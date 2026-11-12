@@ -1,0 +1,46 @@
+# SPEC §16.9: the two required jobs. perf and package arrive with steps 8 and 12;
+# tsc --noEmit arrives with the first JS in step 4.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ubuntu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          enable-cache: true
+      - run: uv sync --locked --python 3.14
+      - name: ruff (lint)
+        run: uv run ruff check src tests
+      - name: ruff (format)
+        run: uv run ruff format --check src tests
+      - name: pyright
+        run: uv run pyright
+      - name: pytest (portable suite)
+        run: uv run pytest
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          enable-cache: true
+      - run: uv sync --locked --python 3.14
+      - name: pytest (full suite, including windows-marked tests)
+        run: uv run pytest
