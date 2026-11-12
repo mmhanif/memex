@@ -1,0 +1,518 @@
+<!doctype html>
+<!--
+  PROTOTYPE — throwaway. Lives only on the prototype/mind-maps branch; never merge.
+  Question (ticket "Mind Map views", mmhanif/memex#14): what should the three read-only Mind Maps look like
+  (a Theme map, a map centred on Me's Directs, a map of Stakeholders)? Layout, which edges show, default
+  expansion depth, click-through, and where the maps sit in the icon-rail shell.
+  Three structurally different answers over the same in-memory sample Workspace, switchable via ?variant=A|B|C
+  (or the floating bar / ← → keys). Uses the vendored Cytoscape.js 3.35.0 (prototype/vendor/), so it works offline.
+  Open by double-clicking. Nothing is saved.
+    A  Radial mind map — classic mind map round a centre; a "Map" view toggle inside Portfolio and People;
+       a click expands or collapses a branch; 2 levels open by default; a Person shows once per place they're Tagged.
+    B  Map outline     — left-to-right tree on its own "Maps" rail section with a map picker; everything expanded;
+       a click opens the Entity; right-click collapses; edges labelled with the role.
+    C  Network         — each Entity exactly once, every relationship drawn, filtered by hop distance from a focus;
+       a "Map" panel on every Entity page plus full-screen maps; a click highlights neighbours; a double-click re-centres.
+  Every map is computed purely from existing frontmatter (theme, project, lead, team, stakeholders, manager, kind,
+  organisation). Nothing about a map is stored (no saved positions or collapse state).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Memex Mind Map prototype</title>
+<script src="vendor/cytoscape.min.js"></script>
+<style>
+:root{--bg:#fbfbfa;--panel:#f2f1ee;--line:#dedcd6;--ink:#1f1f1d;--mute:#6b6a65;--acc:#2f5fd0;--accbg:#e7eefc;
+  --ok:#2e7d4f;--warn:#b26a00;--bad:#b3261e;--font:system-ui,-apple-system,"Segoe UI",sans-serif;--mono:ui-monospace,Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:14px/1.45 var(--font)}
+a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
+button,select,input{font:inherit;color:inherit}
+button.primary{background:var(--acc);color:#fff;border-color:var(--acc)}
+button{cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:6px;padding:3px 9px}
+select{border:1px solid var(--line);border-radius:6px;padding:3px 6px;background:#fff}
+h1{font-size:22px;margin:.2em 0 .4em}h2{font-size:17px;margin:.2em 0 .5em}h3{font-size:14px;margin:.2em 0 .4em}
+.muted{color:var(--mute)}.small{font-size:12px}
+.badge{display:inline-block;font-size:11px;padding:0 6px;border-radius:9px;background:#eee;color:#444;white-space:nowrap}
+.s-active{background:#e3f1e8;color:var(--ok)}.s-blocked{background:#fbe5e3;color:var(--bad)}.s-on-hold{background:#fdf0dc;color:var(--warn)}
+.s-done{background:#e8e8e8;color:#777}.s-cancelled{background:#eee;color:#999;text-decoration:line-through}.s-not-started{background:#eef}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fff}
+.seg a{padding:4px 12px;color:var(--ink);border-right:1px solid var(--line)}.seg a:last-child{border:0}
+.seg a.on{background:var(--ink);color:#fff}
+
+/* shell (variant B of "UI layout & core views") */
+.shell{display:grid;grid-template-columns:76px 1fr;height:100vh}
+.rail{background:#1f2433;display:flex;flex-direction:column;padding-top:8px}
+.rail a{color:#aab;text-align:center;padding:9px 2px;font-size:11px}
+.rail a span{display:block;font-size:19px}
+.rail a.on{color:#fff;background:#2f3650;border-left:3px solid #7aa2ff}
+.main{display:flex;flex-direction:column;min-width:0;min-height:0}
+.top{display:flex;gap:10px;align-items:center;padding:10px 22px;border-bottom:1px solid var(--line)}
+.top .search{flex:1;max-width:460px;color:var(--mute);background:#fff;border:1px solid var(--line);border-radius:8px;padding:5px 12px}
+.page{padding:16px 22px;overflow:auto;flex:1;min-height:0}
+.page.full{padding:0;display:flex;flex-direction:column;overflow:hidden}
+.stub{border:2px dashed var(--line);border-radius:10px;padding:30px;color:var(--mute);text-align:center;margin-top:10px}
+
+/* map chrome */
+.mapbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:8px 22px;border-bottom:1px solid var(--line);background:#fff}
+.mapbar label{display:inline-flex;gap:4px;align-items:center;font-size:12px}
+.mapwrap{position:relative;flex:1;min-height:0;display:flex}
+.cy{flex:1;min-width:0;background:
+  radial-gradient(circle,#e6e4de 1px,transparent 1px) 0 0/22px 22px,var(--bg)}
+.legend{position:absolute;left:12px;bottom:12px;background:#fffd;border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:11px;line-height:1.7}
+.legend i{display:inline-block;width:22px;height:0;vertical-align:middle;margin-right:5px;border-top:2px solid}
+.card{position:absolute;right:12px;top:12px;width:250px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 6px 20px #0002;padding:10px 12px;font-size:13px}
+.card .row{display:flex;justify-content:space-between;gap:8px}
+.tip{position:fixed;pointer-events:none;background:#1f1f1d;color:#fff;font-size:12px;padding:5px 8px;border-radius:6px;z-index:60;max-width:260px}
+.picker{width:220px;border-right:1px solid var(--line);background:var(--panel);overflow:auto;padding:10px}
+.picker h4{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);margin:12px 0 4px}
+.picker a{display:block;padding:3px 8px;border-radius:5px;color:var(--ink)}
+.picker a.on{background:#fff;font-weight:600}
+.entity{display:grid;grid-template-columns:minmax(320px,1fr) minmax(360px,1.1fr);gap:16px;height:100%}
+.props{display:grid;grid-template-columns:110px 1fr;gap:4px 10px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px;margin:10px 0}
+.mappanel{border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;overflow:hidden;min-height:420px;background:#fff}
+.mappanel .hd{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-bottom:1px solid var(--line);font-size:12px}
+
+/* prototype switcher + state panel: deliberately NOT part of the design */
+#switcher{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:100;display:flex;gap:6px;align-items:center;
+  background:#111;color:#fff;border-radius:999px;padding:5px 8px;box-shadow:0 4px 18px #0005;font:600 12px var(--font)}
+#switcher button{background:#333;color:#fff;border:0;border-radius:999px;padding:3px 10px}
+#switcher .lbl{min-width:210px;text-align:center}
+#state{position:fixed;right:10px;bottom:56px;width:min(420px,90vw);max-height:55vh;overflow:auto;background:#111;color:#cfe;
+  font:11px/1.4 var(--mono);padding:10px;border-radius:8px;z-index:99;white-space:pre-wrap;display:none}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="tip" class="tip" style="display:none"></div>
+<div id="switcher"></div>
+<div id="state"></div>
+<script>
+// ============================================================ sample Workspace (in memory only; same as the UI-layout prototype, plus a few more)
+const TODAY = '2026-11-11';
+const ME = 'sam-rivera';
+const E = {};
+function add(type,id,f,body=''){E[id]={type,id,...f,body}}
+add('person','sam-rivera',{title:'Sam Rivera',kind:['team-member'],manager:'jordan-lee',role:'Head of Data Platform'});
+add('person','jordan-lee',{title:'Jordan Lee',kind:['team-member'],role:'VP Engineering'});
+add('person','alice-smith',{title:'Alice Smith',kind:['team-member'],manager:ME,role:'Staff Engineer'});
+add('person','bob-jones',{title:'Bob Jones',kind:['team-member'],manager:ME,role:'Engineering Manager'});
+add('person','priya-shah',{title:'Priya Shah',kind:['team-member','stakeholder'],manager:ME,role:'Analytics Lead',organisation:'Finance'});
+add('person','carol-ng',{title:'Carol Ng',kind:['team-member'],manager:'alice-smith',role:'SRE'});
+add('person','dev-patel',{title:'Dev Patel',kind:['team-member'],manager:'bob-jones',role:'Data Engineer'});
+add('person','mia-chen',{title:'Mia Chen',kind:['team-member'],manager:'bob-jones',role:'Data Engineer'});
+add('person','omar-haddad',{title:'Omar Haddad',kind:['team-member'],manager:'dev-patel',role:'Graduate Engineer'});
+add('person','dan-okafor',{title:'Dan Okafor',kind:['stakeholder'],role:'Head of FP&A',organisation:'Finance'});
+add('person','lena-fischer',{title:'Lena Fischer',kind:['stakeholder'],role:'Financial Controller',organisation:'Finance'});
+add('person','erin-wu',{title:'Erin Wu',kind:['stakeholder'],role:'Director, Customer Success',organisation:'CS'});
+add('person','tom-reyes',{title:'Tom Reyes',kind:['stakeholder'],role:'Security Architect'});
+add('theme','platform-reliability',{title:'Platform reliability',lead:ME,team:['alice-smith','bob-jones'],stakeholders:['erin-wu']},'Make the platform boring.');
+add('theme','finance-data',{title:'Finance data',lead:ME,team:['bob-jones','priya-shah'],stakeholders:['dan-okafor']},'Everything Finance relies on from us.');
+add('project','observability-revamp',{title:'Observability revamp',theme:'platform-reliability',status:'active',lead:'alice-smith',team:['alice-smith','carol-ng'],stakeholders:['erin-wu','tom-reyes'],due:'2026-12-15'});
+add('project','incident-process',{title:'Incident process',theme:'platform-reliability',status:'not-started',lead:'bob-jones',team:['bob-jones'],due:'2027-02-01'});
+add('project','legacy-alerts',{title:'Legacy alerts clean-up',theme:'platform-reliability',status:'cancelled',lead:'carol-ng',team:['carol-ng']});
+add('project','data-migration',{title:'Data migration',theme:'finance-data',status:'blocked',lead:'bob-jones',team:['bob-jones','dev-patel','mia-chen'],stakeholders:['dan-okafor','lena-fischer'],due:'2026-11-30'});
+add('project','ledger-reports',{title:'Ledger reports',theme:'finance-data',status:'active',lead:'priya-shah',team:['priya-shah'],stakeholders:['dan-okafor','erin-wu'],due:'2027-01-15'});
+add('project','hiring-plan-2027',{title:'Hiring plan 2027',status:'active',lead:ME,stakeholders:['jordan-lee'],due:'2026-12-01'});
+add('deliverable','otel-collector-rollout',{title:'OTel collector rollout',project:'observability-revamp',status:'active',lead:'carol-ng',team:['carol-ng'],due:'2026-11-20'});
+add('deliverable','slo-dashboards',{title:'SLO dashboards',project:'observability-revamp',status:'not-started',lead:'alice-smith',team:['alice-smith'],stakeholders:['erin-wu'],due:'2026-12-10'});
+add('deliverable','schema-mapping',{title:'Schema mapping',project:'data-migration',status:'done',lead:'dev-patel',team:['dev-patel','omar-haddad']});
+add('deliverable','cutover-runbook',{title:'Cutover runbook',project:'data-migration',status:'blocked',lead:'bob-jones',team:['bob-jones','dev-patel'],stakeholders:['dan-okafor'],due:'2026-11-25'});
+add('deliverable','reconciliation-checks',{title:'Reconciliation checks',project:'data-migration',status:'active',lead:'mia-chen',team:['mia-chen'],stakeholders:['lena-fischer'],due:'2026-11-27'});
+add('deliverable','month-end-report',{title:'Month-end report v2',project:'ledger-reports',status:'active',lead:'priya-shah',stakeholders:['dan-okafor'],due:'2026-11-28'});
+
+// ============================================================ derived relationships (all from frontmatter)
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const all = t => Object.values(E).filter(e => !t || e.type === t);
+const title = id => E[id]?.title ?? id;
+const WORK = ['theme','project','deliverable'];
+const TYPE_LABEL = {theme:'Theme',project:'Project',deliverable:'Deliverable',person:'Person',group:'Group'};
+const directsOf = p => all('person').filter(x => x.manager === p);
+const projectsOf = th => all('project').filter(p => p.theme === th);
+const delivsOf = pr => all('deliverable').filter(d => d.project === pr);
+const isStakeholder = p => (p.kind||[]).includes('stakeholder');
+const badge = s => s ? `<span class="badge s-${s}">${s}</span>` : '';
+// People on a work item, by role. The Lead is not repeated as a team member.
+function peopleOn(e, show){
+  const r = [];
+  if (show.lead && e.lead) r.push({id:e.lead, role:'lead'});
+  if (show.team) for (const p of e.team||[]) if (p !== e.lead) r.push({id:p, role:'team'});
+  if (show.stakeholder) for (const p of e.stakeholders||[]) r.push({id:p, role:'stakeholder'});
+  return r;
+}
+// Work a Person is on, by role.
+function workOf(p, show){
+  return all().filter(e => WORK.includes(e.type)).flatMap(e => {
+    if (show.lead && e.lead === p) return [{id:e.id, role:'lead'}];
+    if (show.team && (e.team||[]).includes(p)) return [{id:e.id, role:'team'}];
+    if (show.stakeholder && (e.stakeholders||[]).includes(p)) return [{id:e.id, role:'stakeholder'}];
+    return [];
+  });
+}
+// Every edge in the Workspace as a graph (for variant C). kind: contains | manager | lead | team | stakeholder
+function allEdges(){
+  const out = [];
+  for (const e of all()){
+    if (e.type === 'project' && e.theme) out.push({s:e.theme, t:e.id, kind:'contains'});
+    if (e.type === 'deliverable' && e.project) out.push({s:e.project, t:e.id, kind:'contains'});
+    if (e.type === 'person' && e.manager) out.push({s:e.manager, t:e.id, kind:'manager'});
+    if (WORK.includes(e.type)){
+      if (e.lead) out.push({s:e.id, t:e.lead, kind:'lead'});
+      for (const p of e.team||[]) if (p !== e.lead) out.push({s:e.id, t:p, kind:'team'});
+      for (const p of e.stakeholders||[]) out.push({s:e.id, t:p, kind:'stakeholder'});
+    }
+  }
+  return out.filter(x => E[x.s] && E[x.t]);
+}
+
+// ============================================================ shared Cytoscape style
+const STATUS_BORDER = {'blocked':'#b3261e','on-hold':'#b26a00','active':'#2e7d4f','not-started':'#8a8fb8','done':'#aaa','cancelled':'#ccc'};
+const EDGE = {contains:{c:'#9a978f',s:'solid',w:2,label:'contains'}, manager:{c:'#1f2433',s:'solid',w:2.5,label:'manages'},
+  lead:{c:'#d07a1f',s:'solid',w:3,label:'lead'}, team:{c:'#2f5fd0',s:'dashed',w:1.6,label:'team'}, stakeholder:{c:'#8e44ad',s:'dotted',w:2,label:'stakeholder'}};
+// Explicit node sizes from the label (Cytoscape's width:'label' is deprecated and mis-sizes some preset layouts).
+const FS = ele => ({theme:13, deliverable:10}[ele.data('type')] || 11);
+const lines = (ele, max) => Math.max(1, Math.ceil(String(ele.data('label')).length * FS(ele) * .58 / max));
+const nodeW = (ele, max) => Math.min(max, String(ele.data('label')).length * FS(ele) * .58) + 6;
+const nodeH = (ele, max) => lines(ele, max) * FS(ele) * 1.25 + 4;
+function cyStyle(opts={}){
+  return [
+    {selector:'node', style:{label:'data(label)','font-size':11,'font-family':'system-ui','text-wrap':'wrap','text-max-width':opts.wide?160:110,
+      'text-valign':'center','text-halign':'center',color:'#1f1f1d',width:ele => nodeW(ele, opts.wide?160:110),height:ele => nodeH(ele, opts.wide?160:110),padding:'6px',shape:'round-rectangle',
+      'background-color':'#fff','border-width':1.5,'border-color':'#bbb'}},
+    {selector:'node[type="theme"]', style:{'background-color':'#ece4f7','border-color':'#7b4fb8','font-weight':700,'font-size':13,padding:'12px'}},
+    {selector:'node[type="project"]', style:{'background-color':'#e7eefc','font-weight':600}},
+    {selector:'node[type="deliverable"]', style:{'background-color':'#e6f4f1','font-size':10,shape:'rectangle'}},
+    {selector:'node[type="person"]', style:{shape:'round-rectangle','background-color':'#fff4e5','border-color':'#d07a1f'}},
+    {selector:'node[?me]', style:{'background-color':'#1f2433',color:'#fff','border-color':'#1f2433','font-weight':700}},
+    {selector:'node[type="group"]', style:{'background-color':'#f2f1ee','border-style':'dashed','border-color':'#aaa',color:'#6b6a65','font-style':'italic'}},
+    {selector:'node[status]', style:{'border-width':3,'border-color':ele => STATUS_BORDER[ele.data('status')]||'#bbb'}},
+    {selector:'node[status="done"], node[status="cancelled"]', style:{opacity:.55}},
+    {selector:'node[?collapsed]', style:{'border-style':'double','border-width':4}},
+    {selector:'node[?focus]', style:{'overlay-color':'#2f5fd0','overlay-opacity':.12,'overlay-padding':8}},
+    {selector:'node:selected', style:{'border-color':'#2f5fd0','border-width':4}},
+    {selector:'edge', style:{width:2,'line-color':'#bbb','curve-style':opts.taxi?'taxi':'bezier','taxi-direction':'rightward','target-arrow-shape':'none'}},
+    ...Object.entries(EDGE).map(([k,v]) => ({selector:`edge[kind="${k}"]`, style:{'line-color':v.c,'line-style':v.s,width:v.w}})),
+    ...(opts.edgeLabels ? [{selector:'edge[label]', style:{label:'data(label)','font-size':9,color:'#6b6a65','text-background-color':'#fbfbfa','text-background-opacity':1,'text-background-padding':2}}] : []),
+    {selector:'.faded', style:{opacity:.12}},
+    {selector:'edge.hl', style:{width:4}},
+  ];
+}
+const legend = kinds => `<div class="legend">${kinds.map(k => `<div><i style="border-top-color:${EDGE[k].c};border-top-style:${EDGE[k].s}"></i>${EDGE[k].label}</div>`).join('')}
+  <div class="muted">border = status (red blocked, amber on-hold, green active)</div></div>`;
+let CY = null, CY2 = null;
+function mountCy(container, elements, layout, opts){
+  const cy = cytoscape({container, elements, style:cyStyle(opts), layout, minZoom:.2, maxZoom:2.5, boxSelectionEnabled:false, autoungrabify:!!opts.locked});
+  return cy;
+}
+function nodeData(id, extra={}){
+  const e = E[id];
+  return {eid:id, label:e.title, type:e.type, ...(e.status?{status:e.status}:{}), ...(id===ME?{me:true}:{}), ...extra};
+}
+function infoCard(id, extraHtml=''){
+  const e = E[id]; if (!e) return '';
+  const rows = [];
+  if (e.role) rows.push(['Role', esc(e.role)]);
+  if (e.organisation) rows.push(['Organisation', esc(e.organisation)]);
+  if (e.manager) rows.push(['Manager', esc(title(e.manager))]);
+  if (e.status) rows.push(['Status', badge(e.status)]);
+  if (e.due) rows.push(['Due', e.due]);
+  if (e.lead) rows.push(['Lead', esc(title(e.lead))]);
+  if (e.type === 'person') rows.push(['Directs', directsOf(id).length]);
+  return `<div class="card"><div class="row"><b>${esc(e.title)}</b><span class="badge">${TYPE_LABEL[e.type]}</span></div>
+    ${rows.map(([k,v]) => `<div class="row small"><span class="muted">${k}</span><span>${v}</span></div>`).join('')}
+    <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><a href="#/e/${id}"><button class="primary">Open ›</button></a>${extraHtml}</div></div>`;
+}
+
+// ============================================================ tree builder (variants A and B)
+// key = path in the tree, so a Person Tagged on two items appears twice (as in a classic mind map).
+function buildTree(preset, focus, show){
+  const opt = {showClosed:show.closed};
+  const keep = e => opt.showClosed || !['done','cancelled'].includes(e.status);
+  const P = (id, role, depthLeft) => ({key:null, id, role, children:[]});
+  function work(id, role){
+    const e = E[id];
+    const kids = [];
+    if (e.type === 'theme') kids.push(...projectsOf(id).filter(keep).map(p => work(p.id, 'contains')));
+    if (e.type === 'project') kids.push(...delivsOf(id).filter(keep).map(d => work(d.id, 'contains')));
+    kids.push(...peopleOn(e, show).map(p => P(p.id, p.role)));
+    return {id, role, children:kids};
+  }
+  function person(id, role, withWork){
+    const kids = directsOf(id).map(d => person(d.id, 'manager', withWork));
+    if (withWork) kids.push(...workOf(id, show).filter(w => keep(E[w.id])).map(w => ({id:w.id, role:w.role, children:[]})));
+    return {id, role, children:kids};
+  }
+  if (preset === 'theme'){
+    if (focus && E[focus]) return work(focus, null);
+    const loose = all('project').filter(p => !p.theme && keep(p));
+    return {id:null, label:'Portfolio', type:'group', children:[
+      ...all('theme').map(t => work(t.id, 'contains')),
+      ...(loose.length ? [{id:null, label:'No Theme', type:'group', role:'contains', children:loose.map(p => work(p.id,'contains'))}] : [])]};
+  }
+  if (preset === 'directs') return person(ME, null, true);
+  if (preset === 'stakeholders'){
+    const sh = all('person').filter(isStakeholder);
+    const orgs = {}; for (const p of sh) (orgs[p.organisation || 'No organisation'] ??= []).push(p);
+    const s = {lead:false, team:false, stakeholder:true};
+    return {id:ME, children:Object.entries(orgs).sort().map(([org, ps]) => ({id:null, label:org, type:'group', role:'contains',
+      children:ps.map(p => ({id:p.id, role:'contains', children:workOf(p.id, s).filter(w => keep(E[w.id])).map(w => ({id:w.id, role:'stakeholder', children:[]}))}))}))};
+  }
+}
+function keyTree(n, key='r', depth=0){ n.key = key; n.depth = depth; n.children.forEach((c,i) => keyTree(c, `${key}.${i}`, depth+1)); return n }
+function countAll(n){ return n.children.reduce((s,c) => s + 1 + countAll(c), 0) }
+// Tidy-ish layouts computed here, handed to Cytoscape as preset positions.
+function layoutTree(root, collapsed, mode){
+  const nodes = [], edges = []; let slot = 0;
+  function walk(n, parent){
+    const open = !collapsed.has(n.key);
+    const kids = open ? n.children : [];
+    let s0 = slot;
+    if (!kids.length) n.slot = slot++;
+    else { kids.forEach(c => walk(c, n)); n.slot = (kids[0].slot + kids[kids.length-1].slot) / 2 }
+    const hidden = n.children.length && !open ? countAll(n) : 0;
+    const base = n.id ? nodeData(n.id) : {label:n.label, type:n.type||'group'};
+    nodes.push({data:{id:n.key, ...base, label: base.label + (hidden ? `  (+${hidden})` : ''), ...(hidden?{collapsed:true}:{}), hasKids:n.children.length>0}, _n:n});
+    if (parent) edges.push({data:{id:`${parent.key}>${n.key}`, source:parent.key, target:n.key, kind:n.role||'contains', label:n.role && n.role!=='contains' ? EDGE[n.role].label : undefined}});
+  }
+  walk(root, null);
+  const total = Math.max(slot, 1);
+  for (const x of nodes){
+    const n = x._n; delete x._n;
+    if (mode === 'horizontal') x.position = {x: n.depth * 230, y: n.slot * 44};
+    else { const a = (n.slot / total) * 2 * Math.PI - Math.PI/2, r = n.depth * 175;
+      x.position = n.depth === 0 ? {x:0,y:0} : {x: r*Math.cos(a), y: r*Math.sin(a)} }
+  }
+  return [...nodes, ...edges];
+}
+function defaultCollapsed(root, depth){
+  const c = new Set(); (function w(n){ if (n.depth >= depth && n.children.length) c.add(n.key); n.children.forEach(w) })(root); return c;
+}
+
+// ============================================================ app state
+const params = new URLSearchParams(location.search);
+const VARIANTS = {A:'Radial mind map', B:'Map outline', C:'Network'};
+let V = VARIANTS[params.get('variant')] ? params.get('variant') : 'A';
+const S = {  // per-variant UI state, in memory only
+  show:{lead:true, team:false, stakeholder:true, closed:false},
+  collapsed:{},   // map key -> Set of tree keys (A, B)
+  depth:2,        // hops (C)
+  selected:null,
+  lastAction:'—',
+};
+const DEFAULT_SHOW = {A:{lead:true, team:false, stakeholder:false, closed:false}, B:{lead:true, team:true, stakeholder:true, closed:false}, C:{lead:true, team:false, stakeholder:true, manager:true, contains:true, closed:false}};
+S.show = {...DEFAULT_SHOW[V]};
+const route = () => (location.hash.slice(2) || '').split('/').filter(Boolean);
+const DEFAULT_ROUTE = {A:'#/portfolio/map', B:'#/maps/themes', C:'#/map/directs'};
+const RAIL = [['home','⌂','Home'],['portfolio','▦','Portfolio'],['people','☺','People'],['todos','☑','To-dos'],['glossary','𝔸','Glossary'],['bookmarks','★','Bookmarks'],['files','🗀','Files']];
+
+function shell(section, body, full){
+  const rail = [...RAIL.slice(0,3), ...(V==='B'?[['maps','✺','Maps']]:[]), ...RAIL.slice(3)];
+  return `<div class="shell"><nav class="rail">${rail.map(([k,i,l]) => `<a href="#/${k}" class="${section===k?'on':''}"><span>${i}</span>${l}</a>`).join('')}</nav>
+    <div class="main"><div class="top"><div class="search">Search or Ctrl-K…</div><button>+ New…</button></div>
+    <div class="page ${full?'full':''}">${body}</div></div></div>`;
+}
+const stub = what => `<div class="stub">${what} — not part of this prototype.</div>`;
+function entityPage(id, mapPanel){
+  const e = E[id]; if (!e) return `<h1>Unknown Entity “${esc(id)}”</h1>`;
+  const fields = Object.entries(e).filter(([k]) => !['type','id','body','title'].includes(k));
+  const left = `<a href="javascript:history.back()">← Back</a><h1>${esc(e.title)} <span class="badge">${TYPE_LABEL[e.type]}</span></h1>
+    <div class="props">${fields.map(([k,v]) => `<span class="muted">${k}</span><span>${esc(Array.isArray(v)?v.map(title).join(', '):(E[v]?title(v):v))}</span>`).join('')}</div>
+    <div>${esc(e.body)||'<span class="muted">(empty body)</span>'}</div>${stub('Rest of the Entity page (to-dos, children, Notes)')}`;
+  if (!mapPanel) return left;
+  return `<div class="entity"><div>${left}</div><div class="mappanel"><div class="hd"><b>Map</b><span>
+    <a href="#/map/entity/${id}">Full screen ↗</a></span></div><div class="mapwrap"><div class="cy" id="cy2"></div><div id="card2"></div></div></div></div>`;
+}
+
+// ============================================================ variant A: radial, map is a view toggle inside Portfolio / People
+function renderA(r){
+  const [sec, sub, arg] = r;
+  if (sec === 'e') return shell('', entityPage(arg ?? sub));
+  if (sec === 'portfolio'){
+    const seg = `<span class="seg"><a href="#/portfolio/board">Board</a><a href="#/portfolio/outline">Outline</a><a class="${sub==='map'?'on':''}" href="#/portfolio/map">Map</a></span>`;
+    if (sub !== 'map') return shell('portfolio', `<h1>Portfolio ${seg}</h1>${stub('Board / outline')}`);
+    const themes = `<select data-nav><option value="#/portfolio/map">All Themes</option>${all('theme').map(t => `<option value="#/portfolio/map/${t.id}" ${arg===t.id?'selected':''}>${esc(t.title)}</option>`).join('')}</select>`;
+    return shell('portfolio', mapChrome(`<b>Portfolio</b> ${seg} ${themes}`, ['lead','team','stakeholder','closed']), true) ;
+  }
+  if (sec === 'people'){
+    const seg = `<span class="seg"><a href="#/people">Org tree</a><a class="${arg==='directs'?'on':''}" href="#/people/map/directs">Directs map</a><a class="${arg==='stakeholders'?'on':''}" href="#/people/map/stakeholders">Stakeholders map</a></span>`;
+    if (sub !== 'map') return shell('people', `<h1>People ${seg}</h1>${stub('Org tree + Stakeholders table')}`);
+    return shell('people', mapChrome(`<b>People</b> ${seg}`, arg==='directs'?['lead','team','stakeholder','closed']:['closed']), true);
+  }
+  return shell(sec||'home', `<h1>${esc(sec||'home')}</h1>${stub('This page')}<p>Maps in this variant: Portfolio → <a href="#/portfolio/map">Map</a>, People → <a href="#/people/map/directs">Directs map</a> / <a href="#/people/map/stakeholders">Stakeholders map</a>.</p>`);
+}
+function mapChrome(left, toggles, extra=''){
+  const T = {lead:'Lead', team:'Team', stakeholder:'Stakeholders', manager:'Manager', contains:'Hierarchy', closed:'Done & cancelled'};
+  return `<div class="mapbar">${left}<span style="flex:1"></span>${extra}${toggles.map(k => `<label><input type="checkbox" data-show="${k}" ${S.show[k]?'checked':''}>${T[k]}</label>`).join('')}
+    ${V!=='C'?'<button data-act="expand">Expand all</button><button data-act="reset">Reset</button>':''}<button data-act="fit">Fit</button></div>
+    <div class="mapwrap"><div class="cy" id="cy"></div><div id="card"></div></div>`;
+}
+function mountTree(preset, focus, mode){
+  const root = keyTree(buildTree(preset, focus, S.show));
+  const mk = `${V}:${preset}:${focus||''}:${JSON.stringify(S.show)}`;
+  if (!S.collapsed[mk]) S.collapsed[mk] = mode==='radial' ? defaultCollapsed(root, 2) : new Set();
+  const collapsed = S.collapsed[mk];
+  const els = layoutTree(root, collapsed, mode);
+  CY = mountCy(document.getElementById('cy'), els, {name:'preset', fit:true, padding:40}, {taxi:mode==='horizontal', edgeLabels:mode==='horizontal', wide:mode==='horizontal', locked:true});
+  const all = []; (function w(n){ all.push(n); n.children.forEach(w) })(root);
+  STATE_EXTRA = {map:preset, focus:focus||'(all)', layout:mode, nodesInTree:all.length, nodesShown:CY.nodes().length, collapsedBranches:[...collapsed]};
+  return {root, collapsed, mk, allNodes:all};
+}
+
+// ============================================================ variant B: own "Maps" rail section with a picker, horizontal tree
+function renderB(r){
+  const [sec, sub, arg] = r;
+  if (sec === 'e') return shell('', entityPage(sub));
+  if (sec !== 'maps') return shell(sec||'home', `<h1>${esc(sec||'home')}</h1>${stub('This page')}<p>Maps live under the <a href="#/maps/themes">✺ Maps</a> rail icon in this variant.</p>`);
+  const pick = (href, label, on) => `<a href="${href}" class="${on?'on':''}">${esc(label)}</a>`;
+  const picker = `<div class="picker"><h4>Portfolio</h4>${pick('#/maps/themes','All Themes',sub==='themes'&&!arg)}
+    ${all('theme').map(t => pick(`#/maps/themes/${t.id}`, t.title, arg===t.id)).join('')}
+    <h4>People</h4>${pick('#/maps/directs','My Directs',sub==='directs')}${pick('#/maps/stakeholders','Stakeholders',sub==='stakeholders')}
+    <p class="small muted" style="margin-top:16px">Click a node to open it.<br>Right-click to fold a branch.</p></div>`;
+  const label = sub==='themes' ? (arg ? title(arg) : 'All Themes') : sub==='directs' ? 'My Directs' : 'Stakeholders';
+  const body = mapChrome(`<b>${esc(label)}</b>`, sub==='stakeholders'?['closed']:['lead','team','stakeholder','closed']);
+  return shell('maps', `<div style="display:flex;flex:1;min-height:0">${picker}<div style="flex:1;display:flex;flex-direction:column;min-width:0">${body}</div></div>`, true);
+}
+
+// ============================================================ variant C: network, focus + hops; Map panel on every Entity page
+function neighbourhood(seeds, hops, kinds){
+  const edges = allEdges().filter(x => kinds[x.kind]);
+  const adj = {}; for (const x of edges){ (adj[x.s] ??= []).push(x.t); (adj[x.t] ??= []).push(x.s) }
+  const dist = {}; let front = seeds.filter(s => E[s]); front.forEach(s => dist[s] = 0);
+  for (let h = 1; h <= hops; h++){
+    const next = [];
+    for (const n of front) for (const m of adj[n]||[]) if (dist[m] === undefined){
+      if (!S.show.closed && ['done','cancelled'].includes(E[m].status)) continue;
+      dist[m] = h; next.push(m) }
+    front = next;
+  }
+  const ids = Object.keys(dist);
+  return {dist, ids, edges: edges.filter(x => dist[x.s] !== undefined && dist[x.t] !== undefined)};
+}
+function presetC(name, arg){
+  if (name === 'directs') return {seeds:[ME], label:'My Directs', kinds:{manager:true, lead:S.show.lead, team:S.show.team}, hint:'Me + Directs + what they lead'};
+  if (name === 'stakeholders') return {seeds:all('person').filter(isStakeholder).map(p=>p.id), label:'Stakeholders', kinds:{stakeholder:true}, hint:'every Stakeholder + the work they are Tagged on'};
+  if (name === 'theme') return {seeds:[arg || all('theme')[0].id], label:title(arg || all('theme')[0].id), kinds:{contains:true, lead:S.show.lead, team:S.show.team, stakeholder:S.show.stakeholder}};
+  return {seeds:[arg], label:title(arg), kinds:{contains:S.show.contains, manager:S.show.manager, lead:S.show.lead, team:S.show.team, stakeholder:S.show.stakeholder}};
+}
+function renderC(r){
+  const [sec, sub, arg] = r;
+  if (sec === 'e') return shell(E[sub]?.type==='person'?'people':'portfolio', entityPage(sub, true));
+  if (sec === 'map'){
+    const p = presetC(sub, arg);
+    const choose = `<span class="seg"><a class="${sub==='theme'?'on':''}" href="#/map/theme/${all('theme')[0].id}">Theme</a><a class="${sub==='directs'?'on':''}" href="#/map/directs">My Directs</a><a class="${sub==='stakeholders'?'on':''}" href="#/map/stakeholders">Stakeholders</a>${sub==='entity'?`<a class="on">${esc(p.label)}</a>`:''}</span>`;
+    const themeSel = sub==='theme' ? `<select data-nav>${all('theme').map(t => `<option value="#/map/theme/${t.id}" ${(arg||all('theme')[0].id)===t.id?'selected':''}>${esc(t.title)}</option>`).join('')}</select>` : '';
+    const hops = `<label>Hops <input type="range" min="1" max="4" value="${S.depth}" data-depth> ${S.depth}</label>`;
+    const toggles = sub==='stakeholders' ? ['closed'] : sub==='directs' ? ['lead','team','closed'] : sub==='theme' ? ['lead','team','stakeholder','closed'] : ['contains','manager','lead','team','stakeholder','closed'];
+    return shell(sub==='theme'?'portfolio':'people', mapChrome(`${choose} ${themeSel}`, toggles, sub==='stakeholders'?'':hops), true);
+  }
+  if (sec === 'portfolio') return shell('portfolio', `<h1>Portfolio <a href="#/map/theme/${all('theme')[0].id}"><button>✺ Map</button></a></h1>${stub('Board / outline')}<p>Every Theme, Project and Deliverable page also has a Map panel: try <a href="#/e/data-migration">Data migration</a>.</p>`);
+  if (sec === 'people') return shell('people', `<h1>People <a href="#/map/directs"><button>✺ Directs map</button></a> <a href="#/map/stakeholders"><button>✺ Stakeholders map</button></a></h1>${stub('Org tree + Stakeholders table')}<p>Every Person View also has a Map panel: try <a href="#/e/bob-jones">Bob Jones</a>.</p>`);
+  return shell(sec||'home', `<h1>${esc(sec||'home')}</h1>${stub('This page')}<p>Maps: <a href="#/map/directs">My Directs</a>, <a href="#/map/stakeholders">Stakeholders</a>, Theme maps, and a Map panel on every Entity page (e.g. <a href="#/e/data-migration">Data migration</a>). In the real app these are also Ctrl-K targets.</p>`);
+}
+function mountNetwork(container, seeds, hops, kinds, cardEl){
+  const nb = neighbourhood(seeds, hops, kinds);
+  const els = [...nb.ids.map(id => ({data:{id, ...nodeData(id, seeds.includes(id)?{focus:true}:{}), hop:nb.dist[id]}})),
+    ...nb.edges.map((x,i) => ({data:{id:`e${i}`, source:x.s, target:x.t, kind:x.kind}}))];
+  const cy = mountCy(container, els, {name:'concentric', concentric:n => 10 - n.data('hop'), levelWidth:() => 1, minNodeSpacing:28, fit:true, padding:30, animate:false}, {});
+  cy.on('tap','node', ev => {
+    const n = ev.target; cy.elements().addClass('faded'); n.closedNeighborhood().removeClass('faded'); n.connectedEdges().addClass('hl');
+    S.selected = n.id(); S.lastAction = `tap ${n.id()} → highlight neighbours`;
+    cardEl.innerHTML = infoCard(n.id(), `<a href="#/map/entity/${n.id()}"><button>Centre here</button></a>`); renderState();
+  });
+  cy.on('tap', ev => { if (ev.target === cy){ cy.elements().removeClass('faded hl'); cardEl.innerHTML = ''; S.selected = null } });
+  cy.on('dbltap','node', ev => { S.lastAction = `double-click ${ev.target.id()} → re-centre`; location.hash = `#/map/entity/${ev.target.id()}` });
+  return {cy, nb};
+}
+
+// ============================================================ render + wiring
+let STATE_EXTRA = {};
+function render(){
+  if (CY){ CY.destroy(); CY = null } if (CY2){ CY2.destroy(); CY2 = null }
+  if (!location.hash || location.hash === '#/') { location.replace(DEFAULT_ROUTE[V]); return }
+  const r = route();
+  STATE_EXTRA = {};
+  document.getElementById('app').innerHTML = V==='A' ? renderA(r) : V==='B' ? renderB(r) : renderC(r);
+  const card = document.getElementById('card');
+  if (V==='A' && document.getElementById('cy')){
+    const [preset, focus] = r[0]==='portfolio' ? ['theme', r[2]] : [r[2], null];
+    const t = mountTree(preset, focus, 'radial');
+    CY.on('tap','node', ev => {
+      const n = ev.target, d = n.data(); S.selected = d.eid || d.id;
+      if (d.hasKids){ t.collapsed.has(d.id) ? t.collapsed.delete(d.id) : t.collapsed.add(d.id); S.lastAction = `tap ${d.id} → ${t.collapsed.has(d.id)?'collapse':'expand'}`; render(); if (d.eid) document.getElementById('card').innerHTML = infoCard(d.eid); return }
+      S.lastAction = `tap leaf ${d.eid}`; card.innerHTML = d.eid ? infoCard(d.eid) : ''; renderState();
+    });
+    CY.on('dbltap','node', ev => { const id = ev.target.data('eid'); if (id){ S.lastAction = `double-click → open ${id}`; location.hash = `#/e/${id}` } });
+    wireTreeButtons(t, 2);
+  }
+  if (V==='B' && document.getElementById('cy')){
+    const [preset, focus] = r[1]==='themes' ? ['theme', r[2]] : [r[1], null];
+    const t = mountTree(preset, focus, 'horizontal');
+    const tip = document.getElementById('tip');
+    CY.on('mouseover','node', ev => { const d = ev.target.data(); if (!d.eid) return; const e = E[d.eid];
+      tip.innerHTML = `<b>${esc(e.title)}</b> · ${TYPE_LABEL[e.type]}${e.status?' · '+e.status:''}${e.due?' · due '+e.due:''}${e.role?'<br>'+esc(e.role):''}<br><span style="opacity:.7">click to open · right-click to fold</span>`;
+      tip.style.display = 'block'; });
+    CY.on('mousemove', ev => { tip.style.left = ev.originalEvent.clientX + 14 + 'px'; tip.style.top = ev.originalEvent.clientY + 14 + 'px' });
+    CY.on('mouseout','node', () => tip.style.display = 'none');
+    CY.on('tap','node', ev => { const id = ev.target.data('eid'); tip.style.display='none'; if (id){ S.lastAction = `click → open ${id}`; location.hash = `#/e/${id}` } });
+    CY.on('cxttap','node', ev => { const d = ev.target.data(); if (!d.hasKids) return; t.collapsed.has(d.id) ? t.collapsed.delete(d.id) : t.collapsed.add(d.id); S.lastAction = `right-click ${d.id} → fold/unfold`; render() });
+    wireTreeButtons(t, 99);
+  }
+  if (V==='C'){
+    if (document.getElementById('cy')){
+      const p = presetC(r[1], r[2]);
+      const {cy, nb} = mountNetwork(document.getElementById('cy'), p.seeds, r[1]==='stakeholders'?1:S.depth, p.kinds, card);
+      CY = cy; STATE_EXTRA = {map:r[1], focus:p.seeds, hops:S.depth, edgeKinds:Object.keys(p.kinds).filter(k=>p.kinds[k]), nodesShown:nb.ids.length, edgesShown:nb.edges.length};
+      document.querySelectorAll('.mapwrap').forEach(w => w.insertAdjacentHTML('beforeend', legend(Object.keys(p.kinds).filter(k=>p.kinds[k]))));
+      document.querySelector('[data-act="fit"]').onclick = () => CY.fit(undefined, 30);
+    }
+    if (document.getElementById('cy2')){
+      const id = r[1], e = E[id];
+      const kinds = e.type==='person' ? {manager:true, lead:true, team:true, stakeholder:true} : {contains:true, lead:true, stakeholder:true};
+      const {cy, nb} = mountNetwork(document.getElementById('cy2'), [id], 1, kinds, document.getElementById('card2'));
+      CY2 = cy; STATE_EXTRA = {panel:'Entity page Map panel', focus:id, hops:1, edgeKinds:Object.keys(kinds), nodesShown:nb.ids.length};
+      document.querySelector('.mappanel .mapwrap').insertAdjacentHTML('beforeend', legend(Object.keys(kinds)));
+    }
+  }
+  if (V!=='C' && document.getElementById('cy')) document.querySelector('.mapwrap').insertAdjacentHTML('beforeend', legend(V==='A' && route()[0]==='people' && route()[2]==='stakeholders' ? ['stakeholder'] : r.includes('directs') ? ['manager','lead','team','stakeholder'] : ['contains','lead','team','stakeholder']));
+  renderSwitcher(); renderState();
+}
+function wireTreeButtons(t, depth){
+  const q = s => document.querySelector(s);
+  q('[data-act="expand"]').onclick = () => { t.collapsed.clear(); S.lastAction = 'expand all'; render() };
+  q('[data-act="reset"]').onclick = () => { delete S.collapsed[t.mk]; S.lastAction = 'reset to default depth'; render() };
+  q('[data-act="fit"]').onclick = () => CY.fit(undefined, 40);
+}
+document.addEventListener('change', ev => {
+  const el = ev.target;
+  if (el.dataset.show){ S.show[el.dataset.show] = el.checked; S.lastAction = `toggle ${el.dataset.show} = ${el.checked}`; render() }
+  if (el.dataset.nav !== undefined) location.hash = el.value;
+});
+document.addEventListener('input', ev => { if (ev.target.dataset.depth !== undefined){ S.depth = +ev.target.value; S.lastAction = `hops = ${S.depth}`; render() } });
+window.addEventListener('hashchange', render);
+window.addEventListener('resize', () => { CY?.resize(); CY2?.resize() });
+
+// ============================================================ prototype chrome
+function setVariant(v){
+  V = v; S.show = {...DEFAULT_SHOW[V]}; S.selected = null;
+  const u = new URL(location); u.searchParams.set('variant', v); u.hash = DEFAULT_ROUTE[v].slice(1); history.replaceState(null,'',u); render();
+}
+function renderSwitcher(){
+  const ks = Object.keys(VARIANTS), i = ks.indexOf(V);
+  document.getElementById('switcher').innerHTML = `<button onclick="setVariant('${ks[(i+ks.length-1)%ks.length]}')">◀</button>
+    <span class="lbl">${V} (${VARIANTS[V]})</span><button onclick="setVariant('${ks[(i+1)%ks.length]}')">▶</button>
+    <button onclick="const s=document.getElementById('state');s.style.display=s.style.display==='block'?'none':'block'">state</button>`;
+}
+function renderState(){
+  document.getElementById('state').textContent = JSON.stringify({variant:`${V} ${VARIANTS[V]}`, route:location.hash, toggles:S.show, selected:S.selected, lastAction:S.lastAction, ...STATE_EXTRA}, null, 2);
+}
+document.addEventListener('keydown', ev => {
+  if (ev.target.closest('input,textarea,select,[contenteditable]')) return;
+  const ks = Object.keys(VARIANTS), i = ks.indexOf(V);
+  if (ev.key === 'ArrowRight') setVariant(ks[(i+1)%ks.length]);
+  if (ev.key === 'ArrowLeft') setVariant(ks[(i+ks.length-1)%ks.length]);
+});
+render();
+</script>
+</body>
+</html>
