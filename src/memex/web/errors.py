@@ -8,7 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
-from memex.core.errors import Conflict, CoreError
+from memex.core.errors import Conflict, CoreError, HasReferences
 
 log = logging.getLogger(__name__)
 
@@ -48,6 +48,8 @@ def install(app: FastAPI) -> None:
         extra: dict[str, Any] = {}
         if isinstance(exc, Conflict):
             extra["current"] = {"hash": exc.current.hash, "content": exc.current.text}
+        if isinstance(exc, HasReferences):
+            extra["impact"] = {"referrers": list(exc.referrers)}
         return error_response(exc.code, exc.message, **extra)
 
     @app.exception_handler(RequestValidationError)

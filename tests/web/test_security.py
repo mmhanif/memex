@@ -27,15 +27,16 @@ BAD_HOSTS = [
 
 @pytest.mark.parametrize("host", BAD_HOSTS)
 @pytest.mark.parametrize("path", ["/", "/static/index.html", "/api/tree", "/auth", "/relaunch"])
-def test_R04_wrong_host_gets_421_on_every_route(browser: TestClient, host: str, path: str):
-    response = browser.get(path, headers={"Host": host, "X-Memex": "1"})
+def test_R04_wrong_host_gets_421_on_every_route(page_client: TestClient, host: str, path: str):
+    response = page_client.get(path, headers={"Host": host, "X-Memex": "1"})
 
     assert response.status_code == 421
 
 
-def test_R04_missing_host_gets_421(browser: TestClient):
+def test_R04_missing_host_gets_421(page_client: TestClient):
     # httpx always sends Host, so drive the ASGI app directly.
     import asyncio
+    from concurrent.futures import ThreadPoolExecutor
 
     sent: list[dict] = []
 
@@ -58,14 +59,17 @@ def test_R04_missing_host_gets_421(browser: TestClient):
         "client": ("127.0.0.1", 50000),
         "root_path": "",
     }
-    asyncio.run(browser.app(scope, receive, send))  # type: ignore[arg-type]
+    # On its own thread: pytest-playwright keeps an event loop running on this one.
+    app = page_client.app
+    with ThreadPoolExecutor(1) as pool:
+        pool.submit(asyncio.run, app(scope, receive, send)).result()  # type: ignore[arg-type]
 
     assert sent[0]["status"] == 421
 
 
 @pytest.mark.parametrize("host", [f"127.0.0.1:{PORT}", f"localhost:{PORT}", f"LOCALHOST:{PORT}"])
-def test_R04_allowed_hosts_pass(browser: TestClient, host: str):
-    assert browser.get("/", headers={"Host": host}).status_code == 200
+def test_R04_allowed_hosts_pass(page_client: TestClient, host: str):
+    assert page_client.get("/", headers={"Host": host}).status_code == 200
 
 
 @pytest.mark.parametrize("path", ["/", "/static/index.html", "/api/tree", "/api/files?path=x.md"])
@@ -291,7 +295,8 @@ def test_R11_no_get_changes_disk_state(api: TestClient, root: Path, state: AppSt
         for route in api.app.routes  # type: ignore[attr-defined]
         if "GET" in getattr(route, "methods", ())
     }
-    covered = {p.split("?")[0] for p in ALL_GETS}
+    # The endless event stream can't run under TestClient; test_events.py reads it live.
+    covered = {p.split("?")[0] for p in ALL_GETS} | {"/api/events"}
     assert get_paths <= covered, f"add these GET routes to ALL_GETS: {get_paths - covered}"
     before = snapshot(root)
 
@@ -333,7 +338,7 @@ def test_R12_writing_a_non_md_file_is_400(api: TestClient, root: Path):
     assert not (root / "notes/run.bat").exists()
 
 
-# R13 (read, write and walk; move and delete arrive with step 9).
+# R13 (read, write and walk here; move and delete in tests/core/test_files.py).
 
 
 @pytest.fixture
@@ -412,7 +417,9 @@ def test_R16_unexpected_errors_hide_their_details(
         raise RuntimeError(f"failed at {tmp_path}/secret")
 
     monkeypatch.setattr(state.workspace.store, "read", boom)
-    with TestClient(create_app(state), base_url=ORIGIN, raise_server_exceptions=False) as client:
+    with TestClient(
+        create_app(state, watch=False), base_url=ORIGIN, raise_server_exceptions=False
+    ) as client:
         client.cookies.set(COOKIE, state.session.secret)
         response = client.get("/api/files?path=a.md", headers={"X-Memex": "1"})
 
@@ -437,8 +444,8 @@ EXPECTED_CSP_PARTS = [
 
 
 @pytest.mark.parametrize("path", ["/", "/static/index.html", "/relaunch"])
-def test_R18_html_carries_the_csp_and_nosniff(browser: TestClient, path: str):
-    response = browser.get(path)
+def test_R18_html_carries_the_csp_and_nosniff(page_client: TestClient, path: str):
+    response = page_client.get(path)
 
     assert response.headers["content-type"].startswith("text/html")
     csp = [d.strip() for d in response.headers["content-security-policy"].split(";")]
@@ -448,12 +455,12 @@ def test_R18_html_carries_the_csp_and_nosniff(browser: TestClient, path: str):
     assert response.headers["referrer-policy"] == "no-referrer"
 
 
-def test_R18_script_src_allows_self_and_exactly_the_import_maps_hash(browser: TestClient):
-    html = browser.get("/").text
+def test_R18_script_src_allows_self_and_exactly_the_import_maps_hash(page_client: TestClient):
+    html = page_client.get("/").text
     import_map = html.split('<script type="importmap">', 1)[1].split("</script>", 1)[0]
     digest = base64.b64encode(hashlib.sha256(import_map.encode()).digest()).decode()
 
-    csp = browser.get("/").headers["content-security-policy"]
+    csp = page_client.get("/").headers["content-security-policy"]
 
     assert f"script-src 'self' 'sha256-{digest}'" in csp
 
@@ -477,3 +484,17 @@ def snapshot(root: Path) -> dict[str, bytes | None]:
         p.relative_to(root).as_posix(): (p.read_bytes() if p.is_file() else None)
         for p in sorted(root.rglob("*"))
     }
+
+
+# R15: the Workspace root can't be deleted.
+
+
+@pytest.mark.parametrize("rel", ["", ".", "/"])
+def test_R15_deleting_the_workspace_root_is_refused(api: TestClient, root: Path, rel: str):
+    before = sorted(p.relative_to(root).as_posix() for p in root.rglob("*"))
+
+    response = api.delete("/api/files", params={"path": rel})
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "bad_path"
+    assert sorted(p.relative_to(root).as_posix() for p in root.rglob("*")) == before

@@ -3,9 +3,10 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, Query, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from memex.core.cache import CachedFile
+from memex.core.diff import side_by_side
 from memex.core.errors import CoreError, Validation
 from memex.core.store import FileVersion
 from memex.core.workspace import Workspace
@@ -32,7 +33,7 @@ def workspace(state: Annotated[AppState, Depends(app_state)]) -> Workspace:
 WS = Annotated[Workspace, Depends(workspace)]
 
 
-class NewFile(BaseModel):
+class PathContent(BaseModel):
     path: str
     content: str
 
@@ -51,7 +52,15 @@ def _expected_hash(if_match: str | None) -> str:
 
 @router.get("/tree")
 def tree(ws: WS) -> dict:
-    return {"folders": ws.cache.folders(), "files": [_tree_file(f) for f in ws.cache.files()]}
+    return {
+        "folders": ws.cache.folders(),
+        "files": [_tree_file(f) for f in ws.cache.files()],
+        "workspace": {  # for the shell's banners (§11.2)
+            "read_only": ws.read_only,
+            "config_error": ws.config_error and ws.config_error.message,
+            "me_set": ws.me() is not None,
+        },
+    }
 
 
 def _tree_file(f: CachedFile) -> dict:
@@ -72,19 +81,60 @@ def read_file(ws: WS, response: Response, path: Annotated[str, Query()]) -> dict
 
 
 @router.post("/files", status_code=201)
-def create_file(ws: WS, body: NewFile, response: Response) -> dict:
+def create_file(ws: WS, body: PathContent, response: Response) -> dict:
     return _saved(response, body.path, ws.store.create(body.path, body.content))
 
 
 @router.put("/files")
 def write_file(
     ws: WS,
-    body: NewFile,
+    body: PathContent,
     response: Response,
     if_match: Annotated[str | None, Header()] = None,
 ) -> dict:
     new_hash = ws.store.write(body.path, body.content, _expected_hash(if_match))
     return _saved(response, body.path, new_hash)
+
+
+class FolderPath(BaseModel):
+    path: str
+
+
+class Move(BaseModel):
+    source: str = Field(alias="from")
+    to: str
+    overwrite: bool = False
+
+
+@router.post("/folders", status_code=201)
+def new_folder(ws: WS, body: FolderPath) -> dict:
+    ws.store.make_folder(body.path, exist_ok=False)
+    return {"path": body.path}
+
+
+@router.post("/move")
+def move(ws: WS, body: Move) -> dict:
+    """Rename or move a file or folder (R14); typed Entities stay in their folder (§11.8)."""
+    ws.move(body.source, body.to, body.overwrite)
+    return {"from": body.source, "to": body.to}
+
+
+@router.delete("/files")
+def delete(ws: WS, path: Annotated[str, Query()]) -> dict:
+    """Delete a file or folder to trash (§8.4)."""
+    return {"path": path, "trash": ws.trash(path)}
+
+
+@router.post("/diff")
+def diff(ws: WS, body: PathContent) -> dict:
+    """Compare the editor's text with what is on disk now (§5.7)."""
+    disk = _read(ws, body.path)
+    rows = side_by_side(disk.text, body.content)
+    return {
+        "path": body.path,
+        "hash": disk.hash,
+        "rows": [{"kind": r.kind, "disk": r.disk, "mine": r.mine} for r in rows],
+    }
 
 
 def _read(ws: Workspace, path: str) -> FileVersion:

@@ -1,0 +1,16 @@
+{
+  // Dev only: `npm run typecheck` (tsc --noEmit) checks the front end's JSDoc types (SPEC §11.1).
+  // Bare imports resolve to node_modules here, and to the vendored copies in the browser.
+  "compilerOptions": {
+    "target": "es2023",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/memex/static/app/**/*.js"]
+}

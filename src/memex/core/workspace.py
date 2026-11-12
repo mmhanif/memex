@@ -5,7 +5,7 @@ import os
 import sys
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from ruamel.yaml.comments import CommentedSeq
@@ -21,8 +21,10 @@ from memex.core.config import (
     with_keys,
 )
 from memex.core.errors import (
+    BadPath,
     Conflict,
     Exists,
+    HasReferences,
     MeNotSet,
     NotFound,
     UnknownReference,
@@ -79,6 +81,32 @@ class Workspace:
         if self.config.ignore != old_ignore:
             self.cache = Cache.build(self.root, self.config.ignore)
 
+    def move(self, src: str, dst: str, overwrite: bool = False) -> None:
+        """Files-page Rename/move (§11.8). Typed Entities can't leave their folder."""
+        _check_files_page_path(src)
+        _check_files_page_path(dst)
+        src_folder = PurePosixPath(src).parent.as_posix()
+        entity_type = EntityType.for_folder(src_folder)
+        if entity_type and PurePosixPath(dst).parent.as_posix() != src_folder:
+            raise BadPath(dst, f"a {entity_type} stays in {src_folder}/")
+        self.store.move(src, dst, overwrite)
+
+    def trash(self, rel: str) -> str:
+        """Files-page Delete (§8.4, §11.8): to trash, unless something outside refers in.
+
+        Returns the trash entry's path. The guided delete with an impact preview
+        (Replace with… / Remove references) is not here yet.
+        """
+        _check_files_page_path(rel)
+        doomed = self.cache.under(rel)
+        gone = {f.rel for f in doomed}
+        if (me := self.me()) is not None and me.rel in gone:
+            raise Validation("Me can't be deleted: change Me in Settings first")
+        referrers = [f.rel for f in self.cache.referrers(f.id for f in doomed) if f.rel not in gone]
+        if referrers:
+            raise HasReferences(rel, tuple(referrers))
+        return self.store.trash(rel, self.clock.now().strftime("%Y%m%d-%H%M%S"))
+
     def config_hash(self) -> str:
         return self.store.read(WORKSPACE_CONFIG).hash
 
@@ -116,6 +144,14 @@ class Workspace:
         if (me := self.me()) is None:
             raise MeNotSet()
         return me
+
+
+def _check_files_page_path(rel: str) -> None:
+    """Type folders stay put, and dot-folders (`.memex`, `.git`, …) aren't the app's to touch."""
+    if EntityType.for_folder(rel):
+        raise BadPath(rel, "type folders can't be moved or deleted")
+    if any(part.startswith(".") for part in PurePosixPath(rel).parts):
+        raise BadPath(rel, "hidden files and folders can't be moved or deleted")
 
 
 # Setup (§3.4)
