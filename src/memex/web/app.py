@@ -4,6 +4,9 @@ import logging
 import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from os import PathLike
+from pathlib import PurePath
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response
@@ -51,7 +54,7 @@ def create_app(state: AppState, *, watch: bool = True) -> FastAPI:
 
     @app.get("/", include_in_schema=False)
     def index() -> FileResponse:
-        return FileResponse(STATIC / "index.html")
+        return FileResponse(STATIC / "index.html", media_type="text/html")
 
     @app.get("/auth", include_in_schema=False)
     def auth(request: Request) -> Response:
@@ -67,11 +70,30 @@ def create_app(state: AppState, *, watch: bool = True) -> FastAPI:
 
     @app.get("/relaunch", include_in_schema=False)
     def relaunch() -> FileResponse:
-        return FileResponse(STATIC / "relaunch.html")
+        return FileResponse(STATIC / "relaunch.html", media_type="text/html")
 
-    app.mount("/static", StaticFiles(directory=STATIC), name="static")
+    app.mount("/static", AppStaticFiles(directory=STATIC), name="static")
     app.add_middleware(SecurityMiddleware, state=state)
     return app
+
+
+# Our own table, not `mimetypes`: on Windows that reads the registry, which can map .js to
+# text/plain, and Chrome refuses a module script of that type under nosniff.
+STATIC_TYPES = {
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".mjs": "text/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".svg": "image/svg+xml",
+}
+
+
+class AppStaticFiles(StaticFiles):
+    def file_response(self, full_path: PathLike[str] | str, *args: Any, **kwargs: Any) -> Response:
+        response = super().file_response(full_path, *args, **kwargs)
+        if media_type := STATIC_TYPES.get(PurePath(full_path).suffix.lower()):
+            response.headers["content-type"] = media_type
+        return response
 
 
 def _watch(state: AppState, stop: threading.Event) -> None:

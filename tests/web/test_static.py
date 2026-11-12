@@ -5,6 +5,9 @@ import json
 import re
 import tomllib
 
+import pytest
+from fastapi.testclient import TestClient
+
 from memex.web.state import STATIC
 
 VENDOR = STATIC / "vendor"
@@ -36,3 +39,25 @@ def test_every_icon_the_css_uses_is_vendored():
 
     assert used
     assert used <= manifest_files()
+
+
+def test_static_files_are_served_with_types_chrome_accepts(
+    page_client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    # Python's mimetypes reads the Windows registry, which can map .js to text/plain;
+    # Chrome then refuses the module (nosniff), and the app never starts. Act like that.
+    monkeypatch.setattr("starlette.responses.guess_type", lambda *a, **k: ("text/plain", None))
+    expected = {
+        "/": "text/html",
+        "/relaunch": "text/html",
+        "/static/app/main.js": "text/javascript",
+        "/static/vendor/preact/dist/preact.mjs": "text/javascript",
+        "/static/css/app.css": "text/css",
+        "/static/vendor/lucide-static/icons/house.svg": "image/svg+xml",
+    }
+
+    served = {
+        path: page_client.get(path).headers["content-type"].split(";")[0] for path in expected
+    }
+
+    assert served == expected

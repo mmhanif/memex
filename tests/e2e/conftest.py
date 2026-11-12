@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 
 import pytest
 from playwright.sync_api import Page, Request
+from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
 from memex.core.clock import FixedClock
 from memex.core.workspace import NewMe, apply_setup
@@ -87,6 +88,12 @@ def air_gap(requests_made: Requests) -> Iterator[None]:
 @pytest.fixture
 def app(page: Page, server: AppState) -> Page:
     """The SPA, signed in with a fresh launch code (R6)."""
+    errors: list[str] = []
+    page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+    page.on("pageerror", lambda e: errors.append(str(e)))
     page.goto(f"{origin(server)}/auth?code={server.session.issue_code()}")
-    page.wait_for_selector(".shell")
+    try:
+        page.wait_for_selector(".shell", timeout=10_000)
+    except PlaywrightTimeout:
+        pytest.fail(f"the app didn't start; browser errors: {errors}")
     return page
