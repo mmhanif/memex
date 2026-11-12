@@ -125,5 +125,5 @@ The page for one Person showing their Tags, the To-dos Me is waiting on from the
 _Avoid_: Profile, 1:1 page
 
 **Mind Map**:
-A read-only radial diagram centred on a Theme, on Me's Directs, or on Stakeholders.
+A read-only diagram of Entities and the links between them, each Entity shown once, centred on one Entity (a Theme, Me for Directs) or on all Stakeholders.
 _Avoid_: Graph, network view, org chart
