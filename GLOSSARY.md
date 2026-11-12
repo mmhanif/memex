@@ -112,6 +112,14 @@ _Avoid_: Link, favourite, URL
 
 ## Views
 
+**Dashboard**:
+The home page summarising what is due soon, what Me is waiting on, what others are waiting on from Me, and blocked work.
+_Avoid_: Home screen, overview, inbox
+
+**Portfolio**:
+The view of all Themes, Projects and Deliverables, shown either as a board by status or as an outline by hierarchy.
+_Avoid_: Roadmap, project list, kanban
+
 **Person View**:
 The page for one Person showing their Tags, the To-dos Me is waiting on from them, and the To-dos they are waiting on from Me.
 _Avoid_: Profile, 1:1 page
