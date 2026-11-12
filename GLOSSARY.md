@@ -24,6 +24,10 @@ _Avoid_: Slug, key, uuid
 A reference or Mention whose Id matches no Entity in the Workspace.
 _Avoid_: Dead link, orphan
 
+**Template**:
+A named starting point for a new Note or Entity of one type, giving its default fields and body; copied once when the Note is created, with no lasting link.
+_Avoid_: Blueprint, boilerplate, snippet
+
 **Archived**:
 A Theme or Person that is no longer active but is kept for its history; it stays referenceable and is hidden by default.
 _Avoid_: Deleted, inactive, retired
