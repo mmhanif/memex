@@ -5,7 +5,9 @@ description = "A personal, offline workspace for one manager, stored as plain Ma
 readme = "SPEC.md"
 requires-python = ">=3.14"
 dependencies = [
+    "fastapi>=0.135",
     "ruamel.yaml>=0.19.1,<0.20",
+    "uvicorn>=0.30",
 ]
 
 [dependency-groups]
@@ -13,6 +15,7 @@ dev = [
     "pytest>=8",
     "ruff>=0.14",
     "pyright>=1.1.400",
+    "httpx2>=2.16.0",
 ]
 
 [build-system]

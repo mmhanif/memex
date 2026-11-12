@@ -86,6 +86,27 @@ class Cache:
     def files(self) -> list[CachedFile]:
         return [self._with_ambiguity(self._files[rel]) for rel in sorted(self._files)]
 
+    def folders(self) -> list[str]:
+        """Folders for the tree: never dot-folders, ignored ones or links (R13)."""
+        found: list[str] = []
+        for dirpath, dirnames, _ in os.walk(self.root, followlinks=False):
+            kept = []
+            for name in dirnames:
+                rel = Path(dirpath, name).relative_to(self.root).as_posix()
+                if self._is_tree_folder(rel):
+                    kept.append(name)
+                    found.append(rel)
+            dirnames[:] = kept
+        return sorted(found)
+
+    def _is_tree_folder(self, rel: str) -> bool:
+        path = PurePosixPath(rel)
+        return (
+            not path.name.startswith(".")
+            and not os.path.islink(self.root / rel)
+            and not any(path.full_match(glob) for glob in self.ignore)
+        )
+
     def resolve(self, id: str) -> Resolution:
         """Look up an Id, ignoring case. Ambiguous Ids resolve to nothing."""
         rels = self._by_id.get(id.casefold(), set())

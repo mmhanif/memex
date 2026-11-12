@@ -158,6 +158,10 @@ def _read_bytes(path: Path, rel: str) -> bytes:
         return path.read_bytes()
     except FileNotFoundError, IsADirectoryError:
         raise NotFound(rel) from None
+    except PermissionError:
+        if path.is_dir():  # how Windows reports opening a folder
+            raise NotFound(rel) from None
+        raise
 
 
 def decode(raw: bytes) -> str:
