@@ -12,7 +12,7 @@ A build-ready `SPEC.md` for Memex (with `GLOSSARY.md` and ADRs) that an agent ca
 - Skills every session should consult: `grilling` + `domain-modeling` (update GLOSSARY.md inline; ADRs only for hard-to-reverse, surprising trade-offs).
 - Fixed constraints (from the brief, not up for debate): air-gapped (no outbound requests, all assets bundled), bind to 127.0.0.1 only, zero telemetry, no admin rights, Markdown + YAML frontmatter, Workspace separate from app code.
 - Stack: Python backend preferred; packages from an internal PyPI mirror are allowed (popular, enterprise-friendly licences).
-- Research findings live in `docs/research/` (this folder is not a git repo, so no `research/*` branches).
+- Research findings live in `docs/research/`, committed on the main branch (they predate the git repo, so there are no `research/*` branches).
 
 ### Settled while charting
 
