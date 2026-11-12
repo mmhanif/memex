@@ -1,6 +1,6 @@
 # Memex: build spec
 
-Status: **draft for review**. Sources: the brief in [initial-spec.md](initial-spec.md), the decisions on the map [Memex: build-ready spec](https://github.com/mmhanif/memex/issues/1), the research in [docs/research/](docs/research/), and the vocabulary in [GLOSSARY.md](GLOSSARY.md). Capitalised domain words (Workspace, Entity, Id, Me, Tag, Mention, …) have exactly the meanings given in the glossary.
+Status: **accepted** (2026-11-12). Sources: the brief in [initial-spec.md](initial-spec.md), the decisions on the map [Memex: build-ready spec](https://github.com/mmhanif/memex/issues/1), the research in [docs/research/](docs/research/), and the vocabulary in [GLOSSARY.md](GLOSSARY.md). Capitalised domain words (Workspace, Entity, Id, Me, Tag, Mention, …) have exactly the meanings given in the glossary.
 
 ## 0. How to use this spec
 
@@ -15,7 +15,7 @@ Status: **draft for review**. Sources: the brief in [initial-spec.md](initial-sp
 
   Write each item as a failing test before implementing it (see §16).
 - **Decision trail.** Each section links the ticket that decided it. If this spec and a ticket disagree, this spec wins; report the disagreement.
-- **Drafting calls.** Choices made while writing this spec that no ticket settled are listed in [Appendix A](#appendix-a-drafting-calls), so they can be reviewed.
+- **Drafting calls.** Choices made while writing this spec that no ticket settled are listed in [Appendix A](#appendix-a-drafting-calls). All were accepted.
 
 ## 1. Product, scope and phases
 
@@ -1341,7 +1341,7 @@ The later phase follows: MCP, then Mind Maps, then macOS.
 
 ## Appendix A: Drafting calls
 
-Choices made while writing this spec that no ticket decided. Each is cheap to change; please confirm or correct.
+Choices made while writing this spec that no ticket decided. All were reviewed and accepted on 2026-11-12. Each is cheap to change.
 
 1. **Id comparison is case-insensitive** (Windows filesystems are). `Alice.md` and `alice.md` clash.
 2. **Reserved-name Ids get `-2`** (`con-2`), the same suffix rule as taken Ids. An empty slug becomes `untitled`.
