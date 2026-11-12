@@ -9,14 +9,16 @@ import hashlib
 import hmac
 from typing import Annotated
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, StringConstraints
 
 from memex.web.errors import error_response
+from memex.web.state import AppState, app_state
 
 router = APIRouter(prefix="/launcher")
+State = Annotated[AppState, Depends(app_state)]
 
-Nonce = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{32,128}$")]  # 16-64 bytes, hex
+Nonce = Annotated[str, StringConstraints(pattern=r"^(?:[0-9a-f]{2}){16,64}$")]  # 16-64 bytes
 
 
 class Hello(BaseModel):
@@ -34,8 +36,7 @@ def mac(key: bytes, label: bytes, nonce: str) -> str:
 
 
 @router.post("/hello")
-def hello(body: Hello, request: Request) -> dict:
-    state = request.app.state.memex
+def hello(body: Hello, state: State) -> dict:
     ws = state.workspace
     return {
         "mac": mac(state.launcher_key, b"server", body.nonce),
@@ -44,11 +45,10 @@ def hello(body: Hello, request: Request) -> dict:
 
 
 @router.post("/open", response_model=None)
-def open_(body: Open, request: Request):
-    state = request.app.state.memex
+def open_(body: Open, state: State):
     expected = mac(state.launcher_key, b"open", body.nonce)
-    if not (body.mac.isascii() and hmac.compare_digest(expected, body.mac)):
-        return error_response("unauthenticated", "Launcher check failed")
-    if not state.burn_open_nonce(body.nonce):
+    mac_ok = body.mac.isascii() and hmac.compare_digest(expected, body.mac)
+    # Burn the nonce only once the MAC proves the caller holds the key.
+    if not (mac_ok and state.burn_open_nonce(body.nonce)):
         return error_response("unauthenticated", "Launcher check failed")
     return {"code": state.session.issue_code()}

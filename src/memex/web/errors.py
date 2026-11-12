@@ -28,6 +28,8 @@ STATUS = {
     "unauthenticated": 401,
 }
 _CODE_FOR_STATUS = {404: "not_found", 401: "unauthenticated", 403: "forbidden"}
+# On every response (R18). SecurityMiddleware adds them; the 500 handler runs outside it.
+BASE_HEADERS = {"X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"}
 
 
 def error_response(
@@ -69,11 +71,10 @@ def install(app: FastAPI) -> None:
     @app.exception_handler(Exception)
     async def unexpected(request: Request, exc: Exception) -> JSONResponse:
         # Never echo or log the exception's text: it may carry absolute paths or Note
-        # content (R16, §13.3). This response is sent from outside SecurityMiddleware,
-        # so it sets its own headers (R18).
+        # content (R16, §13.3).
         log.error("Unhandled %s on %s %s", type(exc).__name__, request.method, request.url.path)
         return JSONResponse(
             {"error": {"code": "internal", "message": "Something went wrong: see the log"}},
             status_code=500,
-            headers={"X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"},
+            headers=BASE_HEADERS,
         )

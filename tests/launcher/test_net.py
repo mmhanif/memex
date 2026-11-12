@@ -94,3 +94,17 @@ def _lan_address() -> str | None:
                 return None
             return None if addr.startswith("127.") or addr == "0.0.0.0" else addr
     return None
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Windows lets a specific bind shadow a wildcard one; SO_EXCLUSIVEADDRUSE guards ours",
+)
+def test_R03_a_stranger_on_the_wildcard_address_makes_the_port_busy(free_run: int):
+    with socket.socket() as stranger:
+        stranger.bind(("0.0.0.0", free_run))
+        stranger.listen()
+
+        sock, port = bind_first_free(free_run)
+        with sock:
+            assert port == free_run + 1

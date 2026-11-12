@@ -5,19 +5,21 @@ A pure ASGI middleware, so a refused request never reaches a handler.
 
 import base64
 import hashlib
-import json
 import re
 from http.cookies import CookieError, SimpleCookie
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from starlette.datastructures import Headers, MutableHeaders
+from starlette.responses import PlainTextResponse, Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from memex.web.errors import BASE_HEADERS, error_response
 from memex.web.session import COOKIE
+from memex.web.state import STATIC
 
 if TYPE_CHECKING:
-    from memex.web.app import AppState
+    from memex.web.state import AppState
 
 # Reachable without the cookie (R5). `/launcher/*` is HMAC-authenticated instead (§13.4).
 COOKIE_EXEMPT = ("/auth", "/relaunch")
@@ -43,8 +45,6 @@ def csp_for(index_html: Path) -> str:
 
 class SecurityMiddleware:
     def __init__(self, app: ASGIApp, state: AppState) -> None:
-        from memex.web.app import STATIC
-
         self.app = app
         self.state = state
         self.hosts = frozenset({f"127.0.0.1:{state.port}", f"localhost:{state.port}"})
@@ -57,29 +57,29 @@ class SecurityMiddleware:
         refusal = self._refusal(scope)
         sender = self._with_headers(send)
         if refusal is not None:
-            await refusal(sender)
+            await refusal(scope, receive, sender)
             return
         await self.app(scope, receive, sender)
 
-    def _refusal(self, scope: Scope):
+    def _refusal(self, scope: Scope) -> Response | None:
         headers = Headers(scope=scope)
         path: str = scope["path"]
         method: str = scope["method"]
         host = (headers.get("host") or "").lower()
         if host not in self.hosts:  # R4: before anything else, on every route
-            return _plain(421, "Misdirected request")
+            return PlainTextResponse("Misdirected request", status_code=421)
         if path.startswith(LAUNCHER_PREFIX):
             return _json_required(headers) if method in WRITE_METHODS else None
         if path not in COOKIE_EXEMPT and not self.state.session.is_valid_cookie(_cookie(headers)):
-            return _error(401, "unauthenticated", "Run memex again to open this page")
+            return error_response("unauthenticated", "Run memex again to open this page")
         if (path.startswith("/api/") or path == "/api") and headers.get("x-memex") != "1":
-            return _error(403, "forbidden", "Missing X-Memex header")
+            return error_response("forbidden", "Missing X-Memex header")
         if method in WRITE_METHODS:
             if headers.get("origin") != f"http://{host}":  # R9: exact; missing or null fails
-                return _error(403, "forbidden", "Cross-origin write refused")
+                return error_response("forbidden", "Cross-origin write refused")
             site = headers.get("sec-fetch-site")
             if site is not None and site not in SAFE_FETCH_SITES:
-                return _error(403, "forbidden", "Cross-site write refused")
+                return error_response("forbidden", "Cross-site write refused")
             if method != "DELETE" or "content-type" in headers:
                 return _json_required(headers)
         return None
@@ -90,8 +90,7 @@ class SecurityMiddleware:
         async def sender(message: Message) -> None:
             if message["type"] == "http.response.start":
                 headers = MutableHeaders(scope=message)
-                headers["X-Content-Type-Options"] = "nosniff"
-                headers["Referrer-Policy"] = "no-referrer"
+                headers.update(BASE_HEADERS)
                 if headers.get("content-type", "").startswith("text/html"):
                     headers["Content-Security-Policy"] = csp
             await send(message)
@@ -112,34 +111,8 @@ def _cookie(headers: Headers) -> str | None:
     return morsel.value if morsel is not None else None
 
 
-def _json_required(headers: Headers):
+def _json_required(headers: Headers) -> Response | None:
     media_type = headers.get("content-type", "").split(";", 1)[0].strip().lower()
     if media_type != "application/json":  # R10
-        return _plain(415, "Request bodies must be application/json")
+        return PlainTextResponse("Request bodies must be application/json", status_code=415)
     return None
-
-
-def _plain(status: int, text: str):
-    return _respond(status, "text/plain; charset=utf-8", text.encode("utf-8"))
-
-
-def _error(status: int, code: str, message: str):
-    body = json.dumps({"error": {"code": code, "message": message}}).encode("utf-8")
-    return _respond(status, "application/json", body)
-
-
-def _respond(status: int, content_type: str, body: bytes):
-    async def respond(send: Send) -> None:
-        await send(
-            {
-                "type": "http.response.start",
-                "status": status,
-                "headers": [
-                    (b"content-type", content_type.encode("ascii")),
-                    (b"content-length", str(len(body)).encode("ascii")),
-                ],
-            }
-        )
-        await send({"type": "http.response.body", "body": body})
-
-    return respond

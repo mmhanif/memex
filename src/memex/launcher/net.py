@@ -25,9 +25,8 @@ def bind_loopback(port: int) -> socket.socket:
         if sys.platform == "win32":
             # Stops another program binding the same port over us (R2).
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)  # type: ignore[attr-defined]
-        else:
-            # POSIX: only lets a relaunch reuse a port in TIME_WAIT, never steal a listener.
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        # Never SO_REUSEADDR: on BSD/macOS it lets us bind 127.0.0.1 beside a stranger
+        # listening on 0.0.0.0, so a busy port would look free (R3).
         sock.bind((HOST, port))
         sock.listen(128)
     except BaseException:

@@ -90,3 +90,17 @@ def test_launcher_routes_need_json(anon: TestClient):
     )
 
     assert response.status_code == 415
+
+
+def test_odd_length_nonce_is_422_not_500(anon: TestClient):
+    response = anon.post("/launcher/hello", json={"nonce": "a" * 33})
+
+    assert response.status_code == 422
+
+
+def test_R07_launcher_key_and_secret_are_not_in_the_state_repr(state: AppState):
+    text = repr(state)
+
+    assert state.launcher_key.hex() not in text
+    assert repr(state.launcher_key) not in text
+    assert state.session.secret not in text
