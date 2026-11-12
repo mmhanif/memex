@@ -9,7 +9,7 @@ The user's folder of Markdown files that holds all Memex data, kept separate fro
 _Avoid_: Vault, repo, database
 
 **Note**:
-Any Markdown file in the Workspace; the base everything else is a typed kind of.
+Any Markdown file in the Workspace; a meeting is a Note with a date and Participants.
 _Avoid_: Page, document
 
 **Entity**:
@@ -57,8 +57,26 @@ A Person whose Manager is Me.
 _Avoid_: Direct report, DR, subordinate
 
 **Tag**:
-A link from a Person to a Theme, Project or Deliverable, meaning they are involved in it.
+A link recorded on a Theme, Project or Deliverable naming a Person as on its team or as one of its Stakeholders.
 _Avoid_: Assignment, mention, label
+
+**Lead**:
+The one Person accountable for a Project or Deliverable.
+_Avoid_: Owner, DRI, manager
+
+## Linking
+
+**Mention**:
+A link to an Entity written in the body of a Note; navigational only, never a Tag.
+_Avoid_: Tag, reference, backlink
+
+**Participant**:
+A Person recorded on a Note as present at or involved in it, such as a meeting attendee; never a Tag.
+_Avoid_: Attendee, Tag, invitee
+
+**Label**:
+A free-text keyword on a Note or Bookmark, used for grouping and filtering.
+_Avoid_: Tag, category, hashtag
 
 ## Commitments
 
