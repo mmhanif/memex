@@ -12,10 +12,11 @@ from pathlib import Path
 from typing import Any
 
 from memex.core import frontmatter
-from memex.core.errors import BadPath, Conflict, Exists, Locked, NotFound, Validation
+from memex.core.errors import BadPath, Conflict, Exists, Locked, NotFound, ReadOnly, Validation
 from memex.core.paths import resolve_workspace_path
 
 BOM = b"\xef\xbb\xbf"
+WORKSPACE_CONFIG = ".memex/config.yaml"  # the one non-`.md` file the Store writes
 
 
 @dataclass(frozen=True)
@@ -61,9 +62,18 @@ def content_hash(raw: bytes) -> str:
 
 
 class Store:
-    def __init__(self, root: Path, on_change: Callable[[str], None] | None = None) -> None:
-        """`on_change(rel)` runs after each successful write, e.g. `Cache.refresh`."""
+    def __init__(
+        self,
+        root: Path,
+        on_change: Callable[[str], None] | None = None,
+        read_only: bool = False,
+    ) -> None:
+        """`on_change(rel)` runs after each successful write, e.g. `Cache.refresh`.
+
+        A `read_only` Store refuses every write with `read_only` (§3.5).
+        """
         self.root = root
+        self.read_only = read_only
         self._on_change = on_change
         self._locks: defaultdict[str, threading.Lock] = defaultdict(threading.Lock)
         self._locks_guard = threading.Lock()
@@ -72,25 +82,34 @@ class Store:
         return _version(_read_bytes(resolve_workspace_path(self.root, rel), rel))
 
     def create(self, rel: str, text: str) -> str:
-        """Create a new `.md` file (UTF-8, LF, trailing newline). Fails with `exists`."""
-        path = self._markdown_path(rel)
+        """Create a new `.md` file (UTF-8, LF, trailing newline). Fails with `exists`.
+
+        Empty text makes an empty (0-byte) file: it has no last line to end.
+        """
+        path = self._writable_path(rel)
         with self._lock(path):
             if path.exists() or path.is_symlink():
                 raise Exists(rel)
-            raw = NEW_FILE_SHAPE.encode(text if text.endswith("\n") else text + "\n")
+            raw = NEW_FILE_SHAPE.encode(text if text.endswith("\n") or not text else text + "\n")
             path.parent.mkdir(parents=True, exist_ok=True)
-            _atomic_write(path, raw, rel)
+            atomic_write(path, raw, rel)
             self._changed(rel)
             return content_hash(raw)
 
+    def make_folder(self, rel: str) -> None:
+        """Create a folder (and any missing parents, the Workspace root included)."""
+        if self.read_only:
+            raise ReadOnly()
+        resolve_workspace_path(self.root, rel).mkdir(parents=True, exist_ok=True)
+
     def write(self, rel: str, text: str, expected_hash: str) -> str:
-        path = self._markdown_path(rel)
+        path = self._writable_path(rel)
         with self._lock(path):
             current = _read_bytes(path, rel)
             if content_hash(current) != expected_hash:
                 raise Conflict(rel, _version(current))
             raw = _Shape.of(current).encode(text)
-            _atomic_write(path, raw, rel)
+            atomic_write(path, raw, rel)
             self._changed(rel)
             return content_hash(raw)
 
@@ -102,7 +121,7 @@ class Store:
         unset: Iterable[str] = (),
     ) -> str:
         """Hash-checked frontmatter edit through ruamel round-trip; the body is untouched."""
-        path = self._markdown_path(rel)
+        path = self._writable_path(rel)
         with self._lock(path):
             current = _read_bytes(path, rel)
             if content_hash(current) != expected_hash:
@@ -113,7 +132,7 @@ class Store:
             except frontmatter.FrontmatterError as e:
                 raise Validation(f"{rel}: frontmatter doesn't parse ({e.message})") from None
             raw = shape.encode(text)
-            _atomic_write(path, raw, rel)
+            atomic_write(path, raw, rel)
             self._changed(rel)
             return content_hash(raw)
 
@@ -121,8 +140,11 @@ class Store:
         if self._on_change is not None:
             self._on_change(rel)
 
-    def _markdown_path(self, rel: str) -> Path:
-        if not rel.endswith(".md"):
+    def _writable_path(self, rel: str) -> Path:
+        """`.md` files, plus the Workspace config so Settings saves are hash-checked too."""
+        if self.read_only:
+            raise ReadOnly()
+        if not rel.endswith(".md") and rel != WORKSPACE_CONFIG:
             raise BadPath(rel, "only .md files can be written")
         return resolve_workspace_path(self.root, rel)
 
@@ -147,7 +169,7 @@ def _version(raw: bytes) -> FileVersion:
     return FileVersion(text=_Shape.of(raw).decode(raw), hash=content_hash(raw))
 
 
-def _atomic_write(path: Path, raw: bytes, rel: str) -> None:
+def atomic_write(path: Path, raw: bytes, rel: str) -> None:
     """Write via a temp file in the same folder, then swap it in (§5.4)."""
     tmp = path.with_name(f".{path.name}.memex-tmp-{secrets.token_hex(6)}")
     try:

@@ -65,3 +65,30 @@ class NotFound(CoreError):
     def __init__(self, rel: str) -> None:
         super().__init__(f"{rel} not found")
         self.rel = rel
+
+
+class MeNotSet(CoreError):
+    """`me` is missing or names no Person (§3.5). Memex never guesses a replacement."""
+
+    code = "me_not_set"
+
+    def __init__(self) -> None:
+        super().__init__("Me isn't set: pick or create")
+
+
+class ReadOnly(CoreError):
+    """The Workspace was written by a newer Memex, so it opens read-only (§3.5)."""
+
+    code = "read_only"
+
+    def __init__(self) -> None:
+        super().__init__("This Workspace needs a newer Memex: upgrade Memex to edit it")
+
+
+class UnknownReference(CoreError):
+    code = "unknown_reference"
+
+    def __init__(self, field: str, id: str, expected: str) -> None:
+        super().__init__(f"{field}: {id!r} is not {expected}")
+        self.field = field
+        self.id = id

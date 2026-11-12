@@ -20,7 +20,7 @@ def resolve_workspace_path(root: Path, rel: str) -> Path:
     _check_lexical(rel)
     real_root = Path(os.path.realpath(root))
     real = Path(os.path.realpath(real_root / rel))
-    if not _is_within(real_root, real):
+    if not is_within(real_root, real):
         raise BadPath(rel, "outside the Workspace")
     return real
 
@@ -49,6 +49,6 @@ def _check_segment(rel: str, segment: str) -> None:
         raise BadPath(rel, "reserved device name")
 
 
-def _is_within(root: Path, path: Path) -> bool:
+def is_within(root: Path, path: Path) -> bool:
     a, b = os.path.normcase(root), os.path.normcase(path)
     return os.path.commonpath([a, b]) == a
