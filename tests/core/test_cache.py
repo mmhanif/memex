@@ -11,7 +11,7 @@ from memex.core.store import Store
 def put(root: Path, rel: str, text: str) -> None:
     path = root / rel
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
+    path.write_bytes(text.encode())
 
 
 @pytest.fixture

@@ -25,6 +25,8 @@ packages = ["src/memex"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
+# A dying test thread must fail the run, not hide behind a warning.
+filterwarnings = ["error::pytest.PytestUnhandledThreadExceptionWarning"]
 markers = [
     "windows: needs Windows; skipped elsewhere",
     "slow: real watcher or other slow tests",

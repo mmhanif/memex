@@ -1,3 +1,4 @@
+import contextlib
 import datetime as dt
 import hashlib
 import threading
@@ -112,7 +113,9 @@ def test_readers_only_ever_see_a_whole_old_or_whole_new_file(root: Path, store: 
 
     def reader() -> None:
         while not stop.is_set():
-            seen.add((root / "a.md").read_bytes())
+            # Windows: a reader may hit the file mid-swap and miss it, but never see half of it.
+            with contextlib.suppress(PermissionError):
+                seen.add((root / "a.md").read_bytes())
 
     thread = threading.Thread(target=reader)
     thread.start()
@@ -155,23 +158,23 @@ Not frontmatter.
 def test_changing_one_field_preserves_comments_order_quoting_and_body_bytes(
     root: Path, store: Store
 ):
-    (root / "x.md").write_text(PROJECT)
+    (root / "x.md").write_bytes(PROJECT.encode())
     store.update_fields("x.md", expected_hash=store.read("x.md").hash, set={"status": "active"})
     # The end-of-line comment keeps its column.
-    assert (root / "x.md").read_text() == PROJECT.replace(
+    assert (root / "x.md").read_bytes().decode() == PROJECT.replace(
         "status: not-started   # was planned", "status: active        # was planned"
     )
 
 
 def test_new_field_is_appended_and_unset_field_removed(root: Path, store: Store):
-    (root / "x.md").write_text("---\ntitle: X\ndue: 2026-12-01\nstatus: open\n---\nbody\n")
+    (root / "x.md").write_bytes(b"---\ntitle: X\ndue: 2026-12-01\nstatus: open\n---\nbody\n")
     store.update_fields(
         "x.md",
         expected_hash=store.read("x.md").hash,
         set={"completed": dt.date(2026, 11, 12)},
         unset=["due"],
     )
-    assert (root / "x.md").read_text() == (
+    assert (root / "x.md").read_bytes().decode() == (
         "---\ntitle: X\nstatus: open\ncompleted: 2026-11-12\n---\nbody\n"
     )
 
@@ -185,19 +188,19 @@ def test_field_edit_keeps_crlf_bom_and_a_body_without_trailing_newline(root: Pat
 
 
 def test_field_edit_with_a_stale_hash_is_a_conflict(root: Path, store: Store):
-    (root / "x.md").write_text("---\nstatus: open\n---\n")
+    (root / "x.md").write_bytes(b"---\nstatus: open\n---\n")
     stale = store.read("x.md").hash
-    (root / "x.md").write_text("---\nstatus: done\n---\n")
+    (root / "x.md").write_bytes(b"---\nstatus: done\n---\n")
     with pytest.raises(Conflict):
         store.update_fields("x.md", expected_hash=stale, set={"status": "cancelled"})
-    assert (root / "x.md").read_text() == "---\nstatus: done\n---\n"
+    assert (root / "x.md").read_bytes().decode() == "---\nstatus: done\n---\n"
 
 
 def test_field_edit_on_unparseable_frontmatter_is_refused(root: Path, store: Store):
-    (root / "x.md").write_text("---\ntitle: [unclosed\n---\nbody\n")
+    (root / "x.md").write_bytes(b"---\ntitle: [unclosed\n---\nbody\n")
     with pytest.raises(Validation):
         store.update_fields("x.md", expected_hash=store.read("x.md").hash, set={"title": "Y"})
-    assert (root / "x.md").read_text() == "---\ntitle: [unclosed\n---\nbody\n"
+    assert (root / "x.md").read_bytes().decode() == "---\ntitle: [unclosed\n---\nbody\n"
 
 
 def test_read_write_or_field_edit_of_a_missing_file_is_not_found(store: Store):

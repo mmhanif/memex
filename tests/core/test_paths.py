@@ -15,7 +15,7 @@ def test_hostile_path_is_rejected(tmp_path: Path, rel: str):
 
 def test_plain_relative_path_resolves_inside_the_workspace(tmp_path: Path):
     (tmp_path / "notes").mkdir()
-    (tmp_path / "notes" / "a.md").write_text("hi")
+    (tmp_path / "notes" / "a.md").write_bytes(b"hi")
     assert resolve_workspace_path(tmp_path, "notes/a.md") == (tmp_path / "notes" / "a.md").resolve()
 
 
@@ -23,7 +23,7 @@ def test_plain_relative_path_resolves_inside_the_workspace(tmp_path: Path):
 def outside(tmp_path: Path) -> Path:
     target = tmp_path / "outside"
     target.mkdir()
-    (target / "secret.md").write_text("secret")
+    (target / "secret.md").write_bytes(b"secret")
     return target
 
 
