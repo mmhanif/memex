@@ -210,3 +210,13 @@ def test_read_write_or_field_edit_of_a_missing_file_is_not_found(store: Store):
         store.write("gone.md", "x\n", expected_hash=sha256(b""))
     with pytest.raises(NotFound):
         store.update_fields("gone.md", expected_hash=sha256(b""), set={"a": 1})
+
+
+def test_reading_or_writing_a_folder_is_not_found(root: Path, store: Store):
+    # Windows raises PermissionError, not IsADirectoryError, when a folder is opened.
+    (root / "notes.md").mkdir()
+
+    with pytest.raises(NotFound):
+        store.read("notes.md")
+    with pytest.raises(NotFound):
+        store.write("notes.md", "x", "hash")
