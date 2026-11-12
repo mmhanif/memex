@@ -1,0 +1,698 @@
+<!doctype html>
+<!--
+  PROTOTYPE — throwaway. Lives only on the prototype/ui-layout branch; never merge.
+  Question (ticket "UI layout & core views", mmhanif/memex#11): how should Memex look and navigate?
+  Three structurally different shells over the same in-memory sample Workspace, switchable via ?variant=A|B|C
+  (or the floating bar / ← → keys). No persistence: reload resets everything. Open by double-clicking.
+    A  Workbench   — file-first: sidebar (views + Directs + raw tree), properties form + split editor, context panel
+    B  Structured  — view-first: icon rail, dashboard/outline-table/Person View pages, documents open read-mode with an Edit toggle
+    C  Palette     — keyboard-first: no sidebar, Ctrl-K command palette, single column, click-to-edit body, status board
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Memex UI prototype</title>
+<style>
+:root{--bg:#fbfbfa;--panel:#f2f1ee;--line:#dedcd6;--ink:#1f1f1d;--mute:#6b6a65;--acc:#2f5fd0;--accbg:#e7eefc;
+  --ok:#2e7d4f;--warn:#b26a00;--bad:#b3261e;--font:system-ui,-apple-system,"Segoe UI",sans-serif;--mono:ui-monospace,Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:14px/1.45 var(--font)}
+a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
+a.broken{color:var(--bad);text-decoration:line-through dotted}
+button,select,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:6px;padding:3px 9px}
+button:hover{border-color:#bbb}
+button.primary{background:var(--acc);color:#fff;border-color:var(--acc)}
+input,select,textarea{border:1px solid var(--line);border-radius:6px;padding:3px 6px;background:#fff}
+textarea{font-family:var(--mono);font-size:13px;resize:none}
+h1,h2,h3,h4{margin:.2em 0 .5em}h1{font-size:22px}h2{font-size:17px}h3{font-size:14px}
+.muted{color:var(--mute)}.small{font-size:12px}.mono{font-family:var(--mono)}
+.badge{display:inline-block;font-size:11px;padding:0 6px;border-radius:9px;background:#eee;color:#444;white-space:nowrap}
+.s-active{background:#e3f1e8;color:var(--ok)}.s-blocked{background:#fbe5e3;color:var(--bad)}.s-on-hold{background:#fdf0dc;color:var(--warn)}
+.s-done{background:#e8e8e8;color:#777}.s-cancelled{background:#eee;color:#999;text-decoration:line-through}.s-not-started{background:#eef}
+.s-open{background:var(--accbg);color:var(--acc)}
+.chip{display:inline-flex;align-items:center;gap:3px;background:var(--accbg);border-radius:10px;padding:0 7px;font-size:12px;margin:1px 2px}
+.chip button{border:0;background:none;padding:0 2px;color:var(--mute)}
+.av{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#d9e2f5;color:#28407a;font-size:10px;font-weight:600;margin-right:-4px;border:2px solid #fff}
+.overdue{color:var(--bad);font-weight:600}
+.md p{margin:.4em 0}.md ul{margin:.3em 0;padding-left:20px}.md h1,.md h2,.md h3{margin:.6em 0 .3em}
+.done-row{opacity:.55;text-decoration:line-through}
+table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:4px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:600;color:var(--mute);font-size:12px}
+.modal-bg{position:fixed;inset:0;background:#0004;display:grid;place-items:start center;padding-top:10vh;z-index:50}
+.modal{background:#fff;border-radius:10px;box-shadow:0 10px 40px #0003;width:min(560px,92vw);padding:16px}
+.form-grid{display:grid;grid-template-columns:110px 1fr;gap:8px 10px;align-items:center}
+.tree ul{list-style:none;margin:0;padding-left:12px}.tree>ul{padding-left:0}.tree li{white-space:nowrap}
+.tree .dir{cursor:pointer;color:var(--mute)}
+
+/* prototype switcher + state panel: deliberately NOT part of the design */
+#switcher{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:100;display:flex;gap:6px;align-items:center;
+  background:#111;color:#fff;border-radius:999px;padding:5px 8px;box-shadow:0 4px 18px #0005;font:600 12px var(--font)}
+#switcher button{background:#333;color:#fff;border:0;border-radius:999px;padding:3px 10px}
+#switcher .lbl{min-width:190px;text-align:center}
+#state{position:fixed;right:10px;bottom:56px;width:min(440px,90vw);max-height:60vh;overflow:auto;background:#111;color:#cfe;
+  font:11px/1.4 var(--mono);padding:10px;border-radius:8px;z-index:99;white-space:pre-wrap;display:none}
+
+/* ---------- Variant A: Workbench ---------- */
+.A{display:grid;grid-template-columns:auto 1fr 300px;height:100vh}
+.A-side{width:250px;background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:10px}
+.A-side.collapsed{width:36px;padding:8px 4px}
+.A-side h4{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);margin:14px 0 4px}
+.A-side .nav a{display:flex;justify-content:space-between;padding:2px 6px;border-radius:5px;color:var(--ink)}
+.A-side .nav a.on{background:#fff;font-weight:600}
+.A-main{overflow:auto;display:flex;flex-direction:column;min-width:0}
+.A-head{padding:10px 16px;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center}
+.A-props{padding:8px 16px;border-bottom:1px solid var(--line);background:#fff}
+.A-props .form-grid{grid-template-columns:100px 1fr 100px 1fr}
+.A-panes{flex:1;display:flex;min-height:300px}
+.A-panes textarea{flex:1;border:0;border-right:1px solid var(--line);border-radius:0;padding:14px;outline:none}
+.A-panes .md{flex:1;padding:6px 18px;overflow:auto}
+.A-ctx{border-left:1px solid var(--line);overflow:auto;padding:12px;background:#fff}
+.A-ctx section{margin-bottom:16px}.A-ctx ul{padding-left:16px;margin:4px 0}
+.A-page{padding:16px 20px}
+.tabs{display:flex;gap:4px;margin-bottom:10px}.tabs a{padding:3px 10px;border-radius:6px;border:1px solid var(--line);color:var(--ink)}
+.tabs a.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+/* ---------- Variant B: Structured ---------- */
+.B{display:grid;grid-template-columns:76px 1fr;height:100vh}
+.B-rail{background:#1f2433;display:flex;flex-direction:column;align-items:stretch;padding-top:8px}
+.B-rail a{color:#aab;text-align:center;padding:9px 2px;font-size:11px}
+.B-rail a span{display:block;font-size:19px}
+.B-rail a.on{color:#fff;background:#2f3650;border-left:3px solid #7aa2ff}
+.B-wrap{overflow:auto}
+.B-top{position:sticky;top:0;background:var(--bg);display:flex;gap:10px;align-items:center;padding:10px 22px;border-bottom:1px solid var(--line);z-index:2}
+.B-page{padding:16px 22px;max-width:1200px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px}
+.card h3{display:flex;justify-content:space-between}
+.card ul{padding-left:16px;margin:4px 0}
+.outline td:first-child{white-space:nowrap}
+.outline tr.theme td{background:var(--panel);font-weight:600}
+.cols3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.props{display:grid;grid-template-columns:120px 1fr;gap:4px 10px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:14px}
+.pop{position:absolute;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 20px #0002;padding:8px;z-index:20;max-height:260px;overflow:auto}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg a{padding:4px 12px;color:var(--ink);border-right:1px solid var(--line)}.seg a:last-child{border:0}
+.seg a.on{background:var(--ink);color:#fff}
+
+/* ---------- Variant C: Palette ---------- */
+.C-top{position:sticky;top:0;display:flex;gap:12px;align-items:center;padding:8px 16px;background:var(--bg);border-bottom:1px solid var(--line);z-index:5}
+.C-cmd{flex:1;max-width:520px;margin:0 auto;text-align:left;color:var(--mute);background:#fff;padding:6px 12px;border-radius:8px}
+.C-col{max-width:780px;margin:0 auto;padding:22px 20px 80px}
+.C-title{font-size:28px;font-weight:700;border:0;background:none;width:100%;padding:0;outline:none}
+.C-props{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 18px}
+.C-prop{border:1px solid var(--line);border-radius:6px;padding:1px 8px;font-size:12px;background:#fff}
+.C-prop b{color:var(--mute);font-weight:500}
+.C-body{min-height:120px;border-radius:6px;padding:4px 8px;margin:0 -8px;cursor:text}
+.C-body:hover{background:#f4f4f2}
+.C-body textarea{width:100%;min-height:260px;border:0;background:none;padding:0}
+.C-pal{width:min(620px,94vw);background:#fff;border-radius:12px;box-shadow:0 14px 50px #0004;overflow:hidden}
+.C-pal input{width:100%;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:14px 16px;font-size:16px;outline:none}
+.C-pal .res{max-height:50vh;overflow:auto}
+.C-pal .r{padding:6px 16px;display:flex;justify-content:space-between;cursor:pointer}
+.C-pal .r.sel{background:var(--accbg)}
+.C-drawer{position:fixed;top:0;left:0;bottom:0;width:280px;background:var(--panel);border-right:1px solid var(--line);padding:12px;z-index:30;overflow:auto;box-shadow:4px 0 20px #0002}
+.board{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:10px;overflow:auto}
+.board .colm{background:var(--panel);border-radius:8px;padding:8px;min-height:200px}
+.board .cardc{background:#fff;border:1px solid var(--line);border-radius:7px;padding:7px;margin-bottom:7px;font-size:13px}
+.ledger .row{display:grid;grid-template-columns:28px 1fr 110px 90px;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);align-items:center}
+.ledger .dir{font-size:16px;text-align:center}
+.inbox .row{display:grid;grid-template-columns:22px 1fr 150px 90px;gap:8px;padding:6px 8px;border-radius:6px;align-items:center}
+.inbox .row.cur{background:var(--accbg)}
+.kbd{font:11px var(--mono);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 4px;background:#fff}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="switcher"></div>
+<div id="state"></div>
+<script>
+// ============================================================ sample Workspace (in memory only)
+const TODAY = '2026-11-11';
+const ME = 'sam-rivera';
+const FOLDER = {theme:'themes',project:'projects',deliverable:'deliverables',person:'people',todo:'todos',term:'glossary',note:'notes'};
+const TYPE_LABEL = {theme:'Theme',project:'Project',deliverable:'Deliverable',person:'Person',todo:'To-do',term:'Glossary Term',note:'Note'};
+const WORK_STATUS = ['not-started','active','on-hold','blocked','done','cancelled'];
+const E = {}; const LOG = [];
+function add(type,id,f,body=''){E[id]={type,id,created:'2026-10-01',...f,body}}
+// People
+add('person','sam-rivera',{title:'Sam Rivera',kind:['team-member'],manager:'jordan-lee',role:'Head of Data Platform'},'# Sam Rivera\n\nThis is **Me**.');
+add('person','jordan-lee',{title:'Jordan Lee',kind:['team-member'],role:'VP Engineering'},'My manager. Weekly 1:1 Thursdays.');
+add('person','alice-smith',{title:'Alice Smith',kind:['team-member'],manager:ME,role:'Staff Engineer'},'Leads observability. Wants to grow into architecture.');
+add('person','bob-jones',{title:'Bob Jones',kind:['team-member'],manager:ME,role:'Engineering Manager'},'Runs the migration team.');
+add('person','priya-shah',{title:'Priya Shah',kind:['team-member','stakeholder'],manager:ME,role:'Analytics Lead',organisation:'Finance (dotted line)'},'Direct, but also represents Finance reporting.');
+add('person','carol-ng',{title:'Carol Ng',kind:['team-member'],manager:'alice-smith',role:'SRE'},'');
+add('person','dev-patel',{title:'Dev Patel',kind:['team-member'],manager:'bob-jones',role:'Data Engineer'},'');
+add('person','dan-okafor',{title:'Dan Okafor',kind:['stakeholder'],role:'Head of FP&A',organisation:'Finance'},'Cares about month-end close dates above all.');
+add('person','erin-wu',{title:'Erin Wu',kind:['stakeholder'],role:'Director, Customer Success',organisation:'CS'},'');
+// Portfolio
+add('theme','platform-reliability',{title:'Platform reliability',lead:ME,team:['alice-smith','bob-jones'],stakeholders:['erin-wu']},'Make the platform boring.\n\n- Fewer pages\n- Faster recovery');
+add('theme','finance-data',{title:'Finance data',lead:ME,team:['bob-jones','priya-shah'],stakeholders:['dan-okafor']},'Everything Finance relies on from us.');
+add('project','observability-revamp',{title:'Observability revamp',theme:'platform-reliability',status:'active',lead:'alice-smith',team:['alice-smith','carol-ng'],stakeholders:['erin-wu'],due:'2026-12-15'},'Replace the old metrics stack with OpenTelemetry.\n\nSee [[slo-dashboards]].');
+add('project','incident-process',{title:'Incident process',theme:'platform-reliability',status:'not-started',lead:'bob-jones',team:['bob-jones'],due:'2027-02-01'},'');
+add('project','data-migration',{title:'Data migration',theme:'finance-data',status:'blocked',lead:'bob-jones',team:['bob-jones','dev-patel'],stakeholders:['dan-okafor'],due:'2026-11-30'},'Move the ledger warehouse to the new cluster.\n\n**Blocked** on Finance sign-off of the cutover window.');
+add('project','ledger-reports',{title:'Ledger reports',theme:'finance-data',status:'active',lead:'priya-shah',team:['priya-shah'],stakeholders:['dan-okafor','erin-wu'],due:'2027-01-15'},'');
+add('project','hiring-plan-2027',{title:'Hiring plan 2027',status:'active',lead:ME,team:[],stakeholders:['jordan-lee'],due:'2026-12-01'},'No Theme: a Project can stand alone.');
+add('deliverable','otel-collector-rollout',{title:'OTel collector rollout',project:'observability-revamp',status:'active',lead:'carol-ng',team:['carol-ng'],due:'2026-11-20'},'');
+add('deliverable','slo-dashboards',{title:'SLO dashboards',project:'observability-revamp',status:'not-started',lead:'alice-smith',team:['alice-smith'],stakeholders:['erin-wu'],due:'2026-12-10'},'');
+add('deliverable','schema-mapping',{title:'Schema mapping',project:'data-migration',status:'done',lead:'dev-patel',team:['dev-patel']},'');
+add('deliverable','cutover-runbook',{title:'Cutover runbook',project:'data-migration',status:'blocked',lead:'bob-jones',team:['bob-jones','dev-patel'],stakeholders:['dan-okafor'],due:'2026-11-25'},'');
+add('deliverable','month-end-report',{title:'Month-end report v2',project:'ledger-reports',status:'active',lead:'priya-shah',stakeholders:['dan-okafor'],due:'2026-11-28'},'');
+// To-dos
+add('todo','review-slo-targets',{title:'Review SLO targets',owner:ME,requester:'alice-smith',status:'open',due:'2026-11-14',about:'slo-dashboards'});
+add('todo','approve-otel-budget',{title:'Approve OTel budget',owner:ME,requester:'dan-okafor',status:'open',due:'2026-11-10',about:'observability-revamp'});
+add('todo','send-cutover-plan',{title:'Send cutover plan',owner:'bob-jones',requester:ME,status:'open',due:'2026-11-18',about:'data-migration'});
+add('todo','draft-incident-template',{title:'Draft incident template',owner:'bob-jones',requester:ME,status:'open',about:'incident-process'});
+add('todo','share-q4-numbers',{title:'Share Q4 numbers',owner:'dan-okafor',requester:ME,status:'open',due:'2026-11-15',about:'data-migration'});
+add('todo','intro-carol-to-erin',{title:'Intro Carol to Erin',owner:ME,requester:'carol-ng',status:'open'});
+add('todo','book-offsite-room',{title:'Book offsite room',owner:ME,requester:ME,status:'open',due:'2026-11-20'});
+add('todo','perf-review-alice',{title:'Write perf review for Alice',owner:ME,requester:'jordan-lee',status:'open',due:'2026-11-30'});
+add('todo','update-runbook-links',{title:'Update runbook links',owner:'carol-ng',requester:'alice-smith',status:'open'});
+add('todo','collect-team-feedback',{title:'Collect team feedback',owner:'alice-smith',requester:ME,status:'done',completed:'2026-11-05'});
+// Notes, glossary, bookmarks
+add('note','2026-11-10-1-1-bob',{title:'1:1 Bob',date:'2026-11-10',people:['bob-jones'],about:['data-migration']},'- Cutover blocked on [[dan-okafor]]\n- Bob to send [[cutover-runbook]] draft\n- Mentioned [[old-warehouse]] decommission');
+add('note','scratch',{title:'Scratch'},'Ideas for the offsite...');
+add('term','slo',{title:'SLO',aliases:['service level objective']},'A target level for a service metric, e.g. 99.9% of requests under 300 ms.');
+add('term','cutover',{title:'Cutover'},'The moment traffic switches from the old system to the new one.');
+add('term','fp-and-a',{title:'FP&A',aliases:['financial planning and analysis']},'Finance team that owns forecasts and month-end.');
+let BOOKMARKS = '- [OTel docs](https://opentelemetry.io) #observability\n- [Finance calendar](https://intranet/finance/calendar) month-end dates #finance\n- [Team wiki](https://intranet/wiki/data-platform)';
+
+// ============================================================ derived views
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const all = t => Object.values(E).filter(e => !t || e.type === t);
+const title = id => E[id]?.title ?? id;
+const link = id => E[id] ? `<a href="#/e/${id}">${esc(E[id].title)}</a>` : `<a class="broken" title="Broken Reference">${esc(id)}</a>`;
+const plink = id => E[id] ? `<a href="#/e/${id}">${esc(E[id].title)}</a>` + (id===ME?' <span class="badge">Me</span>':'') : link(id);
+const initials = id => (title(id).match(/\b\w/g)||[]).slice(0,2).join('');
+const av = id => `<span class="av" title="${esc(title(id))}">${initials(id)}</span>`;
+const badge = s => s ? `<span class="badge s-${s}">${s}</span>` : '';
+const due = d => !d ? '<span class="muted">—</span>' : `<span class="${d<TODAY?'overdue':''}">${d}</span>`;
+const path = e => `${FOLDER[e.type]}/${e.id}.md`;
+const projectsOf = th => all('project').filter(p => p.theme === th);
+const delivsOf = pr => all('deliverable').filter(d => d.project === pr);
+const todosAbout = id => all('todo').filter(t => t.about === id);
+const isOpen = t => t.status === 'open';
+const TODOS = {
+  'mine': () => all('todo').filter(t => t.owner === ME),
+  'waiting-on-them': () => all('todo').filter(t => t.requester === ME && t.owner !== ME),
+  'waiting-on-me': () => all('todo').filter(t => t.owner === ME && t.requester !== ME),
+};
+const TODO_LABEL = {'mine':'My to-dos','waiting-on-them':'Waiting on them','waiting-on-me':'Waiting on me'};
+const byDue = (a,b) => (a.due||'9999').localeCompare(b.due||'9999');
+const theyOweMe = p => all('todo').filter(t => t.owner === p && t.requester === ME);
+const iOweThem = p => all('todo').filter(t => t.owner === ME && t.requester === p);
+const directsOf = p => all('person').filter(x => x.manager === p);
+const tagsOf = p => all().filter(e => ['theme','project','deliverable'].includes(e.type)).flatMap(e => {
+  const r = []; if (e.lead === p) r.push('lead'); if ((e.team||[]).includes(p)) r.push('team'); if ((e.stakeholders||[]).includes(p)) r.push('stakeholder');
+  return r.length ? [{e, roles:r}] : [];
+});
+const meetingsWith = p => all('note').filter(n => (n.people||[]).includes(p)).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+const mentionsOf = id => all().filter(e => (e.body||'').includes(`[[${id}]]`));
+const fileTree = () => {
+  const t = {}; for (const e of all()) (t[FOLDER[e.type]] ??= []).push(e);
+  return t;
+};
+function md(src){
+  const lines = esc(src||'').replace(/\[\[([^\]]+)\]\]/g,(_,id)=>link(id)).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')
+    .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g,'<a href="$2" target="_blank">$1</a>').split('\n');
+  let out='', inList=false;
+  for (const l of lines){
+    if (/^- /.test(l)){ if(!inList){out+='<ul>';inList=true} out+=`<li>${l.slice(2)}</li>`; continue }
+    if (inList){out+='</ul>';inList=false}
+    const h = l.match(/^(#{1,3}) (.*)/); if (h){out+=`<h${h[1].length}>${h[2]}</h${h[1].length}>`; continue}
+    if (l.trim()) out+=`<p>${l}</p>`;
+  }
+  return out + (inList?'</ul>':'');
+}
+function frontmatter(e){
+  const skip = new Set(['type','id','body']); let y = '---\n';
+  for (const [k,v] of Object.entries(e)) if (!skip.has(k) && v !== undefined && !(Array.isArray(v)&&!v.length))
+    y += Array.isArray(v) ? `${k}: [${v.join(', ')}]\n` : `${k}: ${v}\n`;
+  return y + '---\n';
+}
+
+// ============================================================ mutations (log everything so the state panel can show it)
+function mut(msg, fn){ fn(); LOG.unshift(`${new Date().toLocaleTimeString()}  ${msg}`); render() }
+const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || 'untitled';
+function createEntity(type, f){
+  let id = slug(f.title), n = 2; while (E[id]) id = `${slug(f.title)}-${n++}`;
+  mut(`create ${type} ${id}`, () => add(type, id, {created:TODAY, ...f}, ''));
+  return id;
+}
+const addTo = (id,field,p) => mut(`${id}.${field} += ${p}`, () => { const a = E[id][field] ??= []; if (!a.includes(p)) a.push(p) });
+const rmFrom = (id,field,p) => mut(`${id}.${field} -= ${p}`, () => { E[id][field] = (E[id][field]||[]).filter(x => x !== p) });
+const setF = (id,field,v) => mut(`${id}.${field} = ${v}`, () => { if (v === '') delete E[id][field]; else E[id][field] = v });
+const toggleTodo = id => mut(`toggle ${id}`, () => { const t = E[id]; t.status = t.status==='open'?'done':'open'; t.completed = t.status==='done'?TODAY:undefined });
+function newTodo(f){ return createEntity('todo', {status:'open', requester:ME, ...f}) }
+// Quick-add syntax shared by B and C: "Title @owner from @requester due:YYYY-MM-DD"
+function parseQuick(s){
+  const f = {owner:ME, requester:ME};
+  s = s.replace(/from @([\w-]+)/,(_,p)=>{f.requester=p;return''}).replace(/@([\w-]+)/,(_,p)=>{f.owner=p;return''})
+       .replace(/due:(\S+)/,(_,d)=>{f.due=d;return''});
+  f.title = s.trim().replace(/\s+/g,' '); return f;
+}
+
+// ============================================================ routing + event delegation
+const route = () => (location.hash.slice(2) || 'home').split('/');
+const ACT = {}, CHG = {}, KEY = {};
+document.addEventListener('click', ev => { const a = ev.target.closest('a[href]'); if (a && !a.dataset.act) return; const el = ev.target.closest('[data-act]'); if (el){ ev.preventDefault(); ACT[el.dataset.act]?.(el.dataset, el, ev) } });
+document.addEventListener('change', ev => { const el = ev.target.closest('[data-chg]'); if (el) CHG[el.dataset.chg]?.(el.dataset, el.value, el) });
+document.addEventListener('keydown', ev => { const el = ev.target.closest?.('[data-key]'); if (el) KEY[el.dataset.key]?.(ev, el.dataset, el) });
+window.addEventListener('hashchange', () => { closeModal(); render() });
+const modal = html => { document.getElementById('modal').innerHTML = `<div class="modal-bg" data-act="bgclose">${html}</div>`; document.querySelector('#modal [autofocus]')?.focus() };
+function closeModal(){ document.getElementById('modal').innerHTML = '' }
+ACT.bgclose = (d,el,ev) => { if (ev.target === el) closeModal() };
+ACT.close = closeModal;
+ACT.toggleTodo = d => toggleTodo(d.id);
+CHG.status = (d,v) => setF(d.id,'status',v);
+CHG.field = (d,v) => setF(d.id,d.f,v);
+CHG.addP = (d,v,el) => { if (v) addTo(d.id,d.f,v) };
+ACT.rmP = d => rmFrom(d.id,d.f,d.p);
+
+// person chip-picker used for lead/team/stakeholders/owner/requester/manager
+const personOpts = (exclude=[]) => all('person').filter(p=>!exclude.includes(p.id)).map(p=>`<option value="${p.id}">${esc(p.title)}${p.id===ME?' (Me)':''}</option>`).join('');
+function chips(e, f){
+  const v = e[f]||[];
+  return v.map(p=>`<span class="chip">${esc(title(p))}<button data-act="rmP" data-id="${e.id}" data-f="${f}" data-p="${p}">×</button></span>`).join('')
+    + `<select data-chg="addP" data-id="${e.id}" data-f="${f}" style="width:auto"><option value="">+ person</option>${personOpts(v)}</select>`;
+}
+const personSelect = (e,f,allowEmpty=true) => `<select data-chg="field" data-id="${e.id}" data-f="${f}">${allowEmpty?'<option value="">—</option>':''}${all('person').map(p=>`<option value="${p.id}" ${e[f]===p.id?'selected':''}>${esc(p.title)}${p.id===ME?' (Me)':''}</option>`).join('')}</select>`;
+const statusSelect = e => `<select data-chg="status" data-id="${e.id}">${(e.type==='todo'?['open','done','cancelled']:WORK_STATUS).map(s=>`<option ${s===e.status?'selected':''}>${s}</option>`).join('')}</select>`;
+const parentSelect = (e,f,type) => `<select data-chg="field" data-id="${e.id}" data-f="${f}"><option value="">—</option>${all(type).map(x=>`<option value="${x.id}" ${e[f]===x.id?'selected':''}>${esc(x.title)}</option>`).join('')}</select>`;
+
+// Generic "new Entity" form, reused by A (modal) and B (modal launched from + New). C uses its palette instead.
+let draft = null;
+function createForm(type, preset={}){
+  draft = {type, team:[], stakeholders:[], ...preset};
+  const pick = (f,lbl) => `<label>${lbl}</label><div>${(draft[f]||[]).map(p=>`<span class="chip">${esc(title(p))}</span>`).join('')}<select data-chg="draftAdd" data-f="${f}"><option value="">+ person</option>${personOpts()}</select></div>`;
+  const one = (f,lbl,opts) => `<label>${lbl}</label><select data-chg="draftSet" data-f="${f}"><option value="">—</option>${opts}</select>`;
+  const t = draft.type;
+  modal(`<div class="modal"><h2>New ${TYPE_LABEL[t]}</h2>
+    <div class="form-grid">
+      <label>Type</label><select data-chg="draftType">${Object.keys(TYPE_LABEL).map(k=>`<option value="${k}" ${k===t?'selected':''}>${TYPE_LABEL[k]}</option>`).join('')}</select>
+      <label>Title</label><input id="draftTitle" autofocus value="${esc(draft.title||'')}" placeholder="${t==='todo'?'What needs doing?':'Title'}">
+      ${t==='project'?one('theme','Theme',all('theme').map(x=>`<option value="${x.id}" ${draft.theme===x.id?'selected':''}>${esc(x.title)}</option>`).join('')):''}
+      ${t==='deliverable'?one('project','Project *',all('project').map(x=>`<option value="${x.id}" ${draft.project===x.id?'selected':''}>${esc(x.title)}</option>`).join('')):''}
+      ${['theme','project','deliverable'].includes(t)?one('lead','Lead',personOpts())+pick('team','Team')+pick('stakeholders','Stakeholders'):''}
+      ${t==='todo'?one('owner','Owner *',personOpts().replace(`value="${draft.owner||ME}"`,`value="${draft.owner||ME}" selected`))+one('requester','Requester',personOpts().replace(`value="${draft.requester||ME}"`,`value="${draft.requester||ME}" selected`))+'<label>Due</label><input type="date" id="draftDue">':''}
+      ${t==='person'?'<label>Kind</label><div><label><input type="checkbox" id="kTM" checked> Team Member</label> <label><input type="checkbox" id="kSH"> Stakeholder</label></div>'+one('manager','Manager',personOpts())+'<label>Role</label><input id="draftRole">':''}
+      ${t==='note'?'<label>Date</label><input type="date" id="draftDate">'+pick('people','Participants'):''}
+    </div>
+    <p style="text-align:right"><button data-act="close">Cancel</button> <button class="primary" data-act="draftCreate">Create</button></p></div>`);
+}
+CHG.draftType = (d,v) => { draft.title = document.getElementById('draftTitle').value; createForm(v, {title:draft.title}) };
+CHG.draftAdd = (d,v) => { draft.title = document.getElementById('draftTitle').value; (draft[d.f] ??= []).push(v); createForm(draft.type, draft) };
+CHG.draftSet = (d,v) => { draft[d.f] = v };
+ACT.draftCreate = () => {
+  const f = {...draft}; delete f.type; f.title = document.getElementById('draftTitle').value.trim(); if (!f.title) return;
+  if (['project','deliverable'].includes(draft.type)) f.status = 'not-started';
+  if (draft.type==='todo'){ f.status='open'; f.owner ||= ME; f.requester ||= ME; const dd = document.getElementById('draftDue').value; if (dd) f.due = dd; delete f.team; delete f.stakeholders }
+  if (draft.type==='person'){ f.kind = [document.getElementById('kTM').checked&&'team-member', document.getElementById('kSH').checked&&'stakeholder'].filter(Boolean); f.role = document.getElementById('draftRole').value; delete f.team; delete f.stakeholders }
+  if (draft.type==='note'){ const dd = document.getElementById('draftDate').value; if (dd) f.date = dd; delete f.team; delete f.stakeholders }
+  if (draft.type==='deliverable' && !f.project) return alert('A Deliverable needs a Project');
+  for (const k of Object.keys(f)) if (f[k]===''||f[k]===undefined) delete f[k];
+  const id = createEntity(draft.type, f); closeModal(); location.hash = `#/e/${id}`;
+};
+
+// ============================================================ VARIANT A — Workbench (file-first, three panes)
+const A = { name:'Workbench', side:true, mode:'split' };
+ACT.aSide = () => { A.side = !A.side; render() };
+ACT.aMode = d => { A.mode = d.m; render() };
+ACT.aNew = d => createForm(d.type || 'project', d.preset ? JSON.parse(d.preset) : {});
+CHG.aBody = (d,v) => mut(`edit body ${d.id}`, () => E[d.id].body = v);
+KEY.aBody = ev => {}; // typing only; change event commits (stands in for 1 s auto-save)
+A.render = () => {
+  const r = route(), cur = location.hash || '#/home';
+  const nav = (href,label,n) => `<a href="${href}" class="${cur===href?'on':''}"><span>${label}</span>${n!==undefined?`<span class="muted">${n}</span>`:''}</a>`;
+  const tree = fileTree();
+  const side = A.side ? `<aside class="A-side">
+      <div style="display:flex;justify-content:space-between;align-items:center"><b>Memex</b><button data-act="aSide" title="Collapse (Ctrl+\\)">⟨</button></div>
+      <p><button class="primary" style="width:100%" data-act="aNew">+ New…</button></p>
+      <input placeholder="Search…" style="width:100%">
+      <h4>Views</h4><div class="nav">
+        ${nav('#/home','Home')}${nav('#/portfolio','Portfolio')}
+        ${nav('#/todos/mine','My to-dos',TODOS.mine().filter(isOpen).length)}
+        ${nav('#/todos/waiting-on-them','Waiting on them',TODOS['waiting-on-them']().filter(isOpen).length)}
+        ${nav('#/todos/waiting-on-me','Waiting on me',TODOS['waiting-on-me']().filter(isOpen).length)}
+        ${nav('#/people','People')}${nav('#/glossary','Glossary')}${nav('#/f/bookmarks.md','Bookmarks')}</div>
+      <h4>Directs</h4><div class="nav">${directsOf(ME).map(p=>nav(`#/e/${p.id}`,esc(p.title),theyOweMe(p.id).filter(isOpen).length||'')).join('')}</div>
+      <h4>Files</h4><div class="tree nav"><ul>
+        ${Object.entries(tree).map(([dir,es])=>`<li><details ${r[1]&&E[r[1]]&&FOLDER[E[r[1]].type]===dir?'open':''}><summary class="dir">${dir}/</summary><ul>${es.map(e=>`<li>${nav(`#/e/${e.id}`,e.id+'.md')}</li>`).join('')}</ul></details></li>`).join('')}
+        <li>${nav('#/f/bookmarks.md','bookmarks.md')}</li><li class="muted">memex.yaml</li></ul></div>
+    </aside>` : `<aside class="A-side collapsed"><button data-act="aSide" title="Expand">⟩</button></aside>`;
+  let main = '', ctx = '';
+  if (r[0]==='e' && E[r[1]]){ [main, ctx] = A.entity(E[r[1]]) }
+  else if (r[0]==='f'){ main = `<div class="A-head"><span class="mono">bookmarks.md</span></div><div class="A-panes"><textarea data-chg="aBm">${esc(BOOKMARKS)}</textarea><div class="md">${md(BOOKMARKS)}</div></div>`; ctx = '<p class="muted small">Plain file — no Entity context.</p>' }
+  else if (r[0]==='todos'){ main = A.todos(r[1]||'mine'); ctx = '<h3>Quick add</h3><p class="small muted">Global shortcut opens the same New To-do form: Owner, Requester (defaults to Me), due.</p><button data-act="aNew" data-type="todo">+ New To-do</button>' }
+  else if (r[0]==='portfolio'){ main = A.portfolio(); ctx = '<p class="muted small">Select an item to open its file. The context panel then shows its children, To-dos and Mentions.</p>' }
+  else if (r[0]==='people'){ main = `<div class="A-page"><h1>People</h1>${A.org(ME)}<h3>My manager</h3>${plink('jordan-lee')}<h3>Stakeholders</h3><ul>${all('person').filter(p=>p.kind.includes('stakeholder')).map(p=>`<li>${plink(p.id)} <span class="muted">${esc(p.organisation||'')}</span></li>`).join('')}</ul><button data-act="aNew" data-type="person">+ New Person</button></div>`; ctx='' }
+  else if (r[0]==='glossary'){ main = `<div class="A-page"><h1>Glossary</h1><table>${all('term').map(t=>`<tr><td>${link(t.id)}</td><td>${md(t.body)}</td></tr>`).join('')}</table><p><button data-act="aNew" data-type="term">+ New Term</button></p></div>` }
+  else { main = A.home(); ctx = '' }
+  return `<div class="A" style="grid-template-columns:auto 1fr ${ctx?'300px':'0'}">${side}<div class="A-main">${main}</div><aside class="A-ctx" ${ctx?'':'hidden'}>${ctx}</aside></div>`;
+};
+CHG.aBm = (d,v) => mut('edit bookmarks.md', () => BOOKMARKS = v);
+A.org = (p, depth=0) => `<ul>${directsOf(p).map(d=>`<li>${plink(d.id)} <span class="muted small">${esc(d.role||'')}</span>${A.org(d.id,depth+1)}</li>`).join('')}</ul>`;
+A.home = () => `<div class="A-page"><h1>Home</h1><p class="muted">A is file-first: the home page is just a starting point. Most work happens in the editor with the context panel.</p>
+  <h3>Overdue / due this week</h3><ul>${all().filter(e=>e.due && e.due<='2026-11-18' && !['done','cancelled'].includes(e.status)).sort(byDue).map(e=>`<li>${link(e.id)} <span class="muted small">${TYPE_LABEL[e.type]}</span> ${due(e.due)}</li>`).join('')}</ul>
+  <h3>Recent notes</h3><ul>${all('note').map(n=>`<li>${link(n.id)} <span class="muted">${n.date||''}</span></li>`).join('')}</ul></div>`;
+A.portfolio = () => {
+  const row = (e,ind) => `<div style="padding:3px 0 3px ${ind*22}px">${link(e.id)} ${badge(e.status)} <span class="muted small">${e.lead?'lead '+esc(title(e.lead)):''} ${e.due?'· due '+e.due:''}</span></div>`;
+  return `<div class="A-page"><h1>Portfolio</h1>
+  ${all('theme').map(t=>row(t,0)+projectsOf(t.id).map(p=>row(p,1)+delivsOf(p.id).map(d=>row(d,2)).join('')).join('')+`<div style="padding-left:22px"><a href="#" data-act="aNew" data-type="project" data-preset='{"theme":"${t.id}"}' class="small">+ Project</a></div>`).join('<hr style="border:0;border-top:1px solid var(--line)">')}
+  <hr style="border:0;border-top:1px solid var(--line)"><div class="muted">No Theme</div>${projectsOf(undefined).map(p=>row(p,1)+delivsOf(p.id).map(d=>row(d,2)).join('')).join('')}
+  <p><button data-act="aNew" data-type="theme">+ Theme</button></p></div>`;
+};
+A.todos = which => {
+  const list = TODOS[which]().sort(byDue);
+  const other = t => which==='waiting-on-them' ? t.owner : t.requester;
+  return `<div class="A-page"><h1>To-dos</h1><div class="tabs">${Object.keys(TODOS).map(k=>`<a href="#/todos/${k}" class="${k===which?'on':''}">${TODO_LABEL[k]} (${TODOS[k]().filter(isOpen).length})</a>`).join('')}</div>
+   <table><tr><th></th><th>To-do</th><th>${which==='waiting-on-them'?'Owner':'Requester'}</th><th>Due</th><th>About</th></tr>
+   ${list.map(t=>`<tr class="${isOpen(t)?'':'done-row'}"><td><input type="checkbox" ${isOpen(t)?'':'checked'} data-act="toggleTodo" data-id="${t.id}"></td><td>${link(t.id)}</td><td>${other(t)===ME?'<span class="muted">Me</span>':plink(other(t))}</td><td>${due(t.due)}</td><td>${t.about?link(t.about):''}</td></tr>`).join('')}</table>
+   <p class="small muted">Completed shown struck-through here; real lists hide them behind "show completed".</p></div>`;
+};
+A.entity = e => {
+  const props = [];
+  const P = (lbl, html) => props.push(`<label class="muted small">${lbl}</label><div>${html}</div>`);
+  if (e.type==='project'){ P('Theme', parentSelect(e,'theme','theme')) }
+  if (e.type==='deliverable'){ P('Project', parentSelect(e,'project','project')) }
+  if (['project','deliverable','todo'].includes(e.type)){ P('Status', statusSelect(e)); P('Due', `<input type="date" value="${e.due||''}" data-chg="field" data-id="${e.id}" data-f="due">`) }
+  if (['theme','project','deliverable'].includes(e.type)){ P('Lead', personSelect(e,'lead')); P('Team', chips(e,'team')); P('Stakeholders', chips(e,'stakeholders')) }
+  if (e.type==='todo'){ P('Owner', personSelect(e,'owner',false)); P('Requester', personSelect(e,'requester',false)); P('About', link(e.about||'')) }
+  if (e.type==='person'){ P('Kind', e.kind.join(', ')); P('Manager', personSelect(e,'manager')); P('Role', esc(e.role||'')); P('Organisation', esc(e.organisation||'')) }
+  if (e.type==='note'){ P('Date', e.date||''); P('Participants', chips(e,'people')) }
+  const m = A.mode;
+  const main = `<div class="A-head"><span class="badge">${TYPE_LABEL[e.type]}</span><b style="font-size:17px">${esc(e.title)}</b><span class="mono muted small">${path(e)}</span>
+      <span style="margin-left:auto" class="tabs" >${['source','split','preview'].map(x=>`<a href="#" data-act="aMode" data-m="${x}" class="${m===x?'on':''}">${x}</a>`).join('')}</span></div>
+    ${props.length?`<div class="A-props"><div class="form-grid">${props.join('')}</div></div>`:''}
+    <div class="A-panes">${m!=='preview'?`<textarea data-chg="aBody" data-id="${e.id}" placeholder="Markdown body…">${esc(e.body)}</textarea>`:''}${m!=='source'?`<div class="md">${md(e.body)||'<p class="muted">Empty body</p>'}</div>`:''}</div>
+    <details style="padding:6px 16px" class="small"><summary class="muted">Raw file on disk</summary><pre class="mono">${esc(frontmatter(e)+e.body)}</pre></details>`;
+  return [main, A.ctx(e)];
+};
+A.ctx = e => {
+  const S = (h, body) => `<section><h3>${h}</h3>${body || '<span class="muted small">none</span>'}</section>`;
+  const tl = ts => ts.length ? `<ul>${ts.sort(byDue).map(t=>`<li class="${isOpen(t)?'':'done-row'}"><input type="checkbox" ${isOpen(t)?'':'checked'} data-act="toggleTodo" data-id="${t.id}"> ${link(t.id)} ${t.due?due(t.due):''}</li>`).join('')}</ul>` : '';
+  let h = '';
+  if (e.type==='person'){
+    h += `<h2>Person View</h2>`;
+    h += S('Tagged on', `<ul>${tagsOf(e.id).map(({e:w,roles})=>`<li>${link(w.id)} <span class="muted small">${roles.join(', ')}</span></li>`).join('')}</ul>`);
+    if (e.id!==ME){
+      h += S(`Waiting on ${esc(e.title.split(' ')[0])}`, tl(theyOweMe(e.id)) + `<a href="#" class="small" data-act="aNew" data-type="todo" data-preset='{"owner":"${e.id}","requester":"${ME}"}'>+ ask them</a>`);
+      h += S(`${esc(e.title.split(' ')[0])} is waiting on me`, tl(iOweThem(e.id)) + `<a href="#" class="small" data-act="aNew" data-type="todo" data-preset='{"owner":"${ME}","requester":"${e.id}"}'>+ I'll do</a>`);
+    }
+    h += S('Directs', directsOf(e.id).map(d=>plink(d.id)).join(', '));
+    h += S('Meetings', meetingsWith(e.id).map(n=>`<div>${link(n.id)} <span class="muted small">${n.date}</span></div>`).join(''));
+  } else if (e.type==='theme'){
+    h += S('Projects', `<ul>${projectsOf(e.id).map(p=>`<li>${link(p.id)} ${badge(p.status)}</li>`).join('')}</ul>`);
+  } else if (e.type==='project'){
+    h += S('Theme', e.theme?link(e.theme):'');
+    h += S('Deliverables', `<ul>${delivsOf(e.id).map(d=>`<li>${link(d.id)} ${badge(d.status)}</li>`).join('')}</ul><a href="#" class="small" data-act="aNew" data-type="deliverable" data-preset='{"project":"${e.id}"}'>+ Deliverable</a>`);
+  } else if (e.type==='deliverable'){ h += S('Project', link(e.project)) }
+  if (['theme','project','deliverable'].includes(e.type)) h += S('To-dos about this', tl(todosAbout(e.id)) + `<a href="#" class="small" data-act="aNew" data-type="todo" data-preset='{"about":"${e.id}"}'>+ To-do</a>`);
+  if (e.type==='note') h += S('To-dos from this note', tl(all('todo').filter(t=>t.source===e.id)));
+  h += S('Mentioned in', mentionsOf(e.id).map(m=>`<div>${link(m.id)}</div>`).join(''));
+  return h;
+};
+
+// ============================================================ VARIANT B — Structured (view-first, icon rail)
+const B = { name:'Structured', open:{}, edit:false, pop:null, which:'mine' };
+ACT.bToggle = d => { B.open[d.id] = !B.open[d.id]; render() };
+ACT.bEdit = () => { B.edit = !B.edit; render() };
+ACT.bNew = d => createForm(d.type || 'project', d.preset ? JSON.parse(d.preset) : {});
+ACT.bPop = d => { B.pop = B.pop && B.pop.id===d.id && B.pop.f===d.f ? null : {id:d.id,f:d.f}; render() };
+CHG.bTogglePerson = (d,v,el) => el.checked ? addTo(d.id,d.f,d.p) : rmFrom(d.id,d.f,d.p);
+CHG.bBody = (d,v) => mut(`edit body ${d.id}`, () => E[d.id].body = v);
+KEY.bQuick = (ev,d,el) => { if (ev.key!=='Enter' || !el.value.trim()) return; const f = parseQuick(el.value); Object.assign(f, d.owner?{owner:d.owner}:{}, d.requester?{requester:d.requester}:{}); el.value=''; newTodo(f) };
+KEY.bInline = (ev,d,el) => { if (ev.key!=='Enter' || !el.value.trim()) return; const f = {title:el.value.trim(), status:'not-started'}; f[d.parent] = d.pid; createEntity(d.type,f) };
+CHG.bTagWork = (d,v,el) => { if (!v) return; const [id,f] = v.split('|'); addTo(id,f,d.p) };
+B.render = () => {
+  const r = route();
+  const sec = r[0]==='e' && E[r[1]] ? ({person:'people',term:'glossary'}[E[r[1]].type] || (E[r[1]].type==='todo'?'todos':E[r[1]].type==='note'?'files':'portfolio')) : r[0];
+  const rail = [['home','⌂','Home'],['portfolio','◫','Portfolio'],['people','☺','People'],['todos','☑','To-dos'],['glossary','Ⓐ','Glossary'],['bookmarks','★','Bookmarks'],['files','🗀','Files']]
+    .map(([k,i,l])=>`<a href="#/${k}" class="${sec===k?'on':''}"><span>${i}</span>${l}</a>`).join('');
+  let page;
+  if (r[0]==='e' && E[r[1]]) page = E[r[1]].type==='person' ? B.person(E[r[1]]) : B.entity(E[r[1]]);
+  else page = (B[r[0]] || B.home)(r[1]);
+  return `<div class="B"><nav class="B-rail">${rail}</nav><div class="B-wrap">
+    <div class="B-top"><input placeholder="Search everything…" style="width:320px"><span style="flex:1"></span>
+      <select data-chg="bNewSel"><option value="">+ New…</option>${Object.entries(TYPE_LABEL).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></div>
+    <div class="B-page">${page}</div></div></div>`;
+};
+CHG.bNewSel = (d,v,el) => { if (v){ el.value=''; createForm(v) } };
+const bTodoLine = (t, who) => `<li class="${isOpen(t)?'':'done-row'}"><input type="checkbox" ${isOpen(t)?'':'checked'} data-act="toggleTodo" data-id="${t.id}"> ${link(t.id)} ${who?`<span class="muted small">· ${esc(title(who))}</span>`:''} ${t.due?'· '+due(t.due):''}</li>`;
+B.home = () => {
+  const wot = TODOS['waiting-on-them']().filter(isOpen), wom = TODOS['waiting-on-me']().filter(isOpen);
+  const soon = all().filter(e=>e.due && e.due<='2026-11-18' && !['done','cancelled'].includes(e.status)).sort(byDue);
+  return `<h1>Good morning, Sam</h1><div class="cards">
+   <div class="card"><h3>Due within 7 days <span class="muted">${soon.length}</span></h3><ul>${soon.map(e=>`<li>${link(e.id)} <span class="muted small">${TYPE_LABEL[e.type]}</span> ${due(e.due)}</li>`).join('')}</ul></div>
+   <div class="card"><h3>Waiting on them <span class="muted">${wot.length}</span></h3><ul>${wot.sort(byDue).map(t=>bTodoLine(t,t.owner)).join('')}</ul></div>
+   <div class="card"><h3>They're waiting on me <span class="muted">${wom.length}</span></h3><ul>${wom.sort(byDue).map(t=>bTodoLine(t,t.requester)).join('')}</ul></div>
+   <div class="card"><h3>Blocked work</h3><ul>${all().filter(e=>e.status==='blocked').map(e=>`<li>${link(e.id)} <span class="muted small">lead ${esc(title(e.lead))}</span></li>`).join('')}</ul></div>
+   <div class="card"><h3>Directs</h3>${directsOf(ME).map(p=>`<div>${av(p.id)}&nbsp;&nbsp;${plink(p.id)} <span class="muted small">owes me ${theyOweMe(p.id).filter(isOpen).length} · I owe ${iOweThem(p.id).filter(isOpen).length}</span></div>`).join('')}</div>
+   <div class="card"><h3>Recent notes</h3><ul>${all('note').map(n=>`<li>${link(n.id)} <span class="muted">${n.date||''}</span></li>`).join('')}</ul></div></div>`;
+};
+B.avatars = (e,f) => {
+  const open = B.pop && B.pop.id===e.id && B.pop.f===f;
+  return `<span style="position:relative"><a href="#" data-act="bPop" data-id="${e.id}" data-f="${f}">${(e[f]||[]).map(av).join('') || '<span class="muted small">+ add</span>'}</a>
+   ${open?`<div class="pop" style="top:24px;left:0;width:220px">${all('person').map(p=>`<label style="display:block"><input type="checkbox" data-chg="bTogglePerson" data-id="${e.id}" data-f="${f}" data-p="${p.id}" ${(e[f]||[]).includes(p.id)?'checked':''}> ${esc(p.title)}</label>`).join('')}</div>`:''}</span>`;
+};
+B.portfolio = () => {
+  const row = (e, depth, kids) => `<tr class="${e.type}"><td style="padding-left:${8+depth*22}px">${kids?`<a href="#" data-act="bToggle" data-id="${e.id}">${B.open[e.id]===false?'▸':'▾'}</a>`:'&nbsp;&nbsp;'} ${link(e.id)} <span class="muted small">${TYPE_LABEL[e.type]}</span></td>
+    <td>${e.type==='theme'?'':statusSelect(e)}</td><td>${personSelect(e,'lead')}</td><td>${B.avatars(e,'team')}</td><td>${B.avatars(e,'stakeholders')}</td><td>${e.type==='theme'?'':`<input type="date" value="${e.due||''}" data-chg="field" data-id="${e.id}" data-f="due">`}</td></tr>`;
+  const inl = (type,parent,pid,depth) => `<tr><td colspan="6" style="padding-left:${30+depth*22}px"><input placeholder="+ ${TYPE_LABEL[type]} (Enter)" data-key="bInline" data-type="${type}" data-parent="${parent}" data-pid="${pid}" style="border:0;background:none;width:260px"></td></tr>`;
+  const proj = (p,d) => row(p,d,true) + (B.open[p.id]===false?'':delivsOf(p.id).map(x=>row(x,d+1,false)).join('') + inl('deliverable','project',p.id,d+1));
+  return `<h1>Portfolio</h1><p class="muted small">Edit status, Lead, Tags and due dates in place. Click avatars to tag People. Type in the "+" rows to add.</p>
+   <table class="outline"><tr><th>Name</th><th>Status</th><th>Lead</th><th>Team</th><th>Stakeholders</th><th>Due</th></tr>
+   ${all('theme').map(t=>row(t,0,true)+(B.open[t.id]===false?'':projectsOf(t.id).map(p=>proj(p,1)).join('')+inl('project','theme',t.id,1))).join('')}
+   <tr class="theme"><td colspan="6">No Theme</td></tr>${projectsOf(undefined).map(p=>proj(p,1)).join('')}</table>`;
+};
+B.people = () => {
+  const org = p => `<ul>${directsOf(p).map(d=>`<li>${av(d.id)}&nbsp;&nbsp;${plink(d.id)} <span class="muted small">${esc(d.role||'')}</span>${org(d.id)}</li>`).join('')}</ul>`;
+  return `<h1>People</h1><div class="cards">
+    <div class="card"><h3>Team</h3><div class="muted small">${plink('jordan-lee')} (my manager)</div><div>${plink(ME)}</div>${org(ME)}</div>
+    <div class="card"><h3>Stakeholders</h3><table>${all('person').filter(p=>p.kind.includes('stakeholder')).map(p=>`<tr><td>${plink(p.id)}</td><td class="muted small">${esc(p.organisation||'')}</td><td class="small">${tagsOf(p.id).length} tags</td></tr>`).join('')}</table></div></div>`;
+};
+B.person = p => {
+  const first = esc(p.title.split(' ')[0]);
+  const work = all().filter(e=>['theme','project','deliverable'].includes(e.type));
+  const col = (h, list, who, preset) => `<div class="card"><h3>${h} <span class="muted">${list.filter(isOpen).length}</span></h3><ul>${list.sort(byDue).map(t=>bTodoLine(t)).join('')}</ul>
+     <input placeholder="+ add (Enter) — e.g. Send deck due:2026-11-20" style="width:100%" data-key="bQuick" ${preset}></div>`;
+  return `<div style="display:flex;gap:14px;align-items:center"><span class="av" style="width:48px;height:48px;font-size:16px">${initials(p.id)}</span>
+     <div><h1 style="margin:0">${esc(p.title)} ${p.id===ME?'<span class="badge">Me</span>':''}</h1><div class="muted">${esc(p.role||'')} ${p.organisation?'· '+esc(p.organisation):''} · ${p.kind.join(' + ')}${p.manager?' · reports to '+plink(p.manager):''}</div></div>
+     <span style="flex:1"></span><a href="#/files/${p.id}">Open file</a></div>
+   <p>${directsOf(p.id).length?'Directs: '+directsOf(p.id).map(d=>plink(d.id)).join(', '):''}</p>
+   <div class="cols3">
+     <div class="card"><h3>Tagged on <span class="muted">${tagsOf(p.id).length}</span></h3><ul>${tagsOf(p.id).map(({e,roles})=>`<li>${link(e.id)} ${badge(e.status)} <span class="muted small">${roles.join(', ')}</span></li>`).join('')}</ul>
+       <select data-chg="bTagWork" data-p="${p.id}" style="width:100%"><option value="">+ Tag ${first} to…</option>${work.flatMap(w=>['team','stakeholders'].map(f=>`<option value="${w.id}|${f}">${esc(w.title)} — as ${f==='team'?'team':'stakeholder'}</option>`)).join('')}</select></div>
+     ${p.id===ME?'<div class="card muted">This is you.</div>':col(`Waiting on ${first}`, theyOweMe(p.id), p.id, `data-owner="${p.id}" data-requester="${ME}"`)}
+     ${p.id===ME?'':col(`${first} is waiting on me`, iOweThem(p.id), p.id, `data-owner="${ME}" data-requester="${p.id}"`)}
+   </div>
+   <div class="card" style="margin-top:14px"><h3>Meetings & notes</h3>${meetingsWith(p.id).map(n=>`<div>${link(n.id)} <span class="muted">${n.date}</span></div>`).join('')||'<span class="muted">none</span>'}
+     <div class="md" style="margin-top:8px;border-top:1px solid var(--line)">${md(p.body)}</div></div>`;
+};
+B.todos = which => {
+  which = which || 'mine';
+  const list = TODOS[which]();
+  const groups = {};
+  for (const t of list.sort(byDue)){
+    const k = which==='mine' ? (!t.due?'No date':t.due<TODAY?'Overdue':t.due<='2026-11-18'?'This week':'Later') : title(which==='waiting-on-them'?t.owner:t.requester);
+    (groups[k] ??= []).push(t);
+  }
+  return `<h1>To-dos</h1><div style="display:flex;gap:12px;align-items:center;margin-bottom:12px"><span class="seg">${Object.keys(TODOS).map(k=>`<a href="#/todos/${k}" class="${k===which?'on':''}">${TODO_LABEL[k]} ${TODOS[k]().filter(isOpen).length}</a>`).join('')}</span>
+    <label class="small muted"><input type="checkbox" checked disabled> show completed</label></div>
+   <input data-key="bQuick" placeholder="Quick add:  Review deck @alice-smith due:2026-11-20     (from @dan-okafor = they asked me)" style="width:100%;padding:8px;margin-bottom:12px">
+   <div class="cards">${Object.entries(groups).map(([g,ts])=>`<div class="card"><h3>${esc(g)} <span class="muted">${ts.filter(isOpen).length}</span></h3><ul>${ts.map(t=>bTodoLine(t, which==='mine' && t.requester!==ME ? t.requester : null)).join('')}</ul></div>`).join('')}</div>`;
+};
+B.entity = e => {
+  const kv = (k,v) => `<div class="muted">${k}</div><div>${v}</div>`;
+  let props = kv('Type', TYPE_LABEL[e.type]) + kv('File', `<span class="mono small">${path(e)}</span>`);
+  if (e.theme !== undefined || e.type==='project') props += kv('Theme', e.theme?link(e.theme):'—');
+  if (e.project) props += kv('Project', link(e.project));
+  if (e.status) props += kv('Status', statusSelect(e));
+  if (e.due !== undefined || ['project','deliverable','todo'].includes(e.type)) props += kv('Due', `<input type="date" value="${e.due||''}" data-chg="field" data-id="${e.id}" data-f="due">`);
+  if (['theme','project','deliverable'].includes(e.type)) props += kv('Lead', personSelect(e,'lead')) + kv('Team', B.avatars(e,'team')) + kv('Stakeholders', B.avatars(e,'stakeholders'));
+  if (e.type==='todo') props += kv('Owner', plink(e.owner)) + kv('Requester', plink(e.requester)) + kv('About', e.about?link(e.about):'—');
+  if (e.type==='note') props += kv('Date', e.date||'—') + kv('Participants', B.avatars(e,'people'));
+  let related = '';
+  if (e.type==='theme') related = `<h3>Projects</h3><ul>${projectsOf(e.id).map(p=>`<li>${link(p.id)} ${badge(p.status)}</li>`).join('')}</ul>`;
+  if (e.type==='project') related = `<h3>Deliverables</h3><ul>${delivsOf(e.id).map(d=>`<li>${link(d.id)} ${badge(d.status)}</li>`).join('')}</ul>`;
+  if (['theme','project','deliverable'].includes(e.type)) related += `<h3>To-dos</h3><ul>${todosAbout(e.id).map(t=>bTodoLine(t,t.owner)).join('')}</ul>`;
+  return `<div style="display:flex;align-items:center;gap:10px"><h1 style="flex:1">${esc(e.title)}</h1><button data-act="bEdit">${B.edit?'Done':'✎ Edit'}</button></div>
+    <div class="props">${props}</div>
+    ${B.edit?`<textarea data-chg="bBody" data-id="${e.id}" style="width:100%;height:320px;padding:12px">${esc(e.body)}</textarea>`:`<div class="md card">${md(e.body)||'<p class="muted">Empty — click Edit</p>'}</div>`}
+    <div style="margin-top:14px">${related}</div>`;
+};
+B.glossary = () => `<h1>Glossary</h1><button data-act="bNew" data-type="term">+ Term</button>${all('term').sort((a,b)=>a.title.localeCompare(b.title)).map(t=>`<div class="card" style="margin-top:8px"><b>${link(t.id)}</b> ${(t.aliases||[]).map(a=>`<span class="badge">${esc(a)}</span>`).join(' ')}<div class="md">${md(t.body)}</div></div>`).join('')}`;
+B.bookmarks = () => `<h1>Bookmarks</h1><div class="card md">${md(BOOKMARKS)}</div><p class="muted small">Edited as the raw bookmarks.md file under Files.</p>`;
+B.files = sel => {
+  const tree = fileTree(); const e = sel && E[sel];
+  return `<h1>Files</h1><div style="display:grid;grid-template-columns:260px 1fr;gap:16px"><div class="card tree"><ul>${Object.entries(tree).map(([d,es])=>`<li><details open><summary class="dir">${d}/</summary><ul>${es.map(x=>`<li><a href="#/files/${x.id}">${x.id}.md</a></li>`).join('')}</ul></details></li>`).join('')}<li>bookmarks.md</li></ul></div>
+   <div>${e?`<div class="mono small muted">${path(e)}</div><textarea style="width:100%;height:60vh;padding:10px" data-chg="bBody" data-id="${e.id}">${esc(frontmatter(e)+e.body)}</textarea><p class="small muted">Raw file editing. Typed Entities have their own pages; this is the escape hatch.</p>`:'<p class="muted">Pick a file.</p>'}</div></div>`;
+};
+
+// ============================================================ VARIANT C — Palette (keyboard-first, single column)
+const C = { name:'Palette', drawer:false, pal:null, editBody:false, cur:0, inboxFilter:'mine', boardType:'project', theme:'' };
+ACT.cDrawer = () => { C.drawer = !C.drawer; render() };
+ACT.cPal = () => openPal();
+ACT.cBody = () => { if (!C.editBody){ C.editBody = true; render(); document.querySelector('.C-body textarea')?.focus() } };
+KEY.cBody = (ev,d,el) => { if (ev.key==='Escape'){ C.editBody=false; mut(`edit body ${d.id}`, () => E[d.id].body = el.value) } };
+CHG.cBody = (d,v) => { E[d.id].body = v; LOG.unshift(`edit body ${d.id}`) };
+ACT.cFilter = d => { C.inboxFilter = d.f; C.cur = 0; render() };
+ACT.cBoard = d => { C[d.k] = d.v; render() };
+ACT.cAddProp = d => { C.adding = {id:d.id,f:d.f}; render(); document.getElementById('cAddInput')?.focus() };
+KEY.cAddProp = (ev,d,el) => {
+  if (ev.key==='Escape'){ C.adding=null; render() }
+  if (ev.key==='Enter'){ const id = el.value.replace(/^@/,'').trim(); C.adding=null; if (E[id]?.type==='person'){ ['lead','owner','requester','manager'].includes(d.f) ? setF(d.id,d.f,id) : addTo(d.id,d.f,id) } else render() }
+};
+KEY.cQuick = (ev,d,el) => { if (ev.key==='Enter' && el.value.trim()){ const f = parseQuick(el.value); if (d.owner) f.owner=d.owner; if (d.requester) f.requester=d.requester; el.value=''; newTodo(f) } };
+function cCommands(){
+  const cmds = [];
+  for (const [k,v] of Object.entries(TYPE_LABEL)) cmds.push({label:`New ${v}…`, hint:'create', run:()=>openPal('new:'+k)});
+  cmds.push({label:'New To-do (quick: Title @owner due:…)', hint:'create', run:()=>openPal('todo:')});
+  for (const [k,v] of Object.entries(TODO_LABEL)) cmds.push({label:v, hint:'view', run:()=>{C.inboxFilter=k;location.hash='#/home'}});
+  cmds.push({label:'Portfolio board', hint:'view', run:()=>location.hash='#/portfolio'});
+  cmds.push({label:'Glossary', hint:'view', run:()=>location.hash='#/glossary'});
+  cmds.push({label:'Bookmarks', hint:'view', run:()=>location.hash='#/f/bookmarks.md'});
+  cmds.push({label:'Toggle file tree', hint:'Ctrl+\\', run:()=>{C.drawer=!C.drawer;render()}});
+  for (const e of all()) cmds.push({label:e.title, hint:TYPE_LABEL[e.type]+(e.id===ME?' · Me':''), run:()=>location.hash=`#/e/${e.id}`});
+  return cmds;
+}
+function openPal(mode=''){ C.pal = {mode, q:'', sel:0}; render(); document.getElementById('cPalIn')?.focus() }
+function palResults(){
+  const {mode,q} = C.pal;
+  if (mode.startsWith('new:')) return [{label:`Create ${TYPE_LABEL[mode.slice(4)]} “${q||'…'}”`, hint:'Enter', run:()=>{ if(!q) return; const t = mode.slice(4); const f={title:q}; if(['project','deliverable'].includes(t)) f.status='not-started'; if(t==='person') f.kind=['team-member']; if(t==='todo'){f.status='open';f.owner=ME;f.requester=ME} const id=createEntity(t,f); C.pal=null; C.editBody=false; location.hash=`#/e/${id}` }}];
+  if (mode==='todo:'){ const f = parseQuick(q); return [{label:`To-do “${f.title||'…'}” → owner ${title(f.owner)}, requester ${title(f.requester)}${f.due?', due '+f.due:''}`, hint:'Enter', run:()=>{ if(!f.title) return; newTodo(f); C.pal=null; render() }}] }
+  const qq = q.toLowerCase();
+  return cCommands().filter(c => !qq || c.label.toLowerCase().includes(qq) || c.hint.toLowerCase().includes(qq)).slice(0,30);
+}
+KEY.cPal = (ev,d,el) => {
+  const res = palResults();
+  if (ev.key==='Escape'){ C.pal=null; render(); return }
+  if (ev.key==='ArrowDown'){ C.pal.sel = Math.min(res.length-1, C.pal.sel+1); ev.preventDefault() }
+  else if (ev.key==='ArrowUp'){ C.pal.sel = Math.max(0, C.pal.sel-1); ev.preventDefault() }
+  else if (ev.key==='Enter'){ const r = res[C.pal.sel]; if (r){ const m = C.pal.mode; if (!m.startsWith('new:') && m!=='todo:') C.pal=null; r.run(); if (C.pal===null) render() } return }
+  else return;
+  render(); document.getElementById('cPalIn')?.focus();
+};
+document.addEventListener('input', ev => { if (ev.target.id==='cPalIn'){ C.pal.q = ev.target.value; C.pal.sel = 0; const pos = ev.target.selectionStart; render(); const i=document.getElementById('cPalIn'); i.focus(); i.setSelectionRange(pos,pos) } });
+ACT.cRun = d => { const r = palResults()[+d.i]; if (r){ const m=C.pal.mode; if(!m.startsWith('new:')&&m!=='todo:') C.pal=null; r.run(); if (C.pal===null) render() } };
+C.render = () => {
+  const r = route(); let crumbs = '', body;
+  if (r[0]==='e' && E[r[1]]){ const e = E[r[1]]; crumbs = `${FOLDER[e.type]} / <b>${esc(e.title)}</b>`; body = C.doc(e) }
+  else if (r[0]==='portfolio'){ crumbs='Portfolio'; body = C.board() }
+  else if (r[0]==='glossary'){ crumbs='Glossary'; body = `<h1>Glossary</h1>${all('term').map(t=>`<p><b>${link(t.id)}</b> — ${esc(t.body)}</p>`).join('')}<p class="muted small">New term: <span class="kbd">Ctrl K</span> → “New Glossary Term”.</p>` }
+  else if (r[0]==='f'){ crumbs='bookmarks.md'; body = `<div class="C-title">Bookmarks</div><div class="C-body md">${md(BOOKMARKS)}</div>` }
+  else { crumbs='Inbox'; body = C.inbox() }
+  const pal = C.pal ? `<div class="modal-bg" data-act="bgclosePal"><div class="C-pal"><input id="cPalIn" data-key="cPal" value="${esc(C.pal.q)}" placeholder="${C.pal.mode.startsWith('new:')?`Title of new ${TYPE_LABEL[C.pal.mode.slice(4)]}…`:C.pal.mode==='todo:'?'Send deck @bob-jones due:2026-11-20   (or: from @dan-okafor)':'Jump to anything, or type a command…'}">
+     <div class="res">${palResults().map((x,i)=>`<div class="r ${i===C.pal.sel?'sel':''}" data-act="cRun" data-i="${i}"><span>${esc(x.label)}</span><span class="muted small">${esc(x.hint)}</span></div>`).join('')}</div></div></div>` : '';
+  const tree = fileTree();
+  const drawer = C.drawer ? `<div class="C-drawer"><div style="display:flex;justify-content:space-between"><b>Workspace</b><button data-act="cDrawer">×</button></div><div class="tree"><ul>${Object.entries(tree).map(([d,es])=>`<li><details><summary class="dir">${d}/</summary><ul>${es.map(x=>`<li><a href="#/e/${x.id}">${x.id}.md</a></li>`).join('')}</ul></details></li>`).join('')}<li><a href="#/f/bookmarks.md">bookmarks.md</a></li></ul></div></div>` : '';
+  const nOpen = TODOS.mine().filter(isOpen).length;
+  return `<div class="C-top"><button data-act="cDrawer" title="Ctrl+\\">☰</button><a href="#/home"><b>Memex</b></a><span class="muted small">/ ${crumbs}</span>
+     <button class="C-cmd" data-act="cPal">🔍 Search or run a command… <span class="kbd">Ctrl K</span></button>
+     <a href="#/portfolio">Board</a><a href="#/home">Inbox <span class="badge s-open">${nOpen}</span></a></div>
+   ${drawer}<div class="C-col">${body}</div>${pal}`;
+};
+ACT.bgclosePal = (d,el,ev) => { if (ev.target===el){ C.pal=null; render() } };
+C.inbox = () => {
+  const f = C.inboxFilter;
+  const list = (f==='all' ? all('todo').filter(t=>t.owner===ME||t.requester===ME) : TODOS[f]()).filter(isOpen).sort(byDue);
+  C.list = list;
+  const dir = t => t.owner===ME && t.requester===ME ? '•' : t.owner===ME ? '←' : '→';
+  return `<h1>Inbox</h1><div style="margin-bottom:10px">${[['mine','Mine'],['waiting-on-them','Waiting on them'],['waiting-on-me','Waiting on me'],['all','Everything']].map(([k,l])=>`<a href="#" data-act="cFilter" data-f="${k}" class="chip" style="${k===f?'background:var(--ink);color:#fff':''}">${l}</a>`).join('')}</div>
+   <input data-key="cQuick" placeholder="+ To-do:  Title @owner from @requester due:YYYY-MM-DD" style="width:100%;padding:7px;margin-bottom:8px">
+   <div class="inbox">${list.map((t,i)=>`<div class="row ${i===C.cur?'cur':''}"><input type="checkbox" data-act="toggleTodo" data-id="${t.id}"><span>${link(t.id)} ${t.about?`<span class="muted small">· ${esc(title(t.about))}</span>`:''}</span><span class="small">${dir(t)} ${t.owner===ME?(t.requester===ME?'self':esc(title(t.requester))+' waits'):esc(title(t.owner))+' owes'}</span><span class="small">${due(t.due)}</span></div>`).join('')}</div>
+   <p class="muted small"><span class="kbd">j</span>/<span class="kbd">k</span> move · <span class="kbd">x</span> complete · <span class="kbd">Enter</span> open · ← I owe · → they owe me</p>`;
+};
+document.addEventListener('keydown', ev => {
+  if (variant()!=='C') return;
+  if ((ev.ctrlKey||ev.metaKey) && ev.key==='k'){ ev.preventDefault(); openPal(); return }
+  if ((ev.ctrlKey||ev.metaKey) && ev.key==='\\'){ C.drawer=!C.drawer; render(); return }
+  if (ev.target.matches('input,textarea,select') || C.pal || route()[0]!=='home' || !C.list) return;
+  if (ev.key==='j'){ C.cur = Math.min(C.list.length-1, C.cur+1); render() }
+  if (ev.key==='k'){ C.cur = Math.max(0, C.cur-1); render() }
+  if (ev.key==='x' && C.list[C.cur]) toggleTodo(C.list[C.cur].id);
+  if (ev.key==='Enter' && C.list[C.cur]) location.hash = `#/e/${C.list[C.cur].id}`;
+});
+document.addEventListener('keydown', ev => { if (variant()==='A' && (ev.ctrlKey||ev.metaKey) && ev.key==='\\'){ A.side=!A.side; render() } });
+C.prop = (e,f,lbl) => {
+  const v = e[f], arr = Array.isArray(v);
+  const val = arr ? v.map(p=>`<a href="#/e/${p}">@${p}</a> <a href="#" class="muted" data-act="rmP" data-id="${e.id}" data-f="${f}" data-p="${p}">×</a>`).join(' ') : v ? (E[v]?`<a href="#/e/${v}">${E[v].type==='person'?'@':''}${v}</a>`:esc(v)) : '<span class="muted">—</span>';
+  const adding = C.adding && C.adding.id===e.id && C.adding.f===f;
+  return `<span class="C-prop"><b>${lbl}:</b> ${val} ${['lead','team','stakeholders','owner','requester','manager','people'].includes(f)?(adding?`<input id="cAddInput" list="cPeople" data-key="cAddProp" data-id="${e.id}" data-f="${f}" placeholder="@person" style="width:120px;padding:0 4px">`:`<a href="#" data-act="cAddProp" data-id="${e.id}" data-f="${f}">${arr?'+':'✎'}</a>`):''}</span>`;
+};
+C.doc = e => {
+  let props = '';
+  if (e.status) props += `<span class="C-prop"><b>status:</b> ${statusSelect(e)}</span>`;
+  if (e.type==='project') props += C.prop(e,'theme','theme');
+  if (e.type==='deliverable') props += C.prop(e,'project','project');
+  if (['theme','project','deliverable'].includes(e.type)) props += C.prop(e,'lead','lead') + C.prop(e,'team','team') + C.prop(e,'stakeholders','stakeholders');
+  if (e.due!==undefined || ['project','deliverable','todo'].includes(e.type)) props += `<span class="C-prop"><b>due:</b> <input type="date" value="${e.due||''}" data-chg="field" data-id="${e.id}" data-f="due" style="border:0;padding:0"></span>`;
+  if (e.type==='todo') props += C.prop(e,'owner','owner') + C.prop(e,'requester','requester') + C.prop(e,'about','about');
+  if (e.type==='person') props += `<span class="C-prop"><b>kind:</b> ${e.kind.join(', ')}</span>` + C.prop(e,'manager','manager') + `<span class="C-prop"><b>role:</b> ${esc(e.role||'')}</span>`;
+  if (e.type==='note') props += `<span class="C-prop"><b>date:</b> ${e.date||'—'}</span>` + C.prop(e,'people','participants');
+  props += `<span class="C-prop muted mono">${path(e)}</span>`;
+  const bodyHtml = C.editBody ? `<textarea data-key="cBody" data-chg="cBody" data-id="${e.id}">${esc(e.body)}</textarea><div class="muted small">Esc to finish · auto-saves</div>` : (md(e.body) || '<p class="muted">Click to write…</p>');
+  let linked = '';
+  if (e.type==='person') linked = C.ledger(e);
+  if (e.type==='theme') linked = `<h3>Projects</h3>${projectsOf(e.id).map(p=>`<div>${link(p.id)} ${badge(p.status)} <span class="muted small">${delivsOf(p.id).length} deliverables</span></div>`).join('')}`;
+  if (e.type==='project') linked = `<h3>Deliverables</h3>${delivsOf(e.id).map(d=>`<div>${link(d.id)} ${badge(d.status)} ${due(d.due)}</div>`).join('')}`;
+  if (['theme','project','deliverable'].includes(e.type)) linked += `<h3>To-dos</h3>${todosAbout(e.id).map(t=>`<div class="${isOpen(t)?'':'done-row'}"><input type="checkbox" ${isOpen(t)?'':'checked'} data-act="toggleTodo" data-id="${t.id}"> ${link(t.id)} <span class="muted small">${esc(title(t.owner))}</span></div>`).join('')||'<span class="muted">none</span>'}`;
+  const ment = mentionsOf(e.id);
+  return `<datalist id="cPeople">${all('person').map(p=>`<option value="${p.id}">${esc(p.title)}</option>`).join('')}</datalist>
+   <div class="muted small">${TYPE_LABEL[e.type]}</div><input class="C-title" value="${esc(e.title)}" data-chg="field" data-id="${e.id}" data-f="title">
+   <div class="C-props">${props}</div>
+   ${e.type==='person'?linked:''}
+   <div class="C-body md" data-act="cBody">${bodyHtml}</div>
+   ${e.type!=='person'&&linked?`<hr style="border:0;border-top:1px solid var(--line);margin:20px 0">${linked}`:''}
+   ${ment.length?`<h3 style="margin-top:20px">Mentioned in</h3>${ment.map(m=>`<div>${link(m.id)}</div>`).join('')}`:''}`;
+};
+C.ledger = p => {
+  const tags = tagsOf(p.id);
+  const items = all('todo').filter(t => (t.owner===p.id && t.requester===ME) || (t.owner===ME && t.requester===p.id)).sort(byDue);
+  const first = esc(p.title.split(' ')[0]);
+  return `<div style="margin-bottom:14px"><b>Tagged on:</b> ${tags.map(({e,roles})=>`${link(e.id)} <span class="muted small">(${roles.join('/')})</span>`).join(' · ') || '<span class="muted">nothing</span>'}</div>
+   ${p.id===ME?'':`<h3>Between me and ${first}</h3><div class="ledger">${items.map(t=>`<div class="row ${isOpen(t)?'':'done-row'}"><span class="dir" title="${t.owner===ME?'I owe them':'they owe me'}">${t.owner===ME?'←':'→'}</span><span><input type="checkbox" ${isOpen(t)?'':'checked'} data-act="toggleTodo" data-id="${t.id}"> ${link(t.id)}</span><span class="small muted">${t.owner===ME?'I owe '+first:first+' owes me'}</span><span class="small">${due(t.due)}</span></div>`).join('')||'<p class="muted">Nothing open.</p>'}</div>
+   <div style="display:flex;gap:8px;margin:8px 0 18px"><input data-key="cQuick" data-owner="${p.id}" data-requester="${ME}" placeholder="→ ask ${first} for… (Enter)" style="flex:1"><input data-key="cQuick" data-owner="${ME}" data-requester="${p.id}" placeholder="← I'll do for ${first}… (Enter)" style="flex:1"></div>`}
+   ${meetingsWith(p.id).length?`<div class="small"><b>Meetings:</b> ${meetingsWith(p.id).map(n=>link(n.id)+' '+n.date).join(' · ')}</div>`:''}
+   ${directsOf(p.id).length?`<div class="small"><b>Directs:</b> ${directsOf(p.id).map(d=>link(d.id)).join(', ')}</div>`:''}
+   <hr style="border:0;border-top:1px solid var(--line);margin:16px 0">`;
+};
+C.board = () => {
+  const items = all(C.boardType).filter(x => !C.theme || (x.type==='project' ? x.theme===C.theme : E[x.project]?.theme===C.theme));
+  return `<h1>Portfolio</h1><div style="margin-bottom:10px">Show:
+     ${['project','deliverable'].map(k=>`<a href="#" class="chip" data-act="cBoard" data-k="boardType" data-v="${k}" style="${C.boardType===k?'background:var(--ink);color:#fff':''}">${TYPE_LABEL[k]}s</a>`).join('')}
+     &nbsp; Theme: <a href="#" class="chip" data-act="cBoard" data-k="theme" data-v="" style="${!C.theme?'background:var(--ink);color:#fff':''}">All</a>${all('theme').map(t=>`<a href="#" class="chip" data-act="cBoard" data-k="theme" data-v="${t.id}" style="${C.theme===t.id?'background:var(--ink);color:#fff':''}">${esc(t.title)}</a>`).join('')}</div>
+   <div class="board" style="margin:0 -200px">${WORK_STATUS.filter(s=>s!=='cancelled').map(s=>`<div class="colm"><div class="small"><b>${s}</b> ${items.filter(i=>i.status===s).length}</div>
+     ${items.filter(i=>i.status===s).map(i=>`<div class="cardc"><div class="muted small">${esc(i.type==='project'?title(i.theme)||'No Theme':title(i.project))}</div>${link(i.id)}<div style="display:flex;justify-content:space-between;margin-top:4px">${i.lead?av(i.lead):'<span></span>'}<span class="small">${due(i.due)}</span></div>
+       <select data-chg="status" data-id="${i.id}" style="width:100%;margin-top:4px;font-size:11px">${WORK_STATUS.map(x=>`<option ${x===i.status?'selected':''}>${x}</option>`).join('')}</select></div>`).join('')}</div>`).join('')}</div>
+   <p class="muted small" style="margin-top:12px">Themes have no status, so they are filters here, not cards. Create via <span class="kbd">Ctrl K</span>.</p>`;
+};
+
+// ============================================================ switcher + render loop
+const VARIANTS = {A, B, C};
+const variant = () => { const v = new URLSearchParams(location.search).get('variant'); return VARIANTS[v] ? v : 'A' };
+function setVariant(v){
+  const u = new URL(location.href); u.searchParams.set('variant', v);
+  try { history.replaceState(null, '', u) } catch { location.href = u; return }
+  closeModal(); C.pal = null; render();
+}
+function cycle(d){ const ks = Object.keys(VARIANTS); setVariant(ks[(ks.indexOf(variant()) + d + ks.length) % ks.length]) }
+document.addEventListener('keydown', ev => {
+  if (ev.target.closest('input,textarea,select,[contenteditable]') || C.pal) return;
+  if (ev.key==='ArrowLeft') cycle(-1); if (ev.key==='ArrowRight') cycle(1);
+});
+let stateOpen = false;
+function render(){
+  const v = variant(), focusedId = document.activeElement?.id;
+  document.getElementById('app').innerHTML = VARIANTS[v].render();
+  document.getElementById('switcher').innerHTML = `<button onclick="cycle(-1)">←</button><span class="lbl">${v} (${VARIANTS[v].name})</span><button onclick="cycle(1)">→</button><button onclick="stateOpen=!stateOpen;render()" title="Show in-memory state">{ }</button>`;
+  const s = document.getElementById('state'); s.style.display = stateOpen ? 'block' : 'none';
+  if (stateOpen) s.textContent = `PROTOTYPE STATE (in memory, reload resets)\nvariant: ${v}\nroute:   ${location.hash||'#/home'}\nentities: ${Object.keys(E).length}  open to-dos: ${all('todo').filter(isOpen).length}\n\nlast mutations:\n${LOG.slice(0,12).join('\n')||'(none)'}\n\ncurrent file:\n${(()=>{const e=E[route()[1]];return e?path(e)+'\n'+frontmatter(e)+e.body:'—'})()}`;
+  if (focusedId) document.getElementById(focusedId)?.focus();
+}
+render();
+</script>
+</body>
+</html>
