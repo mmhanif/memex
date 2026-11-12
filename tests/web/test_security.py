@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from memex.core.workspace import Workspace
 from memex.web.app import AppState, create_app
+from memex.web.security import csp_for
 from memex.web.session import COOKIE
 from tests.core.hostile_paths import HOSTILE_PATHS
 from tests.web.conftest import ORIGIN, PORT, client_for
@@ -498,3 +499,13 @@ def test_R15_deleting_the_workspace_root_is_refused(api: TestClient, root: Path,
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "bad_path"
     assert sorted(p.relative_to(root).as_posix() for p in root.rglob("*")) == before
+
+
+def test_R18_import_map_hash_is_of_the_bytes_served_even_with_crlf(tmp_path: Path):
+    # A Windows checkout may give index.html CRLF line endings; Chrome hashes them as served.
+    import_map = '{"imports": {\r\n  "a": "/static/a.js"\r\n}}'
+    index = tmp_path / "index.html"
+    index.write_bytes(f'<script type="importmap">{import_map}</script>\r\n'.encode())
+    digest = base64.b64encode(hashlib.sha256(import_map.encode()).digest()).decode()
+
+    assert f"script-src 'self' 'sha256-{digest}'" in csp_for(index)

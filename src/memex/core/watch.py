@@ -40,6 +40,9 @@ class ChangeFeed:
     def __init__(self) -> None:
         self._listeners: set[Listener] = set()
         self._lock = threading.Lock()
+        # The hash last published per path: the watcher can report one write several
+        # times (Windows sends added, then modified), and an unchanged file isn't news.
+        self._published: dict[str, str | None] = {}
 
     def subscribe(self, listener: Listener) -> Callable[[], None]:
         with self._lock:
@@ -60,7 +63,11 @@ class ChangeFeed:
             if path.is_file() and not (rel.endswith(".md") or rel == WORKSPACE_CONFIG):
                 continue
             ws.changed(rel)
-            changes.append(Change(rel, _hash(ws.root, rel)))
+            new_hash = _hash(ws.root, rel)
+            if new_hash is not None and self._published.get(rel) == new_hash:
+                continue
+            self._published[rel] = new_hash
+            changes.append(Change(rel, new_hash))
         if changes:
             with self._lock:
                 listeners = list(self._listeners)

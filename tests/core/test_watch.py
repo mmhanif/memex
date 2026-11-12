@@ -107,3 +107,29 @@ def test_an_unsubscribed_listener_hears_nothing(ws: Workspace, feed: ChangeFeed)
     feed.hint(ws, ["notes/a.md"])
 
     assert batches == []
+
+
+def test_a_repeated_hint_with_unchanged_content_is_not_republished(ws: Workspace, feed: ChangeFeed):
+    batches = heard(feed)
+    put(ws.root, "notes/a.md", b"a\n")
+    feed.hint(ws, ["notes/a.md"])
+
+    feed.hint(ws, ["notes/a.md"])  # e.g. Windows reports a write as added, then modified
+
+    assert len(batches) == 1
+
+
+def test_a_file_back_with_its_old_content_after_a_delete_is_published(
+    ws: Workspace, feed: ChangeFeed
+):
+    batches = heard(feed)
+    put(ws.root, "notes/a.md", b"a\n")
+    feed.hint(ws, ["notes/a.md"])
+    (ws.root / "notes/a.md").unlink()
+    feed.hint(ws, ["notes/a.md"])
+    put(ws.root, "notes/a.md", b"a\n")
+
+    feed.hint(ws, ["notes/a.md"])
+
+    assert batches[-1] == [Change("notes/a.md", content_hash(b"a\n"))]
+    assert len(batches) == 3
