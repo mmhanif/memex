@@ -16,6 +16,14 @@ _Avoid_: Page, document
 A Note with a declared type (Theme, Project, Deliverable, Person, To-do, Glossary Term) that others can reference.
 _Avoid_: Record, object, item
 
+**Id**:
+An Entity's unique, human-readable name across the whole Workspace, the same as its filename without `.md`.
+_Avoid_: Slug, key, uuid
+
+**Broken Reference**:
+A reference or Mention whose Id matches no Entity in the Workspace.
+_Avoid_: Dead link, orphan
+
 ## Portfolio
 
 **Theme**:
