@@ -69,14 +69,14 @@ def test_person_view_of_something_else_is_not_found(b: Builder):
 
 
 def tree(node) -> tuple:
-    return (node.person.id, [tree(r) for r in node.reports])
+    return (node.person.id, [tree(d) for d in node.directs])
 
 
 def test_people_page_has_the_org_tree_from_me_others_and_stakeholders(b: Builder):
-    b.person("boss")
+    b.person("grace")
     b.file(
         "people/ada.md",
-        "---\ntitle: Ada\nkind: [team-member]\nmanager: boss\n---\n",
+        "---\ntitle: Ada\nkind: [team-member]\nmanager: grace\n---\n",
     )
     b.person("carol", manager="alice")
     b.person("erin")  # a Team Member not under Me
@@ -86,11 +86,12 @@ def test_people_page_has_the_org_tree_from_me_others_and_stakeholders(b: Builder
     b.deliverable("d", project="p", lead="sam")
 
     view = people_view(b.ws)
-    assert view.manager is not None and view.manager.id == "boss"
+    assert view.manager is not None and view.manager.id == "grace"
     assert view.me is not None
     assert tree(view.me) == ("ada", [("alice", [("carol", [])]), ("bob", [])])
     assert [p.id for p in view.others] == ["erin"]
-    assert [(s.file.id, s.tags) for s in view.stakeholders] == [("sam", 2)]
+    # Leading `d` isn't a Tag; being a Stakeholder on `p` is.
+    assert [(s.file.id, s.tags) for s in view.stakeholders] == [("sam", 1)]
 
 
 def test_a_manager_cycle_through_me_is_cut_for_display(b: Builder):

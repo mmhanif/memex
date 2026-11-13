@@ -9,14 +9,14 @@ import { initials, typeLabel, useCandidates } from "./fields.js";
 import { Icon } from "./icons.js";
 import { openNew } from "./newform.js";
 import { entityHref, fileHref, personHref } from "./router.js";
-import { html, meId, tree, useView, viewVersion } from "./state.js";
+import { html, meId, sameId, tree, useView, viewVersion } from "./state.js";
 import { QuickAdd, TodoGroups } from "./todos.js";
 
 /**
  * @typedef {import("./fields.js").Summary} Summary
  * @typedef {import("./entity.js").Detail} Detail
  * @typedef {import("./todos.js").TodoGroup} TodoGroup
- * @typedef {{person: Summary, reports: OrgNode[]}} OrgNode
+ * @typedef {{person: Summary, directs: OrgNode[]}} OrgNode
  * @typedef {{manager: Summary | null, me: OrgNode | null, others: Summary[],
  *   stakeholders: {person: Summary, tags: number}[]}} People
  * @typedef {{
@@ -44,8 +44,8 @@ function OrgBranch({ node }) {
   return html`
     <li>
       <${PersonLink} person=${node.person} />
-      ${node.reports.length > 0 &&
-      html`<ul>${node.reports.map((r) => html`<${OrgBranch} key=${r.person.id} node=${r} />`)}</ul>`}
+      ${node.directs.length > 0 &&
+      html`<ul>${node.directs.map((d) => html`<${OrgBranch} key=${d.person.id} node=${d} />`)}</ul>`}
     </li>
   `;
 }
@@ -112,7 +112,7 @@ export function PersonPage({ id }) {
         <${Title} detail=${person} readOnly=${readOnly} onSaved=${reload} />
         ${person.fields.archived && html`<span class="status status-cancelled">archived ${person.fields.archived}</span>`}
         <button type="button" disabled=${readOnly}
-          onClick=${() => openNew("note", { people: me && me !== person.id ? [me, person.id] : [person.id] }, "one-on-one")}>
+          onClick=${() => openNew("note", { people: me && !sameId(me, person.id) ? [me, person.id] : [person.id] }, "one-on-one")}>
           <${Icon} name="plus" /> New 1:1
         </button>
         <a class="button" href=${fileHref(person.path)} title="Open the raw file"><${Icon} name="file-text" /> Open file</a>
@@ -136,7 +136,7 @@ export function PersonPage({ id }) {
                 )}
               </ul>`
             : html`<p class="muted">Not Tagged on anything yet</p>`}
-          ${!readOnly && html`<${TagPicker} person=${person.id} name=${name} tagged=${view.tagged_on.map((t) => t.item.id)} />`}
+          ${!readOnly && html`<${TagPicker} person=${person.id} name=${name} />`}
         </section>
         <section class="column" aria-label="Waiting on ${name}">
           <h2>Waiting on ${name}</h2>
@@ -172,15 +172,18 @@ const TAG_ROLES = [
 
 /**
  * "Tag <name> to…": pick a work item and a role; writes the Tag on that item (§11.7).
- * @param {{person: string, name: string, tagged: string[]}} props
+ * Offers the items they don't already have that role on.
+ * @param {{person: string, name: string}} props
  */
-function TagPicker({ person, name, tagged }) {
+function TagPicker({ person, name }) {
   const candidates = useCandidates();
   const [item, setItem] = useState("");
   const [role, setRole] = useState("team");
   const [error, setError] = useState(/** @type {string | null} */ (null));
+  const has = (/** @type {Summary} */ c) =>
+    Array.isArray(c.fields[role]) && c.fields[role].some((/** @type {unknown} */ v) => sameId(v, person));
   const options = candidates.filter(
-    (c) => ["theme", "project", "deliverable"].includes(c.type) && !c.fields.archived && !tagged.includes(c.id),
+    (c) => ["theme", "project", "deliverable"].includes(c.type) && !c.fields.archived && !has(c),
   );
 
   /** @param {Event} e */

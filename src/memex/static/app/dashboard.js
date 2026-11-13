@@ -13,7 +13,6 @@ import { TodoGroups, TodoRow, isOverdue } from "./todos.js";
  * @typedef {import("./fields.js").Summary} Summary
  * @typedef {import("./todos.js").TodoGroup} TodoGroup
  * @typedef {{
- *   me_set: boolean,
  *   due_soon: Summary[],
  *   waiting_on_them: TodoGroup[] | null,
  *   waiting_on_me: Summary[] | null,
@@ -25,7 +24,7 @@ import { TodoGroups, TodoRow, isOverdue } from "./todos.js";
  * }} DashboardData
  */
 
-const NO_ME = "Me isn't set: pick your Person in Settings.";
+const NO_ME = "Me isn't set: pick or create your Person in Settings.";
 
 export function Dashboard() {
   const { data, error } = useView("/api/views/dashboard");
@@ -63,7 +62,7 @@ export function Dashboard() {
                 </ul>`
               : html`<p class="muted">Nobody is waiting on you</p>`}
         <//>
-        <${Card} title="Blocked work" href="#/portfolio">
+        <${Card} title="Blocked work" href="#/portfolio/board">
           ${d.blocked.length
             ? html`<ul class="todo-list">${d.blocked.map((f) => html`<${WorkRow} key=${f.id} item=${f} />`)}</ul>`
             : html`<p class="muted">Nothing blocked</p>`}

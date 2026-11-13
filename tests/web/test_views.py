@@ -50,7 +50,7 @@ def test_parse_quick_add_reports_token_errors_with_candidates(api: TestClient, a
     ).json()
     assert body["requester"] == alice
     assert body["errors"] == [
-        {"token": "@zz", "message": "No Person matches @zz", "candidates": []}
+        {"field": "owner", "token": "@zz", "message": "No Person matches @zz", "candidates": []}
     ]
 
 
@@ -69,12 +69,26 @@ def test_quick_add_creates_the_todo(api: TestClient, alice: str, root: Path):
     assert "requester: ada-lovelace" in text
 
 
-def test_quick_add_with_a_bad_token_is_422(api: TestClient):
-    response = api.post("/api/todos/quick-add", json={"text": "x @zz"})
+def test_quick_add_with_an_unmatched_person_is_422_unknown_reference(
+    api: TestClient, state: AppState, alice: str
+):
+    put(state, "people/alan-po.md", "---\ntitle: Alan Po\nkind: [team-member]\n---\n")
+    response = api.post("/api/todos/quick-add", json={"text": "x @al"})
+    assert response.status_code == 422
+    error = response.json()["error"]
+    assert error["code"] == "unknown_reference"
+    assert error["suggestions"] == ["alan-po", "alice-smith"]
+    assert error["field_errors"] == [
+        {"field": "owner", "message": "@al could be alan-po, alice-smith"}
+    ]
+
+
+def test_quick_add_with_a_bad_date_is_422_validation(api: TestClient):
+    response = api.post("/api/todos/quick-add", json={"text": "x due:2026-02-30"})
     assert response.status_code == 422
     error = response.json()["error"]
     assert error["code"] == "validation"
-    assert error["field_errors"] == [{"field": "@zz", "message": "No Person matches @zz"}]
+    assert [f["field"] for f in error["field_errors"]] == ["due"]
 
 
 def test_quick_add_without_me_is_409_me_not_set(api: TestClient, state: AppState):
@@ -133,14 +147,13 @@ def test_dashboard(api: TestClient, state: AppState, alice: str):
     assert body["waiting_on_them"] == []
     assert body["waiting_on_me"] == []
     assert body["get_started"] is False
-    assert body["me_set"] is True
 
 
 def test_dashboard_without_me_marks_the_me_cards(api: TestClient, state: AppState):
     unset_me(state)
     body = api.get("/api/views/dashboard").json()
-    assert body["me_set"] is False
     assert body["waiting_on_them"] is None
+    assert body["directs"] is None
 
 
 def test_dashboard_without_a_workspace_is_404(state: AppState, api: TestClient):
@@ -151,7 +164,7 @@ def test_dashboard_without_a_workspace_is_404(state: AppState, api: TestClient):
 def test_people(api: TestClient, alice: str):
     body = api.get("/api/views/people").json()
     assert body["me"]["person"]["id"] == "ada-lovelace"
-    assert [r["person"]["id"] for r in body["me"]["reports"]] == ["alice-smith"]
+    assert [d["person"]["id"] for d in body["me"]["directs"]] == ["alice-smith"]
     assert body["manager"] is None
     assert body["others"] == []
     assert body["stakeholders"] == []
@@ -174,3 +187,14 @@ def test_person_view_of_a_project_is_404(api: TestClient, state: AppState):
     response = api.get("/api/views/person/p")
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "not_found"
+
+
+def test_todo_views_for_a_person_take_only_the_two_column_views(
+    api: TestClient, state: AppState, alice: str
+):
+    response = api.get("/api/views/todos?view=mine&person=alice-smith")
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation"
+    unset_me(state)
+    response = api.get("/api/views/todos?view=waiting-on-them&person=alice-smith")
+    assert response.status_code == 200

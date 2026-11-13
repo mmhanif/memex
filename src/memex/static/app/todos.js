@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { ApiError, describe, request } from "./api.js";
 import { entityHref, personHref } from "./router.js";
-import { html, meId, reloadTree, useView, viewVersion } from "./state.js";
+import { html, meId, reloadTree, sameId, useView, viewVersion } from "./state.js";
 
 /**
  * @typedef {import("./fields.js").Summary} Summary
@@ -67,9 +67,9 @@ export function TodoRow({ todo, names, hide }) {
       <input type="checkbox" checked=${finished} aria-label="Done: ${todo.title}" onChange=${toggle} />
       <a href=${entityHref(todo.id)}>${todo.title}</a>
       ${status === "cancelled" && html`<span class="status status-cancelled">cancelled</span>`}
-      ${hide !== "owner" && owner && owner !== me &&
+      ${hide !== "owner" && owner && !sameId(owner, me) &&
       html`<span class="party">→ <a href=${personHref(owner)}>${name(owner)}</a></span>`}
-      ${hide !== "requester" && requester && requester !== me &&
+      ${hide !== "requester" && requester && !sameId(requester, me) &&
       html`<span class="party">from <a href=${personHref(requester)}>${name(requester)}</a></span>`}
       ${due && html`<span class="due ${!finished && isOverdue(due) ? "overdue" : ""}">due ${due}</span>`}
       ${todo.warnings.length > 0 && html`<span class="broken" title=${todo.warnings.map((w) => w.message).join("; ")}>!</span>`}

@@ -8,11 +8,14 @@ from pydantic import BaseModel, Field
 
 from memex.core import entities, quickadd, views
 from memex.core.cache import CachedFile
+from memex.core.errors import Validation
 from memex.core.workspace import Workspace
 from memex.web.api import WS
 from memex.web.entities_routes import detail_json, summary
 
 router = APIRouter(prefix="/api")
+
+PERSON_COLUMNS = ("waiting-on-them", "waiting-on-me")
 
 
 class QuickAddText(BaseModel):
@@ -29,7 +32,12 @@ def parse_quick_add(ws: WS, body: QuickAddText) -> dict:
         "requester": parsed.requester,
         "due": parsed.due.isoformat() if parsed.due else None,
         "errors": [
-            {"token": e.token, "message": e.message, "candidates": list(e.candidates)}
+            {
+                "field": e.field,
+                "token": e.token,
+                "message": e.message,
+                "candidates": list(e.candidates),
+            }
             for e in parsed.errors
         ],
         "names": _names(ws, [parsed.owner, parsed.requester]),
@@ -54,10 +62,10 @@ def todo_view(
     is what they owe, `waiting-on-me` what they're waiting on)."""
     if person is None:
         groups = views.todo_view(ws, view, include_done).groups
+    elif view not in PERSON_COLUMNS:
+        raise Validation(f"With person, view is one of {', '.join(PERSON_COLUMNS)}")
     else:
         found = views.person_view(ws, person, include_done)
-        if view not in ("waiting-on-them", "waiting-on-me"):
-            views.todo_view(ws, view)  # raises Validation on a bad name
         groups = found.waiting_on_them if view == "waiting-on-them" else found.waiting_on_me
     return {"view": view, "groups": _groups(groups), "names": _todo_names(ws, groups)}
 
@@ -68,7 +76,6 @@ def dashboard(ws: WS) -> dict:
     shown_todos = [*d.due_soon, *(d.waiting_on_me or ())]
     groups = d.waiting_on_them or ()
     return {
-        "me_set": ws.me() is not None,
         "due_soon": [summary(f) for f in d.due_soon],
         "waiting_on_them": None if d.waiting_on_them is None else _groups(d.waiting_on_them),
         "waiting_on_me": None if d.waiting_on_me is None else [summary(t) for t in d.waiting_on_me],
@@ -128,7 +135,7 @@ def _groups(groups: Iterable[views.TodoGroup]) -> list[dict]:
 
 
 def _org(node: views.OrgNode) -> dict:
-    return {"person": summary(node.person), "reports": [_org(r) for r in node.reports]}
+    return {"person": summary(node.person), "directs": [_org(d) for d in node.directs]}
 
 
 def _todo_names(

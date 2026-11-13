@@ -83,3 +83,9 @@ def test_views_need_me_and_a_known_view_name(b: Builder):
     b.file(".memex/config.yaml", "format: 1\n")
     with pytest.raises(MeNotSet):
         todo_view(b.ws, "mine")
+
+
+def test_groups_merge_ids_written_in_different_case(b: Builder):
+    b.todo("one", owner="alice")
+    b.todo("two", owner="Alice")
+    assert groups(todo_view(b.ws, "waiting-on-them")) == {"Alice": ["one", "two"]}

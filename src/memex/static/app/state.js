@@ -46,6 +46,15 @@ export function resolveMention(id) {
   return found.length === 1 ? { title: found[0].title } : null;
 }
 
+/**
+ * Whether two Ids name the same file: Ids compare ignoring case (§4.1).
+ * @param {unknown} a
+ * @param {unknown} b
+ */
+export function sameId(a, b) {
+  return typeof a === "string" && typeof b === "string" && a.toLowerCase() === b.toLowerCase();
+}
+
 /** Me's Id, or null while Me isn't set. */
 export function meId() {
   return tree.value?.workspace.me ?? null;

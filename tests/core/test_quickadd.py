@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from memex.core.errors import MeNotSet, Validation
+from memex.core.errors import MeNotSet, UnknownReference, Validation
 from memex.core.quickadd import parse_quick_add, quick_add
 from tests.core.builder import Builder
 
@@ -42,8 +42,8 @@ def test_without_tokens_owner_and_requester_are_me(b: Builder):
 def test_an_unmatched_owner_is_an_error_and_nothing_is_created(b: Builder):
     parsed = parse_quick_add(b.ws, "@zz review")
     [error] = parsed.errors
-    assert error.token == "@zz"
-    with pytest.raises(Validation):
+    assert (error.field, error.token) == ("owner", "@zz")
+    with pytest.raises(UnknownReference):
         quick_add(b.ws, "@zz review")
     assert list((b.root / "todos").iterdir()) == []
 
@@ -119,6 +119,11 @@ def test_quick_add_creates_a_dated_todo_file(b: Builder):
         "created: 2026-11-12",
     ):
         assert line in text
+
+
+def test_a_bad_date_is_refused_with_validation(b: Builder):
+    with pytest.raises(Validation):
+        quick_add(b.ws, "x due:2026-02-30")
 
 
 def test_quick_add_without_an_owner_fails_when_me_is_not_set(b: Builder):
