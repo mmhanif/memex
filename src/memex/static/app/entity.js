@@ -11,7 +11,7 @@ import { DocBanners, RawText, SaveStatus } from "./files.js";
 import { Icon } from "./icons.js";
 import { renderMarkdown } from "./markdown.js";
 import { openNew } from "./newform.js";
-import { entityHref, fileHref } from "./router.js";
+import { entityHref, fileHref, personHref } from "./router.js";
 import { html, openDoc, resolveMention, tree, viewVersion } from "./state.js";
 
 /**
@@ -33,7 +33,6 @@ import { html, openDoc, resolveMention, tree, viewVersion } from "./state.js";
 export function EntityPage({ id }) {
   const [detail, setDetail] = useState(/** @type {Detail | null} */ (null));
   const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
-  const [editing, setEditing] = useState(false);
   const version = viewVersion.value;
 
   async function load() {
@@ -48,7 +47,11 @@ export function EntityPage({ id }) {
   useEffect(() => {
     void load();
   }, [id, version]);
-  useEffect(() => () => closeBody(id), [id]);
+
+  useEffect(() => {
+    // A Person's page is their Person View (§11.3).
+    if (detail?.type === "person") window.location.replace(personHref(detail.id));
+  }, [detail?.type, detail?.id]);
 
   if (loadError) return html`<section class="entity"><p class="error-text" role="alert">${loadError}</p></section>`;
   if (!detail || detail.id.toLowerCase() !== id.toLowerCase()) return html`<p class="hint">Loading…</p>`;
@@ -61,28 +64,48 @@ export function EntityPage({ id }) {
         <${Title} detail=${detail} readOnly=${readOnly} onSaved=${load} />
         <a class="button" href=${fileHref(detail.path)} title="Open the raw file"><${Icon} name="file-text" /> Open file</a>
       </header>
-      ${detail.warnings.map(
-        (w) => html`<div class="banner warn" role="status">${w.message}${w.line ? ` (line ${w.line})` : ""}</div>`,
-      )}
-      ${detail.broken.length > 0 &&
-      html`<div class="banner warn" role="status">
-        <span>Broken references: ${detail.broken.map((b) => `${b.field} → ${b.id} (${brokenLabel(b.status)})`).join("; ")}</span>
-      </div>`}
+      <${Warnings} detail=${detail} />
       <${Properties} detail=${detail} readOnly=${readOnly} onSaved=${load} />
-      <section class="entity-body">
-        <div class="section-head">
-          <h2>${detail.type === "glossary-term" ? "Definition" : "Body"}</h2>
-          ${!readOnly &&
-          html`<button type="button" aria-pressed=${editing} onClick=${() => {
-            if (editing) closeBody(id);
-            setEditing(!editing);
-          }}><${Icon} name="pencil" /> ${editing ? "Done" : "Edit"}</button>`}
-        </div>
-        ${editing ? html`<${BodyEditor} id=${detail.id} />` : html`<div class="markdown"
-          dangerouslySetInnerHTML=${{ __html: renderMarkdown(detail.body, resolveMention) }}></div>`}
-      </section>
+      <${BodySection} detail=${detail} readOnly=${readOnly} />
       <${Related} detail=${detail} />
     </article>
+  `;
+}
+
+/** Validation warnings and Broken References, each in a bar. @param {{detail: Detail}} props */
+export function Warnings({ detail }) {
+  return html`
+    ${detail.warnings.map(
+      (w) => html`<div class="banner warn" role="status">${w.message}${w.line ? ` (line ${w.line})` : ""}</div>`,
+    )}
+    ${detail.broken.length > 0 &&
+    html`<div class="banner warn" role="status">
+      <span>Broken references: ${detail.broken.map((b) => `${b.field} → ${b.id} (${brokenLabel(b.status)})`).join("; ")}</span>
+    </div>`}
+  `;
+}
+
+/**
+ * The body in read mode, or with ✎ Edit a raw textarea with auto-save.
+ * @param {{detail: Detail, readOnly: boolean}} props
+ */
+export function BodySection({ detail, readOnly }) {
+  const [editing, setEditing] = useState(false);
+  const id = detail.id;
+  useEffect(() => () => closeBody(id), [id]);
+  return html`
+    <section class="entity-body">
+      <div class="section-head">
+        <h2>${detail.type === "glossary-term" ? "Definition" : "Body"}</h2>
+        ${!readOnly &&
+        html`<button type="button" aria-pressed=${editing} onClick=${() => {
+          if (editing) closeBody(id);
+          setEditing(!editing);
+        }}><${Icon} name="pencil" /> ${editing ? "Done" : "Edit"}</button>`}
+      </div>
+      ${editing ? html`<${BodyEditor} id=${id} />` : html`<div class="markdown"
+        dangerouslySetInnerHTML=${{ __html: renderMarkdown(detail.body, resolveMention) }}></div>`}
+    </section>
   `;
 }
 
@@ -114,7 +137,7 @@ async function patch(detail, set, unset) {
 }
 
 /** @param {{detail: Detail, readOnly: boolean, onSaved: () => Promise<void>}} props */
-function Title({ detail, readOnly, onSaved }) {
+export function Title({ detail, readOnly, onSaved }) {
   const current = typeof detail.fields.title === "string" ? detail.fields.title : "";
   const [draft, setDraft] = useState(current || detail.title);
   const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -148,7 +171,7 @@ function Title({ detail, readOnly, onSaved }) {
 }
 
 /** @param {{detail: Detail, readOnly: boolean, onSaved: () => Promise<void>}} props */
-function Properties({ detail, readOnly, onSaved }) {
+export function Properties({ detail, readOnly, onSaved }) {
   const candidates = useCandidates();
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const [notice, setNotice] = useState(/** @type {string | null} */ (null));
@@ -298,7 +321,7 @@ function Related({ detail }) {
 }
 
 /** @param {{title: string, items: Summary[], children?: any}} props */
-function LinkList({ title, items, children }) {
+export function LinkList({ title, items, children }) {
   return html`
     <div class="link-list">
       <div class="section-head"><h2>${title}</h2>${children}</div>
@@ -306,7 +329,7 @@ function LinkList({ title, items, children }) {
         ? html`<ul>
             ${items.map(
               (item) => html`<li>
-                <a href=${entityHref(item.id)}>${item.title}</a>
+                <a href=${entityHref(item.id, item.type)}>${item.title}</a>
                 ${item.fields.status && html`<span class="status status-${item.fields.status}">${item.fields.status}</span>`}
                 ${item.fields.due && html`<span class="muted">due ${item.fields.due}</span>`}
               </li>`,

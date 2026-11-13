@@ -296,6 +296,11 @@ ALL_GETS = [
     "/api/entities/missing",
     "/api/templates?type=note",
     "/api/settings",
+    "/api/views/todos?view=mine",
+    "/api/views/todos?view=waiting-on-me&person=ada-lovelace&include_done=true",
+    "/api/views/dashboard",
+    "/api/views/people",
+    "/api/views/person/ada-lovelace",
 ]
 
 

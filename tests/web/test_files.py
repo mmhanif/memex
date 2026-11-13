@@ -310,7 +310,12 @@ def test_delete_missing_is_404(api: TestClient):
 def test_tree_carries_the_workspace_status_for_the_banners(api: TestClient):
     status = api.get("/api/tree").json()["workspace"]
 
-    assert status == {"read_only": False, "config_error": None, "me_set": True}
+    assert status == {
+        "read_only": False,
+        "config_error": None,
+        "me_set": True,
+        "me": "ada-lovelace",
+    }
 
 
 def test_tree_status_flags_a_broken_config_and_missing_me(api: TestClient, state: AppState):
@@ -319,6 +324,7 @@ def test_tree_status_flags_a_broken_config_and_missing_me(api: TestClient, state
     status = api.get("/api/tree").json()["workspace"]
 
     assert status["me_set"] is False
+    assert status["me"] is None
     assert status["config_error"] is not None
 
 

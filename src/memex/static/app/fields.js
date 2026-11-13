@@ -286,6 +286,9 @@ export function initials(name) {
 /** @param {InputProps} props */
 function display({ spec, value, names }) {
   if (value == null || value === "") return html`<span class="muted">—</span>`;
-  if (spec.shape === "ref") return html`<a href=${entityHref(value)}>${names?.[value] ?? value}</a>`;
+  if (spec.shape === "ref") {
+    const type = spec.targets?.length === 1 ? spec.targets[0] : undefined;
+    return html`<a href=${entityHref(value, type)}>${names?.[value] ?? value}</a>`;
+  }
   return Array.isArray(value) ? value.join(", ") : String(value);
 }

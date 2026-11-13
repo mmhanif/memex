@@ -72,6 +72,11 @@ def list_entities(
 def entity_detail(ws: WS, id: str, response: Response) -> dict:
     detail = entities.entity_detail(ws, id)
     response.headers["ETag"] = f'"{detail.file.hash}"'
+    return detail_json(ws, detail)
+
+
+def detail_json(ws: Workspace, detail: entities.EntityDetail) -> dict:
+    """The Entity page's data (§11.5); the Person View carries it too (§11.6)."""
     return {
         **summary(detail.file, detail.warnings),
         "body": detail.file.body,
