@@ -1,12 +1,13 @@
 """The `/api/*` routes built so far (SPEC §17.2)."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Header, Query, Response
 from pydantic import BaseModel, Field
 
 from memex.core.cache import CachedFile
 from memex.core.diff import side_by_side
+from memex.core.entities import body_of
 from memex.core.errors import CoreError, Validation
 from memex.core.store import FileVersion
 from memex.core.workspace import Workspace
@@ -44,7 +45,7 @@ def _saved(response: Response, path: str, version_hash: str) -> dict:
     return {"path": path, "hash": version_hash}
 
 
-def _expected_hash(if_match: str | None) -> str:
+def expected_hash(if_match: str | None) -> str:
     if not if_match:
         raise Validation("If-Match is required: send the hash you last read")
     return if_match.strip().removeprefix("W/").strip('"')
@@ -92,7 +93,7 @@ def write_file(
     response: Response,
     if_match: Annotated[str | None, Header()] = None,
 ) -> dict:
-    new_hash = ws.store.write(body.path, body.content, _expected_hash(if_match))
+    new_hash = ws.store.write(body.path, body.content, expected_hash(if_match))
     return _saved(response, body.path, new_hash)
 
 
@@ -125,10 +126,16 @@ def delete(ws: WS, path: Annotated[str, Query()]) -> dict:
     return {"path": path, "trash": ws.trash(path)}
 
 
+class DiffRequest(PathContent):
+    part: Literal["file", "body"] = "file"  # "body": an Entity page's body editor
+
+
 @router.post("/diff")
-def diff(ws: WS, body: PathContent) -> dict:
+def diff(ws: WS, body: DiffRequest) -> dict:
     """Compare the editor's text with what is on disk now (§5.7)."""
     disk = _read(ws, body.path)
+    if body.part == "body":
+        disk = body_of(disk)
     rows = side_by_side(disk.text, body.content)
     return {
         "path": body.path,

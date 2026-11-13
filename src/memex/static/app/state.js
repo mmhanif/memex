@@ -34,3 +34,13 @@ export async function reloadTree() {
     treeError.value = describe(error);
   }
 }
+
+/**
+ * A Mention's target from the tree: one file with that Id (ignoring case), else null.
+ * @type {import("./markdown.js").MentionResolver}
+ */
+export function resolveMention(id) {
+  const key = id.toLowerCase();
+  const found = tree.value?.files.filter((f) => f.id.toLowerCase() === key) ?? [];
+  return found.length === 1 ? { title: found[0].title } : null;
+}

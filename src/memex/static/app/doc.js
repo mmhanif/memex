@@ -5,6 +5,9 @@
 // A change on disk while clean reloads in place; while dirty it becomes a conflict and
 // auto-save pauses. A file deleted or moved outside the app becomes `deleted`; the editor
 // keeps its text. The server's hash check settles everything; nothing retries on its own.
+//
+// A change on disk that leaves our text's base alone (e.g. a field edit while the Entity
+// page's body is open) just moves the hash on: there is nothing to reconcile.
 
 import { signal } from "@preact/signals";
 import { ApiError, describe, fileUrl, request } from "./api.js";
@@ -27,6 +30,8 @@ export class OpenDoc {
     this.path = path;
     /** The version of the file the editor's text is based on. */
     this.hash = version.hash;
+    /** The text on disk at `hash`. */
+    this.base = version.content;
     this.text = signal(version.content);
     this.state = signal(/** @type {SaveState} */ ("clean"));
     /** What is on disk now, while in conflict. */
@@ -40,6 +45,8 @@ export class OpenDoc {
     this.timer = 0;
     this.noticeTimer = 0;
     this.recheckAfterSave = false;
+    /** What `compare()` diffs against on the server: the whole file, or its body. */
+    this.part = "file";
     /** The save in flight, if any, so leaving can wait for it. */
     this.inflight = /** @type {Promise<void> | null} */ (null);
   }
@@ -48,6 +55,37 @@ export class OpenDoc {
   static async open(path) {
     const version = await request("GET", fileUrl(path));
     return new OpenDoc(path, version);
+  }
+
+  /**
+   * Whether a route shows this document, so going there isn't leaving it.
+   * @param {import("./router.js").Route} route
+   */
+  ownsRoute(route) {
+    return route.name === "file" && route.path === this.path;
+  }
+
+  /** Whether the deleted banner can offer Recreate. */
+  get canRecreate() {
+    return true;
+  }
+
+  /** @returns {Promise<FileVersion>} */
+  async fetchVersion() {
+    return request("GET", fileUrl(this.path));
+  }
+
+  /**
+   * @param {string} text
+   * @param {boolean} keepalive
+   * @returns {Promise<{hash: string}>}
+   */
+  async put(text, keepalive) {
+    return request("PUT", "/api/files", {
+      json: { path: this.path, content: text },
+      ifMatch: this.hash,
+      keepalive,
+    });
   }
 
   /** True while leaving would lose something: unsaved, saving, or a banner showing. */
@@ -93,12 +131,9 @@ export class OpenDoc {
     const sent = this.text.value;
     this.state.value = "saving";
     try {
-      const saved = await request("PUT", "/api/files", {
-        json: { path: this.path, content: sent },
-        ifMatch: this.hash,
-        keepalive,
-      });
+      const saved = await this.put(sent, keepalive);
       this.hash = saved.hash;
+      this.base = sent;
       this.problem.value = null;
       this.state.value = this.text.value === sent ? "clean" : "dirty";
       if (this.state.value === "dirty") this.schedule();
@@ -113,8 +148,14 @@ export class OpenDoc {
 
   /** @param {unknown} error */
   failed(error) {
-    if (error instanceof ApiError && error.code === "conflict" && error.body.current) {
-      this.enterConflict(error.body.current);
+    const current = error instanceof ApiError && error.code === "conflict" ? error.body.current : null;
+    if (current && current.content === this.base) {
+      // Only something we don't edit changed: save again on top of it.
+      this.hash = current.hash;
+      this.state.value = "dirty";
+      this.schedule();
+    } else if (current) {
+      this.enterConflict(current);
     } else if (error instanceof ApiError && error.code === "not_found") {
       this.state.value = "deleted";
     } else {
@@ -148,7 +189,7 @@ export class OpenDoc {
     /** @type {FileVersion} */
     let disk;
     try {
-      disk = await request("GET", fileUrl(this.path));
+      disk = await this.fetchVersion();
     } catch (error) {
       if (error instanceof ApiError && error.code === "not_found") {
         clearTimeout(this.timer);
@@ -160,6 +201,10 @@ export class OpenDoc {
     const state = /** @type {SaveState} */ (this.state.value);
     if (state === "saving") {
       this.recheckAfterSave = true;
+    } else if (disk.hash !== this.hash && disk.content === this.base && state !== "conflict") {
+      this.hash = disk.hash; // our text's base is unchanged
+      if (state === "deleted") this.state.value = this.text.value === disk.content ? "clean" : "dirty";
+      if (this.state.value === "dirty") this.schedule();
     } else if (disk.hash === this.hash) {
       // Back as it was. Without edits since, nothing is lost; otherwise let the user choose.
       if (state === "deleted" && this.text.value === disk.content) this.state.value = "clean";
@@ -198,7 +243,7 @@ export class OpenDoc {
    */
   async compare() {
     const diff = await request("POST", "/api/diff", {
-      json: { path: this.path, content: this.text.value },
+      json: { path: this.path, content: this.text.value, part: this.part },
     });
     return diff.rows;
   }
@@ -211,6 +256,7 @@ export class OpenDoc {
         json: { path: this.path, content: sent },
       });
       this.hash = created.hash;
+      this.base = sent;
       this.problem.value = null;
       this.state.value = this.text.value === sent ? "clean" : "dirty";
       if (this.state.value === "dirty") this.schedule();
@@ -228,6 +274,7 @@ export class OpenDoc {
   replaceText(version) {
     clearTimeout(this.timer);
     this.hash = version.hash;
+    this.base = version.content;
     this.text.value = version.content;
     this.state.value = "clean";
     this.revision.value += 1;
@@ -243,5 +290,51 @@ export class OpenDoc {
   dispose() {
     clearTimeout(this.timer);
     clearTimeout(this.noticeTimer);
+  }
+}
+
+/** An Entity page's body (SPEC §11.5): saved with a body replace, frontmatter untouched. */
+export class BodyDoc extends OpenDoc {
+  /**
+   * @param {string} id
+   * @param {string} path
+   * @param {FileVersion} version
+   */
+  constructor(id, path, version) {
+    super(path, version);
+    this.id = id;
+    this.part = "body";
+  }
+
+  /** @param {string} id */
+  static async open(id) {
+    const entity = await request("GET", `/api/entities/${encodeURIComponent(id)}`);
+    return new BodyDoc(id, entity.path, { hash: entity.hash, content: entity.body });
+  }
+
+  /** @param {import("./router.js").Route} route */
+  ownsRoute(route) {
+    return route.name === "entity" && route.id === this.id;
+  }
+
+  get canRecreate() {
+    return false;
+  }
+
+  async fetchVersion() {
+    const entity = await request("GET", `/api/entities/${encodeURIComponent(this.id)}`);
+    return { hash: entity.hash, content: entity.body };
+  }
+
+  /**
+   * @param {string} text
+   * @param {boolean} keepalive
+   */
+  async put(text, keepalive) {
+    return request("PUT", `/api/entities/${encodeURIComponent(this.id)}/body`, {
+      json: { body: text },
+      ifMatch: this.hash,
+      keepalive,
+    });
   }
 }

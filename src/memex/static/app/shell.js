@@ -2,11 +2,14 @@
 // The shell (SPEC §11.2): icon rail, top bar, banners, and the routed view.
 
 import { useState } from "preact/hooks";
-import { describe, request } from "./api.js";
+import { EntityPage } from "./entity.js";
+import { TYPES } from "./fields.js";
 import { FilesPage } from "./files.js";
 import { Icon } from "./icons.js";
-import { fileHref, navigate, route } from "./router.js";
-import { html, openDoc, reloadTree, tree, treeError } from "./state.js";
+import { NewDialog, openNew } from "./newform.js";
+import { route } from "./router.js";
+import { SettingsPage } from "./settings.js";
+import { html, openDoc, tree, treeError } from "./state.js";
 
 const RAIL = [
   { route: "home", label: "Home", icon: "house" },
@@ -30,6 +33,7 @@ export function App() {
           <${View} />
         </main>
       </div>
+      <${NewDialog} />
     </div>
   `;
 }
@@ -77,23 +81,6 @@ function TopBar() {
 
 function NewMenu() {
   const [open, setOpen] = useState(false);
-  const [error, setError] = useState(/** @type {string | null} */ (null));
-
-  async function newNote() {
-    setOpen(false);
-    const taken = new Set(tree.value?.files.map((f) => f.path) ?? []);
-    let path = "notes/untitled.md";
-    for (let n = 2; taken.has(path); n++) path = `notes/untitled-${n}.md`;
-    try {
-      await request("POST", "/api/files", { json: { path, content: "# Untitled\n" } });
-      await reloadTree();
-      navigate(fileHref(path));
-      setError(null);
-    } catch (e) {
-      setError(describe(e));
-    }
-  }
-
   return html`
     <div class="new-menu">
       <button type="button" class="primary" aria-expanded=${open} onClick=${() => setOpen(!open)}>
@@ -101,12 +88,17 @@ function NewMenu() {
       </button>
       ${open &&
       html`
-        <ul class="menu" role="menu">
-          <li><button type="button" role="menuitem" onClick=${newNote}>Note</button></li>
-          <li class="menu-note">Themes, Projects and the other types arrive with Entities.</li>
+        <ul class="menu" role="menu" onKeyDown=${(/** @type {KeyboardEvent} */ e) => e.key === "Escape" && setOpen(false)}>
+          ${TYPES.map(
+            (t) => html`<li>
+              <button type="button" role="menuitem" onClick=${() => {
+                setOpen(false);
+                openNew(t.key);
+              }}>${t.label}</button>
+            </li>`,
+          )}
         </ul>
       `}
-      ${error && html`<span class="error-text">${error}</span>`}
     </div>
   `;
 }
@@ -142,6 +134,8 @@ function View() {
   const current = route.value;
   if (current.name === "files") return html`<${FilesPage} path=${null} />`;
   if (current.name === "file") return html`<${FilesPage} path=${current.path ?? null} />`;
+  if (current.name === "settings") return html`<${SettingsPage} />`;
+  if (current.name === "entity" && current.id) return html`<${EntityPage} key=${current.id} id=${current.id} />`;
   return html`<${Placeholder} name=${current.name} />`;
 }
 

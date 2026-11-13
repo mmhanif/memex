@@ -3,6 +3,8 @@
 Messages hold Workspace-relative paths only, never absolute ones (§5.1).
 """
 
+from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -67,8 +69,31 @@ class Locked(CoreError):
         self.rel = rel
 
 
+@dataclass(frozen=True)
+class FieldProblem:
+    """One field's problem, for the error body's `field_errors` (§17.1)."""
+
+    field: str
+    message: str
+    allowed: tuple[str, ...] | None = None
+
+
 class Validation(CoreError):
     code = "validation"
+
+    def __init__(self, message: str, field_errors: Sequence[FieldProblem] = ()) -> None:
+        super().__init__(message)
+        self.field_errors = tuple(field_errors)
+
+
+class AmbiguousId(CoreError):
+    """Several files share the Id, ignoring case (§4.1), so it names none of them."""
+
+    code = "ambiguous_id"
+
+    def __init__(self, id: str) -> None:
+        super().__init__(f"{id!r} names more than one file")
+        self.id = id
 
 
 class NotFound(CoreError):
@@ -100,7 +125,17 @@ class ReadOnly(CoreError):
 class UnknownReference(CoreError):
     code = "unknown_reference"
 
-    def __init__(self, field: str, id: str, expected: str) -> None:
-        super().__init__(f"{field}: {id!r} is not {expected}")
+    def __init__(
+        self,
+        field: str,
+        id: str,
+        expected: str,
+        suggestions: Sequence[str] = (),
+        field_errors: Sequence[FieldProblem] = (),
+        message: str | None = None,
+    ) -> None:
+        super().__init__(message or f"{field}: {id!r} is not {expected}")
         self.field = field
         self.id = id
+        self.suggestions = tuple(suggestions)  # up to 3 "did you mean" Ids (§4.5)
+        self.field_errors = tuple(field_errors)

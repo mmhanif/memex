@@ -3,8 +3,11 @@
 import base64
 import hashlib
 import os
+import re
 import sys
+from collections.abc import Iterable, Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -287,18 +290,30 @@ ALL_GETS = [
     "/api/files?path=people/ada-lovelace.md",
     "/api/files?path=notes/missing.md",
     "/api/setup",
+    "/api/entities",
+    "/api/entities?type=project&due_before=2026-12-01",
+    "/api/entities/ada-lovelace",
+    "/api/entities/missing",
+    "/api/templates?type=note",
+    "/api/settings",
 ]
 
 
 def test_R11_no_get_changes_disk_state(api: TestClient, root: Path, state: AppState):
     get_paths = {
-        route.path  # type: ignore[attr-defined]
-        for route in api.app.routes  # type: ignore[attr-defined]
+        route.path
+        for route in _all_routes(api.app.routes)  # type: ignore[attr-defined]
         if "GET" in getattr(route, "methods", ())
     }
+    assert "/api/tree" in get_paths, "route discovery found no included routes"
     # The endless event stream can't run under TestClient; test_events.py reads it live.
     covered = {p.split("?")[0] for p in ALL_GETS} | {"/api/events"}
-    assert get_paths <= covered, f"add these GET routes to ALL_GETS: {get_paths - covered}"
+    missing = {
+        p
+        for p in get_paths
+        if not any(re.fullmatch(re.sub(r"\{\w+\}", "[^/]+", p), c) for c in covered)
+    }
+    assert not missing, f"add these GET routes to ALL_GETS: {missing}"
     before = snapshot(root)
 
     for path in ALL_GETS:
@@ -306,6 +321,15 @@ def test_R11_no_get_changes_disk_state(api: TestClient, root: Path, state: AppSt
     api.get(f"/auth?code={state.session.issue_code()}")
 
     assert snapshot(root) == before
+
+
+def _all_routes(routes: Iterable[Any]) -> Iterator[Any]:
+    """Routes, including those inside included routers (FastAPI wraps them)."""
+    for route in routes:
+        if inner := getattr(route, "original_router", None):
+            yield from _all_routes(inner.routes)
+        else:
+            yield route
 
 
 # R12: hostile paths are 400 and leave disk unchanged.
