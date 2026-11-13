@@ -53,13 +53,15 @@ def expected_hash(if_match: str | None) -> str:
 
 @router.get("/tree")
 def tree(ws: WS) -> dict:
+    me = ws.me()
     return {
         "folders": ws.cache.folders(),
         "files": [_tree_file(f) for f in ws.cache.files()],
         "workspace": {  # for the shell's banners (§11.2)
             "read_only": ws.read_only,
             "config_error": ws.config_error and ws.config_error.message,
-            "me_set": ws.me() is not None,
+            "me_set": me is not None,
+            "me": me and me.id,  # for To-do rows and pre-fills
         },
     }
 

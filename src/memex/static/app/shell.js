@@ -2,14 +2,17 @@
 // The shell (SPEC §11.2): icon rail, top bar, banners, and the routed view.
 
 import { useState } from "preact/hooks";
+import { Dashboard } from "./dashboard.js";
 import { EntityPage } from "./entity.js";
 import { TYPES } from "./fields.js";
 import { FilesPage } from "./files.js";
 import { Icon } from "./icons.js";
 import { NewDialog, openNew } from "./newform.js";
+import { PeoplePage, PersonPage } from "./people.js";
 import { route } from "./router.js";
 import { SettingsPage } from "./settings.js";
 import { html, openDoc, tree, treeError } from "./state.js";
+import { TodosPage } from "./todos.js";
 
 const RAIL = [
   { route: "home", label: "Home", icon: "house" },
@@ -21,11 +24,15 @@ const RAIL = [
   { route: "files", label: "Files", icon: "folder" },
 ];
 
+/** Routes that light up another route's rail icon. */
+/** @type {Record<string, string>} */
+const RAIL_FOR = { file: "files", person: "people" };
+
 export function App() {
   const current = route.value;
   return html`
     <div class="shell">
-      <${Rail} active=${current.name === "file" ? "files" : current.name} />
+      <${Rail} active=${RAIL_FOR[current.name] ?? current.name} />
       <div class="main">
         <${TopBar} />
         <${Banners} />
@@ -135,6 +142,10 @@ function View() {
   if (current.name === "files") return html`<${FilesPage} path=${null} />`;
   if (current.name === "file") return html`<${FilesPage} path=${current.path ?? null} />`;
   if (current.name === "settings") return html`<${SettingsPage} />`;
+  if (current.name === "home") return html`<${Dashboard} />`;
+  if (current.name === "todos") return html`<${TodosPage} view=${current.view ?? "mine"} />`;
+  if (current.name === "people") return html`<${PeoplePage} />`;
+  if (current.name === "person" && current.id) return html`<${PersonPage} key=${current.id} id=${current.id} />`;
   if (current.name === "entity" && current.id) return html`<${EntityPage} key=${current.id} id=${current.id} />`;
   return html`<${Placeholder} name=${current.name} />`;
 }

@@ -20,6 +20,7 @@ from memex.web import (
     launcher_routes,
     settings_routes,
     setup_routes,
+    views_routes,
 )
 from memex.web.security import SecurityMiddleware
 from memex.web.session import COOKIE
@@ -61,6 +62,7 @@ def create_app(state: AppState, *, watch: bool = True) -> FastAPI:
     app.include_router(events.router)
     app.include_router(launcher_routes.router)
     app.include_router(setup_routes.router)
+    app.include_router(views_routes.router)
 
     @app.get("/", include_in_schema=False)
     def index() -> FileResponse:

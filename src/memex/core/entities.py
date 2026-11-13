@@ -383,8 +383,8 @@ def entity_detail(ws: Workspace, id: str) -> EntityDetail:
     key = entry.id.casefold()
     files = [f for f in ws.cache.files() if f.rel != entry.rel]
 
-    def refers(f: CachedFile, field: str) -> bool:
-        return _refers(f, [field], entry.id)
+    def names_it(f: CachedFile, field: str) -> bool:
+        return refers(f, [field], entry.id)
 
     child_type, child_field = _CHILDREN.get(entry.type, (None, ""))
     return EntityDetail(
@@ -393,15 +393,15 @@ def entity_detail(ws: Workspace, id: str) -> EntityDetail:
         broken=tuple(broken),
         names=names,
         children=tuple(
-            f for f in files if child_type and f.type is child_type and refers(f, child_field)
+            f for f in files if child_type and f.type is child_type and names_it(f, child_field)
         ),
-        todos=tuple(f for f in files if f.type is EntityType.TODO and refers(f, "about")),
-        notes=tuple(f for f in files if f.type is None and refers(f, "about")),
+        todos=tuple(f for f in files if f.type is EntityType.TODO and names_it(f, "about")),
+        notes=tuple(f for f in files if f.type is None and names_it(f, "about")),
         mentioned_in=tuple(f for f in files if key in {m.casefold() for m in f.mentions}),
     )
 
 
-def _refers(f: CachedFile, fields: Iterable[str], id: str) -> bool:
+def refers(f: CachedFile, fields: Iterable[str], id: str) -> bool:
     """Whether one of `f`'s `fields` names `id`, ignoring case."""
     return any(r.field in fields and r.id.casefold() == id.casefold() for r in f.references)
 
@@ -439,11 +439,11 @@ def list_entities(
             return False
         if status is not None and f.fields.get("status") != status:
             return False
-        if theme is not None and not _refers(f, ["theme"], theme):
+        if theme is not None and not refers(f, ["theme"], theme):
             return False
-        if project is not None and not _refers(f, ["project"], project):
+        if project is not None and not refers(f, ["project"], project):
             return False
-        if person is not None and not _refers(f, _PERSON_FILTER_FIELDS, person):
+        if person is not None and not refers(f, _PERSON_FILTER_FIELDS, person):
             return False
         labels = f.fields.get("labels")
         if label is not None and not (isinstance(labels, list) and label in labels):

@@ -10,7 +10,7 @@ import { entityHref, navigate } from "./router.js";
 import { html, reloadTree } from "./state.js";
 
 /**
- * @typedef {{type: string, prefill?: Record<string, any>}} NewRequest
+ * @typedef {{type: string, prefill?: Record<string, any>, template?: string}} NewRequest
  * @typedef {{key: string, name: string, display_name: string, default: boolean, hidden: boolean,
  *   error: string | null, fields: Record<string, any>, body: string}} TemplateInfo
  */
@@ -18,9 +18,13 @@ import { html, reloadTree } from "./state.js";
 /** The open + New… form, if any. */
 export const newDialog = signal(/** @type {NewRequest | null} */ (null));
 
-/** @param {string} type @param {Record<string, any>} [prefill] */
-export function openNew(type, prefill) {
-  newDialog.value = { type, prefill };
+/**
+ * @param {string} type
+ * @param {Record<string, any>} [prefill]
+ * @param {string} [template] a Template name to preselect instead of the default
+ */
+export function openNew(type, prefill, template) {
+  newDialog.value = { type, prefill, template };
 }
 
 /**
@@ -38,11 +42,11 @@ export async function fetchTemplates(type) {
 export function NewDialog() {
   const req = newDialog.value;
   if (!req) return null;
-  return html`<${NewForm} key=${req.type} type=${req.type} prefill=${req.prefill ?? {}} />`;
+  return html`<${NewForm} key=${req.type} type=${req.type} prefill=${req.prefill ?? {}} initial=${req.template} />`;
 }
 
-/** @param {{type: string, prefill: Record<string, any>}} props */
-function NewForm({ type, prefill }) {
+/** @param {{type: string, prefill: Record<string, any>, initial?: string}} props */
+function NewForm({ type, prefill, initial }) {
   const [templates, setTemplates] = useState(/** @type {TemplateInfo[]} */ ([]));
   const [template, setTemplate] = useState(/** @type {TemplateInfo | null} */ (null));
   const [title, setTitle] = useState("");
@@ -64,7 +68,7 @@ function NewForm({ type, prefill }) {
     fetchTemplates(type).then(
       ({ usable, fallback }) => {
         setTemplates(usable);
-        choose(fallback, null);
+        choose(usable.find((t) => t.name === initial) ?? fallback, null);
       },
       (e) => setError(describe(e)),
     );

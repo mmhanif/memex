@@ -5,7 +5,7 @@
 import { signal } from "@preact/signals";
 import { openDoc } from "./state.js";
 
-/** @typedef {{name: string, path?: string, id?: string}} Route */
+/** @typedef {{name: string, path?: string, id?: string, view?: string}} Route */
 
 /** @param {string} hash */
 export function parseRoute(hash) {
@@ -15,6 +15,8 @@ export function parseRoute(hash) {
     return { name: "file", path: rest.map(decodeURIComponent).join("/") };
   }
   if (name === "e" && rest.length) return { name: "entity", id: decodeURIComponent(rest.join("/")) };
+  if (name === "people" && rest.length) return { name: "person", id: decodeURIComponent(rest.join("/")) };
+  if (name === "todos") return { name: "todos", view: rest[0] || "mine" };
   return { name: name || "home" };
 }
 
@@ -32,9 +34,18 @@ export function fileHref(path) {
   return `#/f/${path.split("/").map(encodeURIComponent).join("/")}`;
 }
 
+/**
+ * An Entity's page. Persons open on their Person View (§11.3); pass the type when known.
+ * @param {string} id
+ * @param {string} [type]
+ */
+export function entityHref(id, type) {
+  return type === "person" ? personHref(id) : `#/e/${encodeURIComponent(id)}`;
+}
+
 /** @param {string} id */
-export function entityHref(id) {
-  return `#/e/${encodeURIComponent(id)}`;
+export function personHref(id) {
+  return `#/people/${encodeURIComponent(id)}`;
 }
 
 export const route = signal(/** @type {Route} */ (parseRoute(window.location.hash)));
