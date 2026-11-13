@@ -192,3 +192,139 @@ def test_unknown_api_route_is_404_not_found(api: TestClient):
 
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "not_found"
+
+
+# Files page: new folder, move, delete (§11.8, §17.2)
+
+
+def test_new_folder(api: TestClient, root: Path):
+    response = api.post("/api/folders", json={"path": "notes/trips"})
+
+    assert response.status_code == 201
+    assert response.json() == {"path": "notes/trips"}
+    assert (root / "notes/trips").is_dir()
+    assert "notes/trips" in api.get("/api/tree").json()["folders"]
+
+
+def test_new_folder_that_exists_is_409_exists(api: TestClient):
+    response = api.post("/api/folders", json={"path": "notes"})
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "exists"
+
+
+def test_move_renames_and_updates_the_tree(api: TestClient, state: AppState):
+    hinted(state, "notes/a.md", b"# A\n")
+
+    response = api.post("/api/move", json={"from": "notes/a.md", "to": "meetings/a.md"})
+
+    assert response.status_code == 200
+    assert response.json() == {"from": "notes/a.md", "to": "meetings/a.md"}
+    paths = {f["path"] for f in api.get("/api/tree").json()["files"]}
+    assert "meetings/a.md" in paths
+    assert "notes/a.md" not in paths
+
+
+def test_move_a_typed_entity_out_of_its_folder_is_400(api: TestClient, root: Path):
+    put(root, "projects/x.md", b"---\ntitle: X\n---\n")
+
+    response = api.post("/api/move", json={"from": "projects/x.md", "to": "notes/x.md"})
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "bad_path"
+
+
+def test_move_missing_source_is_404(api: TestClient):
+    response = api.post("/api/move", json={"from": "notes/nope.md", "to": "notes/b.md"})
+
+    assert response.status_code == 404
+
+
+def test_R14_move_refusals(api: TestClient, root: Path):
+    put(root, "notes/a.md", b"a\n")
+    put(root, "notes/b.md", b"b\n")
+    put(root, "notes/f/x.md", b"x\n")
+
+    responses = {
+        "root as source": api.post("/api/move", json={"from": "", "to": "notes/z"}),
+        "outside the root": api.post("/api/move", json={"from": "notes/a.md", "to": "../a.md"}),
+        "into a descendant": api.post("/api/move", json={"from": "notes/f", "to": "notes/f/g"}),
+        "existing": api.post("/api/move", json={"from": "notes/a.md", "to": "notes/b.md"}),
+    }
+
+    assert {k: r.status_code for k, r in responses.items()} == {
+        "root as source": 400,
+        "outside the root": 400,
+        "into a descendant": 400,
+        "existing": 409,
+    }
+    assert (root / "notes/a.md").read_bytes() == b"a\n"
+    assert (root / "notes/b.md").read_bytes() == b"b\n"
+    assert (root / "notes/f/x.md").exists()
+
+
+def test_R14_move_with_overwrite_replaces_the_destination(api: TestClient, root: Path):
+    put(root, "notes/a.md", b"a\n")
+    put(root, "notes/b.md", b"b\n")
+
+    response = api.post(
+        "/api/move", json={"from": "notes/a.md", "to": "notes/b.md", "overwrite": True}
+    )
+
+    assert response.status_code == 200
+    assert (root / "notes/b.md").read_bytes() == b"a\n"
+
+
+def test_delete_moves_to_trash(api: TestClient, state: AppState):
+    hinted(state, "notes/a.md", b"# A\n")
+
+    response = api.delete("/api/files", params={"path": "notes/a.md"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "path": "notes/a.md",
+        "trash": ".memex/trash/20261112-000000/notes/a.md",
+    }
+    assert state.workspace is not None
+    assert (state.workspace.root / ".memex/trash/20261112-000000/notes/a.md").exists()
+
+
+def test_delete_with_incoming_references_is_409_with_impact(api: TestClient, state: AppState):
+    hinted(state, "notes/a.md", b"# A\n")
+    hinted(state, "notes/b.md", b"see [[a]]\n")
+
+    response = api.delete("/api/files", params={"path": "notes/a.md"})
+
+    assert response.status_code == 409
+    error = response.json()["error"]
+    assert error["code"] == "has_references"
+    assert error["impact"] == {"referrers": ["notes/b.md"]}
+
+
+def test_delete_missing_is_404(api: TestClient):
+    response = api.delete("/api/files", params={"path": "notes/nope.md"})
+
+    assert response.status_code == 404
+
+
+def test_tree_carries_the_workspace_status_for_the_banners(api: TestClient):
+    status = api.get("/api/tree").json()["workspace"]
+
+    assert status == {"read_only": False, "config_error": None, "me_set": True}
+
+
+def test_tree_status_flags_a_broken_config_and_missing_me(api: TestClient, state: AppState):
+    hinted(state, ".memex/config.yaml", b"format: 1\nme: [unclosed\n")
+
+    status = api.get("/api/tree").json()["workspace"]
+
+    assert status["me_set"] is False
+    assert status["config_error"] is not None
+
+
+def test_delete_a_type_folder_is_400_and_keeps_it(api: TestClient, root: Path):
+    response = api.delete("/api/files", params={"path": "people"})
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "bad_path"
+    assert (root / "people/ada-lovelace.md").exists()

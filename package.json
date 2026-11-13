@@ -1,0 +1,16 @@
+{
+  "name": "memex-dev",
+  "private": true,
+  "description": "Dev-only: type-checks the front end with tsc --noEmit (SPEC §11.1). Nothing here ships; the browser loads the vendored copies under src/memex/static/vendor/.",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "devDependencies": {
+    "@preact/signals": "2.11.4",
+    "dompurify": "3.4.17",
+    "htm": "3.1.1",
+    "markdown-it": "15.0.3",
+    "preact": "11.2.0",
+    "typescript": "7.0.2"
+  }
+}

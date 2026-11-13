@@ -13,10 +13,12 @@ from typing import Any
 
 from memex.core import frontmatter
 from memex.core.errors import BadPath, Conflict, Exists, Locked, NotFound, ReadOnly, Validation
-from memex.core.paths import resolve_workspace_path
+from memex.core.paths import is_within, resolve_workspace_path
 
 BOM = b"\xef\xbb\xbf"
 WORKSPACE_CONFIG = ".memex/config.yaml"  # the one non-`.md` file the Store writes
+TRASH = ".memex/trash"
+TEMP_MARKER = ".memex-tmp-"  # in atomic writes' temp names; the watcher ignores them
 
 
 @dataclass(frozen=True)
@@ -96,11 +98,14 @@ class Store:
             self._changed(rel)
             return content_hash(raw)
 
-    def make_folder(self, rel: str) -> None:
+    def make_folder(self, rel: str, exist_ok: bool = True) -> None:
         """Create a folder (and any missing parents, the Workspace root included)."""
         if self.read_only:
             raise ReadOnly()
-        resolve_workspace_path(self.root, rel).mkdir(parents=True, exist_ok=True)
+        path = resolve_workspace_path(self.root, rel)
+        if not exist_ok and (path.exists() or Path(self.root, rel).is_symlink()):
+            raise Exists(rel)
+        path.mkdir(parents=True, exist_ok=True)
 
     def write(self, rel: str, text: str, expected_hash: str) -> str:
         path = self._writable_path(rel)
@@ -135,6 +140,58 @@ class Store:
             atomic_write(path, raw, rel)
             self._changed(rel)
             return content_hash(raw)
+
+    def move(self, src: str, dst: str, overwrite: bool = False) -> None:
+        """Move or rename a file or folder (R14). Links are never moved (R13).
+
+        `overwrite` replaces an existing file at `dst`, never a folder.
+        """
+        if self.read_only:
+            raise ReadOnly()
+        source = self._existing(src)
+        is_folder = source.is_dir()
+        if not is_folder and not (src.endswith(".md") and dst.endswith(".md")):
+            raise BadPath(dst, "only .md files can be moved, and they stay .md")
+        target = resolve_workspace_path(self.root, dst)
+        same = os.path.normcase(source) == os.path.normcase(target)  # a case-only rename
+        if is_folder and not same and is_within(source, target):
+            raise BadPath(dst, "a folder can't move into itself")
+        taken = not same and (target.exists() or target.is_symlink())
+        if taken and (not overwrite or is_folder or target.is_dir()):
+            raise Exists(dst)
+        with self._lock(source):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            _replace_with_retry(source, target, src)
+        self._changed(src)
+        self._changed(dst)
+
+    def trash(self, rel: str, stamp: str) -> str:
+        """Move a file or folder to `.memex/trash/<stamp>/<rel>` (§8.4); return that path.
+
+        A link inside a trashed folder moves as a link; its target is never touched (R13).
+        """
+        if self.read_only:
+            raise ReadOnly()
+        source = self._existing(rel)
+        entry, n = f"{TRASH}/{stamp}/{rel}", 1
+        while (self.root / entry).exists() or (self.root / entry).is_symlink():
+            n += 1
+            entry = f"{TRASH}/{stamp}-{n}/{rel}"
+        target = self.root / entry
+        with self._lock(source):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            _replace_with_retry(source, target, rel)
+        self._changed(rel)
+        return entry
+
+    def _existing(self, rel: str) -> Path:
+        """An existing file or folder that is not itself a link."""
+        if Path(self.root, rel).is_symlink():
+            raise BadPath(rel, "links can't be moved or deleted")
+        path = resolve_workspace_path(self.root, rel)
+        if not path.exists():
+            raise NotFound(rel)
+        return path
 
     def _changed(self, rel: str) -> None:
         if self._on_change is not None:
@@ -175,7 +232,7 @@ def _version(raw: bytes) -> FileVersion:
 
 def atomic_write(path: Path, raw: bytes, rel: str) -> None:
     """Write via a temp file in the same folder, then swap it in (§5.4)."""
-    tmp = path.with_name(f".{path.name}.memex-tmp-{secrets.token_hex(6)}")
+    tmp = path.with_name(f".{path.name}{TEMP_MARKER}{secrets.token_hex(6)}")
     try:
         with open(tmp, "xb") as f:
             f.write(raw)

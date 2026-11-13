@@ -40,14 +40,18 @@ def state(root: Path, home: Path, tmp_path: Path) -> AppState:
 @pytest.fixture
 def anon(state: AppState) -> Iterator[TestClient]:
     """A client on the right host with no cookie and no Memex headers."""
-    with TestClient(create_app(state), base_url=ORIGIN, follow_redirects=False) as client:
+    with TestClient(
+        create_app(state, watch=False), base_url=ORIGIN, follow_redirects=False
+    ) as client:
         yield client
 
 
 @pytest.fixture
-def browser(state: AppState) -> Iterator[TestClient]:
+def page_client(state: AppState) -> Iterator[TestClient]:
     """A client with the session cookie, as the SPA's page loads would be."""
-    with TestClient(create_app(state), base_url=ORIGIN, follow_redirects=False) as client:
+    with TestClient(
+        create_app(state, watch=False), base_url=ORIGIN, follow_redirects=False
+    ) as client:
         client.cookies.set(COOKIE, state.session.secret)
         yield client
 
@@ -61,7 +65,7 @@ def api(state: AppState) -> Iterator[TestClient]:
 def client_for(state: AppState) -> TestClient:
     """The SPA's `fetch`: cookie, `X-Memex: 1`, and a same-origin `Origin`."""
     client = TestClient(
-        create_app(state),
+        create_app(state, watch=False),
         base_url=ORIGIN,
         follow_redirects=False,
         headers={"X-Memex": "1", "Origin": ORIGIN, "Sec-Fetch-Site": "same-origin"},

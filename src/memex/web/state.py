@@ -11,6 +11,7 @@ from fastapi import Request
 
 from memex.core.clock import Clock, SystemClock
 from memex.core.config import Location
+from memex.core.watch import ChangeFeed
 from memex.core.workspace import Workspace
 from memex.web.session import Session
 
@@ -27,6 +28,7 @@ class AppState:
     setup_path: Path | None = None  # Setup's pre-filled path (§3.3)
     clock: Clock = field(default_factory=SystemClock)
     install_dir: Path | None = None
+    feed: ChangeFeed = field(default_factory=ChangeFeed, repr=False)
     session: Session = field(default_factory=Session, repr=False)
     launcher_key: bytes = field(default_factory=lambda: secrets.token_bytes(32), repr=False)
     on_quit: Callable[[], None] = field(default=lambda: None, repr=False)

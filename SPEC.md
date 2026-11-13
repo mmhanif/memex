@@ -1259,11 +1259,12 @@ Error body: `{"error": {"code", "message", "field_errors"?: [{field, message, al
 | `POST /launcher/hello`, `POST /launcher/open` | Already-running hand-off (§13.4; HMAC, no cookie) |
 | `GET /` and `/static/…` | SPA and assets |
 | `GET /api/events` | SSE stream (§5.6) |
-| `GET /api/tree` | Workspace tree (files and folders, typed or Note, warnings) |
+| `GET /api/tree` | Workspace tree (files and folders, typed or Note, warnings), plus `workspace: {read_only, config_error, me_set}` for the shell's banners |
 | `GET /api/files?path=` | Raw file content plus `ETag` |
 | `POST /api/files` `{path, content}` | Create a raw file (`exists` if taken) |
 | `PUT /api/files` `{path, content}` + `If-Match` | Overwrite a raw file |
 | `DELETE /api/files?path=` | Delete a file or folder to trash (§8.4) |
+| `POST /api/folders` `{path}` | New folder (Files page, §11.8; `exists` if taken) |
 | `POST /api/move` `{from, to, overwrite?}` | Move or rename a file or folder (R14; typed Entities can't leave their folder) |
 | `POST /api/diff` `{path, content}` | Side-by-side diff against disk |
 | `GET /api/entities?type=&status=&theme=&project=&person=&label=&due_before=&include_archived=` | Entity summaries, each with a hash |

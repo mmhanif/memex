@@ -45,6 +45,18 @@ class Exists(CoreError):
         self.rel = rel
 
 
+class HasReferences(CoreError):
+    """Other files refer to what would be deleted (§8.4). `referrers` are their paths."""
+
+    code = "has_references"
+
+    def __init__(self, rel: str, referrers: tuple[str, ...]) -> None:
+        n = len(referrers)
+        super().__init__(f"{rel} is referred to by {n} file{'' if n == 1 else 's'}")
+        self.rel = rel
+        self.referrers = referrers
+
+
 class Locked(CoreError):
     """Another program holds the file open, so it can't be replaced (Windows)."""
 

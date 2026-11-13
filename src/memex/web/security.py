@@ -33,6 +33,8 @@ _IMPORT_MAP = re.compile(r'<script type="importmap">(.*?)</script>', re.DOTALL)
 def csp_for(index_html: Path) -> str:
     """The CSP of §12. Chrome treats the inline import map as a script, so its hash is allowed."""
     script_src = "'self'"
+    # read_text turns CRLF into LF, as the HTML parser does before Chrome hashes an inline
+    # script, so a CRLF checkout (Windows) still matches.
     if match := _IMPORT_MAP.search(index_html.read_text("utf-8")):
         digest = base64.b64encode(hashlib.sha256(match.group(1).encode("utf-8")).digest())
         script_src += f" 'sha256-{digest.decode('ascii')}'"

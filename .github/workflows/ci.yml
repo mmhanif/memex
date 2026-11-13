@@ -1,5 +1,5 @@
-# SPEC §16.9: the two required jobs. perf and package arrive with steps 8 and 12;
-# tsc --noEmit arrives with the first JS in step 4.
+# SPEC §16.9: the two required jobs. perf and package arrive with steps 8 and 12.
+# Playwright (the e2e marker) runs on Windows only, as §16.9 lists it there.
 name: CI
 
 on:
@@ -30,8 +30,15 @@ jobs:
         run: uv run ruff format --check src tests
       - name: pyright
         run: uv run pyright
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: tsc --noEmit
+        run: npm run typecheck
       - name: pytest (portable suite)
-        run: uv run pytest
+        run: uv run pytest -m "not e2e"
 
   windows:
     runs-on: windows-latest
@@ -42,5 +49,7 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --locked --python 3.14
+      - name: Install Chromium for Playwright
+        run: uv run playwright install chromium
       - name: pytest (full suite, including windows-marked tests)
         run: uv run pytest

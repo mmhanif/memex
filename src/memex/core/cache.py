@@ -5,8 +5,9 @@ An optimisation only: the Store's hash check is authoritative.
 
 import os
 import re
+import threading
 from collections import defaultdict
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
@@ -71,6 +72,8 @@ class Cache:
         self.ignore = tuple(ignore)
         self._files: dict[str, CachedFile] = {}
         self._by_id: defaultdict[str, set[str]] = defaultdict(set)
+        # Request threads and the watcher thread share the cache.
+        self._lock = threading.RLock()
 
     @classmethod
     def build(cls, root: Path, ignore: Sequence[str] = ()) -> Cache:
@@ -80,11 +83,13 @@ class Cache:
         return cache
 
     def get(self, rel: str) -> CachedFile | None:
-        entry = self._files.get(rel)
-        return entry and self._with_ambiguity(entry)
+        with self._lock:
+            entry = self._files.get(rel)
+            return entry and self._with_ambiguity(entry)
 
     def files(self) -> list[CachedFile]:
-        return [self._with_ambiguity(self._files[rel]) for rel in sorted(self._files)]
+        with self._lock:
+            return [self._with_ambiguity(self._files[rel]) for rel in sorted(self._files)]
 
     def folders(self) -> list[str]:
         """Folders for the tree: never dot-folders, ignored ones or links (R13)."""
@@ -109,19 +114,48 @@ class Cache:
 
     def resolve(self, id: str) -> Resolution:
         """Look up an Id, ignoring case. Ambiguous Ids resolve to nothing."""
-        rels = self._by_id.get(id.casefold(), set())
-        if not rels:
-            return Resolution("missing")
-        if len(rels) > 1:
-            return Resolution("ambiguous")
-        [rel] = rels
-        return Resolution("found", self.get(rel))
+        with self._lock:
+            rels = self._by_id.get(id.casefold(), set())
+            if not rels:
+                return Resolution("missing")
+            if len(rels) > 1:
+                return Resolution("ambiguous")
+            [rel] = rels
+            return Resolution("found", self.get(rel))
+
+    def under(self, rel: str) -> list[CachedFile]:
+        """The file at `rel`, or every indexed file inside the folder `rel`."""
+        with self._lock:
+            prefix = f"{rel}/"
+            return [self._files[r] for r in sorted(self._files) if r == rel or r.startswith(prefix)]
+
+    def referrers(self, ids: Iterable[str]) -> list[CachedFile]:
+        """Files with a reference or Mention naming any of `ids`, ignoring case."""
+        wanted = {i.casefold() for i in ids}
+        return [
+            f
+            for f in self.files()
+            if wanted.intersection(
+                [r.id.casefold() for r in f.references] + [m.casefold() for m in f.mentions]
+            )
+        ]
 
     def refresh(self, rel: str) -> None:
-        """Reread one path after a write or a watcher hint; drop it if it's gone."""
-        self._drop(rel)
-        if self.is_indexed(rel) and self._contained(rel):
-            self._load_into(rel)
+        """Reread one path after a write or a watcher hint; drop what's gone.
+
+        `rel` may be a folder (moved, deleted or new): everything under it is reread.
+        """
+        with self._lock:
+            self._drop(rel)
+            prefix = f"{rel}/"
+            for under in [r for r in self._files if r.startswith(prefix)]:
+                self._drop(under)
+            path = self.root / rel
+            if path.is_dir() and not path.is_symlink() and self._contained(rel):
+                for found in self._walk(path):
+                    self._load_into(found)
+            elif self.is_indexed(rel) and self._contained(rel):
+                self._load_into(rel)
 
     def _load_into(self, rel: str) -> None:
         try:
@@ -155,9 +189,9 @@ class Cache:
             and not any(PurePosixPath(rel).full_match(glob) for glob in self.ignore)
         )
 
-    def _walk(self) -> Iterator[str]:
+    def _walk(self, top: Path | None = None) -> Iterator[str]:
         """Indexed paths. Links are never descended; linked files must stay inside."""
-        for dirpath, dirnames, filenames in os.walk(self.root, followlinks=False):
+        for dirpath, dirnames, filenames in os.walk(top or self.root, followlinks=False):
             dirnames[:] = [d for d in dirnames if not d.startswith(".")]
             for name in filenames:
                 rel = Path(dirpath, name).relative_to(self.root).as_posix()
