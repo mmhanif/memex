@@ -36,6 +36,36 @@ md.core.ruler.after("inline", "task-lists", (state) => {
   return false;
 });
 
+/**
+ * What a Mention names: its title, or nothing when it's a Broken Reference (§4.4, §4.6).
+ * @typedef {(id: string) => {title: string} | null} MentionResolver
+ */
+
+// `[[id]]` → an in-app link. An inline rule, so code spans and blocks never hold Mentions.
+const MENTION = /^\[\[([^\[\]\n]+?)\]\]/;
+md.inline.ruler.before("link", "mention", (state, silent) => {
+  if (state.src.charCodeAt(state.pos) !== 0x5b || state.src.charCodeAt(state.pos + 1) !== 0x5b) {
+    return false;
+  }
+  const match = MENTION.exec(state.src.slice(state.pos));
+  if (!match) return false;
+  if (!silent) {
+    const id = match[1].trim();
+    const resolve = /** @type {MentionResolver | undefined} */ (state.env.resolveMention);
+    const target = resolve ? resolve(id) : { title: id };
+    const open = state.push("link_open", "a", 1);
+    open.attrs = [
+      ["href", `#/e/${encodeURIComponent(id)}`],
+      ["class", target ? "mention" : "mention broken"],
+    ];
+    if (!target) open.attrs.push(["title", `Broken reference: nothing is called ${id}`]);
+    state.push("text", "", 0).content = target ? target.title : id;
+    state.push("link_close", "a", -1);
+  }
+  state.pos += match[0].length;
+  return true;
+});
+
 DOMPurify.addHook("afterSanitizeAttributes", (node) => {
   // validateLink can't tell links from images: data: URLs are for inline images only.
   if (node instanceof HTMLAnchorElement && /^\s*data:/i.test(node.getAttribute("href") ?? "")) {
@@ -51,9 +81,10 @@ DOMPurify.addHook("afterSanitizeAttributes", (node) => {
  * Markdown → sanitised HTML. Ids and names get the `user-content-` prefix, so a
  * heading can never clobber a global like `window.foo`.
  * @param {string} source
+ * @param {MentionResolver} [resolveMention]
  */
-export function renderMarkdown(source) {
-  return DOMPurify.sanitize(md.render(source), {
+export function renderMarkdown(source, resolveMention) {
+  return DOMPurify.sanitize(md.render(source, { resolveMention }), {
     SANITIZE_NAMED_PROPS: true,
     FORBID_TAGS: ["style", "form"],
     FORBID_ATTR: ["style"],

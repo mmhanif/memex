@@ -5,7 +5,7 @@
 import { signal } from "@preact/signals";
 import { openDoc } from "./state.js";
 
-/** @typedef {{name: string, path?: string}} Route */
+/** @typedef {{name: string, path?: string, id?: string}} Route */
 
 /** @param {string} hash */
 export function parseRoute(hash) {
@@ -14,6 +14,7 @@ export function parseRoute(hash) {
   if (name === "f" && rest.length) {
     return { name: "file", path: rest.map(decodeURIComponent).join("/") };
   }
+  if (name === "e" && rest.length) return { name: "entity", id: decodeURIComponent(rest.join("/")) };
   return { name: name || "home" };
 }
 
@@ -31,6 +32,11 @@ export function fileHref(path) {
   return `#/f/${path.split("/").map(encodeURIComponent).join("/")}`;
 }
 
+/** @param {string} id */
+export function entityHref(id) {
+  return `#/e/${encodeURIComponent(id)}`;
+}
+
 export const route = signal(/** @type {Route} */ (parseRoute(window.location.hash)));
 
 let current = window.location.hash;
@@ -40,7 +46,7 @@ async function onHashChange() {
   if (next === current) return;
   const doc = openDoc.value;
   const target = parseRoute(next);
-  const leavingDoc = doc && !(target.name === "file" && target.path === doc.path);
+  const leavingDoc = doc && !doc.ownsRoute(target);
   if (doc && leavingDoc) {
     await doc.flush();
     if (

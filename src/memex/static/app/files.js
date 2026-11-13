@@ -6,9 +6,9 @@ import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { ApiError, describe, fileUrl, request } from "./api.js";
 import { OpenDoc } from "./doc.js";
 import { renderMarkdown, splitFrontmatter } from "./markdown.js";
-import { fileHref, isUnder, navigate } from "./router.js";
+import { entityHref, fileHref, isUnder, navigate } from "./router.js";
 import { Icon } from "./icons.js";
-import { html, openDoc, reloadTree, tree } from "./state.js";
+import { html, openDoc, reloadTree, resolveMention, tree } from "./state.js";
 
 /**
  * @typedef {import("./state.js").TreeFile} TreeFile
@@ -284,11 +284,13 @@ function Editor({ path }) {
   const doc = openDoc.value;
   if (loadError) return html`<p class="error-text" role="alert">${loadError}</p>`;
   if (!doc || doc.path !== path) return html`<p class="hint">Opening ${path}…</p>`;
-  const warnings = tree.value?.files.find((f) => f.path === path)?.warnings ?? [];
+  const file = tree.value?.files.find((f) => f.path === path);
+  const warnings = file?.warnings ?? [];
   return html`
     <div class="editor">
       <header class="editor-head">
         <h1 class="editor-path">${path}</h1>
+        ${file && html`<a class="button" href=${entityHref(file.id)}>Open page</a>`}
         <${SaveStatus} doc=${doc} />
       </header>
       ${warnings.map(
@@ -304,13 +306,13 @@ function Editor({ path }) {
 }
 
 /** @param {{doc: OpenDoc}} props */
-function SaveStatus({ doc }) {
+export function SaveStatus({ doc }) {
   const labels = { clean: "Saved", dirty: "Unsaved", saving: "Saving…", conflict: "Not saved", deleted: "Not saved" };
   return html`<span class="save-status ${doc.state.value}" data-state=${doc.state.value}>${labels[doc.state.value]}</span>`;
 }
 
-/** @param {{doc: OpenDoc}} props */
-function DocBanners({ doc }) {
+/** @param {{doc: OpenDoc, closeTo?: string}} props */
+export function DocBanners({ doc, closeTo = "#/files" }) {
   const [rows, setRows] = useState(/** @type {import("./doc.js").DiffRow[] | null} */ (null));
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const state = doc.state.value;
@@ -338,13 +340,13 @@ function DocBanners({ doc }) {
     ${state === "deleted" &&
     html`<div class="banner conflict" role="alert">
       <span>This file was deleted or moved outside Memex. Your text is still here.</span>
-      <button type="button" onClick=${() => void doc.recreate()}>Recreate</button>
+      ${doc.canRecreate && html`<button type="button" onClick=${() => void doc.recreate()}>Recreate</button>`}
       <button
         type="button"
         onClick=${() => {
           doc.dispose();
           openDoc.value = null;
-          navigate("#/files");
+          navigate(closeTo);
         }}
       >
         Close
@@ -382,9 +384,9 @@ function DiffView({ rows, onClose }) {
 /**
  * The raw textarea: uncontrolled, so a reload from disk can keep the cursor and scroll.
  * Its value is only ever set here (no `defaultValue`: re-rendering one resets the cursor).
- * @param {{doc: OpenDoc}} props
+ * @param {{doc: OpenDoc, label?: string, onKeyDown?: (e: KeyboardEvent) => void}} props
  */
-function RawText({ doc }) {
+export function RawText({ doc, label = "File text", onKeyDown }) {
   const area = useRef(/** @type {HTMLTextAreaElement | null} */ (null));
   const revision = doc.revision.value;
   useLayoutEffect(() => {
@@ -399,11 +401,12 @@ function RawText({ doc }) {
     <textarea
       ref=${area}
       class="raw"
-      aria-label="File text"
+      aria-label=${label}
       spellcheck=${false}
       readOnly=${tree.value?.workspace.read_only ?? false}
       onInput=${(/** @type {InputEvent} */ e) => doc.edit(/** @type {HTMLTextAreaElement} */ (e.currentTarget).value)}
       onBlur=${() => void doc.flush()}
+      onKeyDown=${onKeyDown}
     ></textarea>
   `;
 }
@@ -414,7 +417,7 @@ function Preview({ text }) {
   return html`
     <article class="preview" aria-label="Preview">
       ${frontmatter !== null && html`<pre class="frontmatter">${frontmatter}</pre>`}
-      <div class="markdown" dangerouslySetInnerHTML=${{ __html: renderMarkdown(body) }}></div>
+      <div class="markdown" dangerouslySetInnerHTML=${{ __html: renderMarkdown(body, resolveMention) }}></div>
     </article>
   `;
 }
