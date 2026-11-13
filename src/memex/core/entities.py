@@ -25,6 +25,7 @@ from memex.core.errors import (
 )
 from memex.core.ids import make_id
 from memex.core.schema import (
+    AUTOMATIC,
     FIELD_BY_NAME,
     FIELDS,
     FINISHED_TODO,
@@ -32,6 +33,7 @@ from memex.core.schema import (
     Field,
     Target,
     check_value,
+    is_missing,
     parse_date,
 )
 from memex.core.store import FileVersion
@@ -43,6 +45,8 @@ NOTES_FOLDER = "notes"
 
 @dataclass(frozen=True)
 class Saved:
+    """A write's result: the file's Id, path and new hash (§5.3)."""
+
     id: str
     rel: str
     hash: str
@@ -80,11 +84,11 @@ def create_entity(
     if title:
         merged["title"] = title
     for spec in FIELDS[entity_type]:
-        if spec.default is not None and _absent(merged.get(spec.name)):
+        if spec.default is not None and is_missing(merged.get(spec.name)):
             merged[spec.name] = spec.default
     today = ws.clock.today()
     if entity_type is EntityType.TODO:
-        if _absent(merged.get("requester")):
+        if is_missing(merged.get("requester")):
             if me is None:
                 raise MeNotSet()
             merged["requester"] = me.id
@@ -182,7 +186,7 @@ def _with_body(text: str, body: str) -> str:
 
 
 def _refuse_automatic(fields: Mapping[str, Any]) -> None:
-    for name in ("created", "completed"):
+    for name in sorted(AUTOMATIC):
         if name in fields:
             raise Validation(
                 f"{name} is set automatically", [FieldProblem(name, f"{name} is set automatically")]
@@ -212,7 +216,7 @@ def _validate(
     problems: list[FieldProblem] = []
     for spec in FIELDS[entity_type]:
         value = fields.get(spec.name)
-        if _absent(value):
+        if is_missing(value):
             if spec.required:
                 problems.append(FieldProblem(spec.name, f"{spec.name} is required"))
         elif spec.name in changed and (p := check_value(spec, value)):
@@ -223,7 +227,7 @@ def _validate(
     for name in changed:
         spec = specs.get(name)
         value = fields.get(name)
-        if spec is None or spec.shape not in ("ref", "refs") or _absent(value):
+        if spec is None or spec.shape not in ("ref", "refs") or is_missing(value):
             continue
         for ref in value if isinstance(value, list) else [value]:
             _check_reference(ws, spec, str(ref), source(name))
@@ -243,9 +247,7 @@ def _check_reference(ws: Workspace, spec: Field, ref: str, source: str) -> None:
     suggestions = _suggest(ws, ref, spec.targets)
     hint = f": did you mean {', '.join(suggestions)}?" if suggestions else ""
     problem = FieldProblem(spec.name, f"{spec.name}: {message}{hint}{source}")
-    error = UnknownReference(spec.name, ref, expected, suggestions, [problem])
-    error.message = problem.message
-    raise error
+    raise UnknownReference(spec.name, ref, expected, suggestions, [problem], problem.message)
 
 
 def _suggest(ws: Workspace, ref: str, targets: tuple[Target, ...]) -> list[str]:
@@ -254,7 +256,7 @@ def _suggest(ws: Workspace, ref: str, targets: tuple[Target, ...]) -> list[str]:
 
 
 def _describe_targets(targets: tuple[Target, ...]) -> str:
-    names = [t.label if t else "Note" for t in targets]
+    names = [t.display_name if t else "Note" for t in targets]
     if len(names) == 1:
         return f"a {names[0]}"
     return "a " + ", ".join(names[:-1]) + f" or {names[-1]}"
@@ -264,24 +266,26 @@ def _check_manager(ws: Workspace, self_id: str | None, manager: str) -> None:
     """Not themself, and no cycle up the chain (§4.5)."""
     if self_id is None:
         return  # a new Person has no reports yet, so can't close a loop
+    if manager.casefold() == self_id.casefold():
+        message = "manager can't be the Person themself"
+    elif _manages(ws, self_id, manager):
+        message = f"manager: {manager!r} would create a manager cycle"
+    else:
+        return
+    raise Validation(message, [FieldProblem("manager", message)])
+
+
+def _manages(ws: Workspace, person: str, start: str | None) -> bool:
+    """Whether `person` is on the manager chain going up from `start`."""
     seen: set[str] = set()
-    current: str | None = manager
-    while current and current.casefold() not in seen:
-        if current.casefold() == self_id.casefold():
-            message = (
-                "manager can't be the Person themself"
-                if manager.casefold() == self_id.casefold()
-                else f"manager: {manager!r} would create a manager cycle"
-            )
-            raise Validation(message, [FieldProblem("manager", message)])
+    current = start
+    while isinstance(current, str) and current.casefold() not in seen:
+        if current.casefold() == person.casefold():
+            return True
         seen.add(current.casefold())
         found = ws.cache.resolve(current).file
-        value = found.fields.get("manager") if found else None
-        current = value if isinstance(value, str) else None
-
-
-def _absent(value: Any) -> bool:
-    return value is None or (isinstance(value, str) and not value.strip()) or value == []
+        current = found.fields.get("manager") if found else None
+    return False
 
 
 # Writing values
@@ -356,14 +360,14 @@ def entity_detail(ws: Workspace, id: str) -> EntityDetail:
             names[mention] = found.file.title
 
     warnings = list(entry.warnings)
-    if entry.type is EntityType.PERSON and _in_manager_cycle(ws, entry):
+    if entry.type is EntityType.PERSON and _manages(ws, entry.id, entry.fields.get("manager")):
         warnings.append(FileWarning("validation", "manager: part of a manager cycle"))
 
     key = entry.id.casefold()
     files = [f for f in ws.cache.files() if f.rel != entry.rel]
 
     def refers(f: CachedFile, field: str) -> bool:
-        return any(r.field == field and r.id.casefold() == key for r in f.references)
+        return _refers(f, [field], entry.id)
 
     child_type, child_field = _CHILDREN.get(entry.type, (None, ""))
     return EntityDetail(
@@ -380,25 +384,19 @@ def entity_detail(ws: Workspace, id: str) -> EntityDetail:
     )
 
 
+def _refers(f: CachedFile, fields: Iterable[str], id: str) -> bool:
+    """Whether one of `f`'s `fields` names `id`, ignoring case."""
+    return any(r.field in fields and r.id.casefold() == id.casefold() for r in f.references)
+
+
 _CHILDREN: dict[EntityType | None, tuple[EntityType, str]] = {
     EntityType.THEME: (EntityType.PROJECT, "theme"),
     EntityType.PROJECT: (EntityType.DELIVERABLE, "project"),
 }
 
 
-def _in_manager_cycle(ws: Workspace, person: CachedFile) -> bool:
-    seen: set[str] = set()
-    current = person.fields.get("manager")
-    while isinstance(current, str) and current.casefold() not in seen:
-        if current.casefold() == person.id.casefold():
-            return True
-        seen.add(current.casefold())
-        found = ws.cache.resolve(current).file
-        current = found.fields.get("manager") if found else None
-    return False
-
-
-_TAG_FIELDS = ("lead", "team", "stakeholders", "owner", "requester")
+# The `person` filter: work they Lead or are Tagged on, and To-dos they own or requested.
+_PERSON_FILTER_FIELDS = ("lead", "team", "stakeholders", "owner", "requester")
 
 
 def list_entities(
@@ -415,9 +413,6 @@ def list_entities(
 ) -> list[CachedFile]:
     """Entity summaries, filtered, ordered by title (§17.2). `notes=True` lists Notes."""
 
-    def refers(f: CachedFile, fields: Iterable[str], id: str) -> bool:
-        return any(r.field in fields and r.id.casefold() == id.casefold() for r in f.references)
-
     def keep(f: CachedFile) -> bool:
         if notes and f.type is not None:
             return False
@@ -427,11 +422,11 @@ def list_entities(
             return False
         if status is not None and f.fields.get("status") != status:
             return False
-        if theme is not None and not refers(f, ["theme"], theme):
+        if theme is not None and not _refers(f, ["theme"], theme):
             return False
-        if project is not None and not refers(f, ["project"], project):
+        if project is not None and not _refers(f, ["project"], project):
             return False
-        if person is not None and not refers(f, _TAG_FIELDS, person):
+        if person is not None and not _refers(f, _PERSON_FILTER_FIELDS, person):
             return False
         labels = f.fields.get("labels")
         if label is not None and not (isinstance(labels, list) and label in labels):

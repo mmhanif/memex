@@ -132,8 +132,9 @@ class UnknownReference(CoreError):
         expected: str,
         suggestions: Sequence[str] = (),
         field_errors: Sequence[FieldProblem] = (),
+        message: str | None = None,
     ) -> None:
-        super().__init__(f"{field}: {id!r} is not {expected}")
+        super().__init__(message or f"{field}: {id!r} is not {expected}")
         self.field = field
         self.id = id
         self.suggestions = tuple(suggestions)  # up to 3 "did you mean" Ids (§4.5)

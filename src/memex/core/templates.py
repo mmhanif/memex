@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from memex.core import frontmatter
-from memex.core.errors import NotFound, Validation
+from memex.core.errors import MeNotSet, NotFound, Validation
 from memex.core.schema import NOT_FROM_TEMPLATES, EntityType
 from memex.core.store import decode
 
@@ -34,23 +34,15 @@ TEMPLATE_TYPES: dict[EntityType | None, str] = {
     EntityType.TODO: "todo",
     EntityType.GLOSSARY_TERM: "glossary",
 }
-_TYPE_FOR_KEY = {key: t for t, key in TEMPLATE_TYPES.items()}
 _PLACEHOLDER = re.compile(r"\{\{(title|date|me)\}\}")
 _NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
-
-
-def type_for_key(key: str) -> EntityType | None:
-    """`note` → None, `glossary` → Glossary Term, …; Validation for anything else."""
-    if key not in _TYPE_FOR_KEY:
-        raise Validation(f"Unknown type {key!r}: one of {', '.join(_TYPE_FOR_KEY)}")
-    return _TYPE_FOR_KEY[key]
 
 
 @dataclass(frozen=True)
 class Template:
     type: EntityType | None
     name: str  # the file stem, e.g. `meeting`
-    label: str  # the display name
+    display_name: str
     source: Literal["blank", "builtin", "custom"]
     default: bool = False
     fields: Mapping[str, Any] = field(default_factory=dict)
@@ -145,15 +137,26 @@ def _customs(root: Path, entity_type: EntityType | None) -> list[Template]:
     found = []
     for path in sorted(folder.glob("*.md")):
         name = path.stem
-        if name == BLANK or not _NAME.match(name) or path.is_symlink():
-            continue  # Blank can't be overridden (§7.2)
+        if path.is_symlink():
+            continue
+        if name == BLANK:
+            found.append(_broken(entity_type, name, "Blank can't be overridden: rename this file"))
+            continue
+        if not _NAME.match(name):
+            message = "Template file names use lowercase letters, digits and -: rename this file"
+            found.append(_broken(entity_type, name, message))
+            continue
         try:
             text = decode(path.read_bytes())
         except UnicodeDecodeError:
-            found.append(Template(entity_type, name, name, "custom", error="Not UTF-8"))
+            found.append(_broken(entity_type, name, "Not UTF-8"))
             continue
         found.append(_parse(entity_type, name, text, "custom"))
     return found
+
+
+def _broken(entity_type: EntityType | None, name: str, error: str) -> Template:
+    return Template(entity_type, name, name, "custom", error=error)
 
 
 def _parse(
@@ -183,9 +186,11 @@ def render(
 ) -> tuple[dict[str, Any], str]:
     """The Template's fields and body with placeholders filled (§7.2).
 
-    Fields the app controls are dropped. Without Me, `{{me}}` stays literal.
+    Fields the app controls are dropped. A Template using `{{me}}` needs Me set.
     """
     values = {"title": title, "date": today.isoformat(), "me": me}
+    if me is None and "{{me}}" in repr(dict(template.fields)) + template.body:
+        raise MeNotSet()
 
     def fill(text: str) -> str:
         return _PLACEHOLDER.sub(lambda m: values[m.group(1)] or m.group(0), text)

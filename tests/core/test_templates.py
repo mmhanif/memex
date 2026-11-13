@@ -6,7 +6,7 @@ import pytest
 
 from memex.core.config import with_keys
 from memex.core.entities import create_entity
-from memex.core.errors import Exists, NotFound, UnknownReference, Validation
+from memex.core.errors import Exists, MeNotSet, NotFound, UnknownReference, Validation
 from memex.core.schema import EntityType
 from memex.core.templates import customise_template, templates_for
 from tests.core.builder import Builder
@@ -39,17 +39,21 @@ def test_built_in_note_templates_with_blank_as_the_default(b: Builder):
     found = templates_for(b.root, None)
     assert [t.name for t in found.templates] == ["blank", "meeting", "one-on-one"]
     assert found.default.name == "blank"
-    assert [t.label for t in found.templates] == ["Blank", "Meeting", "1:1"]
+    assert [t.display_name for t in found.templates] == ["Blank", "Meeting", "1:1"]
 
 
 def test_a_custom_template_replaces_the_built_in_and_deleting_it_restores_it(b: Builder):
     path = custom(b, "note/meeting", "---\ntemplate: {name: Standup}\n---\n## Yesterday\n")
     [meeting] = [t for t in templates_for(b.root, None).templates if t.name == "meeting"]
-    assert (meeting.source, meeting.label, meeting.body) == ("custom", "Standup", "## Yesterday\n")
+    assert (meeting.source, meeting.display_name, meeting.body) == (
+        "custom",
+        "Standup",
+        "## Yesterday\n",
+    )
 
     path.unlink()
     [meeting] = [t for t in templates_for(b.root, None).templates if t.name == "meeting"]
-    assert (meeting.source, meeting.label) == ("builtin", "Meeting")
+    assert (meeting.source, meeting.display_name) == ("builtin", "Meeting")
 
 
 def test_a_custom_template_with_a_new_name_adds_a_variant(b: Builder):
@@ -154,3 +158,23 @@ def test_customise_copies_a_built_in_into_the_workspace(b: Builder):
         customise_template(b.ws, None, "meeting")
     with pytest.raises(NotFound):
         customise_template(b.ws, None, "nope")
+
+
+def test_badly_named_custom_templates_are_reported_not_dropped(b: Builder):
+    custom(b, "note/My_Meeting", "---\n---\n")
+    custom(b, "note/blank", "---\n---\n")
+    errors = {t.name: t.error for t in templates_for(b.root, None).templates if t.error}
+    assert set(errors) == {"My_Meeting", "blank"}
+    assert [t.name for t in templates_for(b.root, None).usable] == [
+        "blank",
+        "meeting",
+        "one-on-one",
+    ]
+
+
+def test_a_template_using_me_needs_me_set(b: Builder):
+    text = (b.root / ".memex/config.yaml").read_text()
+    b.file(".memex/config.yaml", with_keys(text, {"me": "nobody"}))
+    with pytest.raises(MeNotSet):
+        create_entity(b.ws, None, {"title": "Sync"}, template="meeting")
+    assert create_entity(b.ws, None, {"title": "Sync"}).rel == "notes/sync.md"

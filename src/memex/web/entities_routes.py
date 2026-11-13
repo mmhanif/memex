@@ -10,9 +10,9 @@ from pydantic import BaseModel, Field
 from memex.core import entities
 from memex.core.cache import CachedFile
 from memex.core.entities import BrokenReference, Saved
-from memex.core.errors import Validation
-from memex.core.schema import EntityType
-from memex.core.templates import Template, customise_template, render, templates_for, type_for_key
+from memex.core.schema import type_named
+from memex.core.templates import Template, customise_template, render, templates_for
+from memex.core.workspace import Workspace
 from memex.web.api import WS, expected_hash
 
 router = APIRouter(prefix="/api")
@@ -51,7 +51,7 @@ def list_entities(
     due_before: Annotated[dt.date | None, Query()] = None,
     include_archived: Annotated[bool, Query()] = False,
 ) -> dict:
-    entity_type = type_for_key(_template_key(type)) if type else None
+    entity_type = type_named(type) if type else None
     found = entities.list_entities(
         ws,
         type=entity_type,
@@ -86,7 +86,7 @@ def entity_detail(ws: WS, id: str, response: Response) -> dict:
 
 @router.post("/entities", status_code=201)
 def create_entity(ws: WS, body: NewEntity, response: Response) -> dict:
-    entity_type = type_for_key(_template_key(body.type))
+    entity_type = type_named(body.type)
     return _saved(
         response, entities.create_entity(ws, entity_type, body.fields, body.body, body.template)
     )
@@ -117,7 +117,7 @@ def replace_body(
 
 @router.get("/templates")
 def list_templates(ws: WS, type: Annotated[str, Query()]) -> dict:
-    found = templates_for(ws.root, type_for_key(type), ws.config.hidden_templates)
+    found = templates_for(ws.root, type_named(type), ws.config.hidden_templates)
     me = ws.me()
     return {
         "templates": [_template(t, ws, me.id if me else None) for t in found.templates],
@@ -128,7 +128,7 @@ def list_templates(ws: WS, type: Annotated[str, Query()]) -> dict:
 
 @router.post("/templates/customise", status_code=201)
 def customise(ws: WS, body: TemplateName) -> dict:
-    return {"path": customise_template(ws, type_for_key(body.type), body.name)}
+    return {"path": customise_template(ws, type_named(body.type), body.name)}
 
 
 def summary(f: CachedFile, warnings: tuple = ()) -> dict:
@@ -159,12 +159,14 @@ def jsonable(value: Any) -> Any:
     return str(value)
 
 
-def _template(t: Template, ws: Any, me: str | None) -> dict:
-    fields, body = render(t, "{{title}}", ws.clock.today(), me)
+def _template(t: Template, ws: Workspace, me: str | None) -> dict:
+    """A Template as the form shows it: placeholders filled, except `{{title}}` (and
+    `{{me}}` while Me isn't set)."""
+    fields, body = render(t, "{{title}}", ws.clock.today(), me or "{{me}}")
     return {
         "key": t.key,
         "name": t.name,
-        "label": t.label,
+        "display_name": t.display_name,
         "source": t.source,
         "default": t.default,
         "hidden": t.hidden,
@@ -183,12 +185,3 @@ def _broken(b: BrokenReference) -> dict:
 def _saved(response: Response, saved: Saved) -> dict:
     response.headers["ETag"] = f'"{saved.hash}"'
     return {"id": saved.id, "path": saved.rel, "hash": saved.hash}
-
-
-def _template_key(type: str) -> str:
-    """API types are Entity types (`glossary-term`) or `note`; Template keys say `glossary`."""
-    if type == EntityType.GLOSSARY_TERM.value:
-        return "glossary"
-    if type == "glossary":
-        raise Validation("Unknown type 'glossary': use glossary-term")
-    return type

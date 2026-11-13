@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Literal
 
-from memex.core.errors import FieldProblem
+from memex.core.errors import FieldProblem, Validation
 
 
 class EntityType(StrEnum):
@@ -27,8 +27,8 @@ class EntityType(StrEnum):
         return _FOLDERS[self]
 
     @property
-    def label(self) -> str:
-        return _LABELS[self]
+    def display_name(self) -> str:
+        return _DISPLAY_NAMES[self]
 
     @classmethod
     def for_folder(cls, folder: str) -> EntityType | None:
@@ -44,7 +44,7 @@ _FOLDERS = {
     EntityType.GLOSSARY_TERM: "glossary",
 }
 _BY_FOLDER = {folder: t for t, folder in _FOLDERS.items()}
-_LABELS = {
+_DISPLAY_NAMES = {
     EntityType.THEME: "Theme",
     EntityType.PROJECT: "Project",
     EntityType.DELIVERABLE: "Deliverable",
@@ -57,7 +57,7 @@ WORK_STATUSES = ("not-started", "active", "on-hold", "blocked", "done", "cancell
 TODO_STATUSES = ("open", "done", "cancelled")
 FINISHED_TODO = ("done", "cancelled")
 KINDS = ("team-member", "stakeholder")
-WORK = (EntityType.THEME, EntityType.PROJECT, EntityType.DELIVERABLE)
+PORTFOLIO = (EntityType.THEME, EntityType.PROJECT, EntityType.DELIVERABLE)
 
 # What a reference may point at: an Entity type, or None for a Note.
 Target = EntityType | None
@@ -128,7 +128,7 @@ FIELDS: dict[EntityType | None, tuple[Field, ...]] = {
         Field("status", "enum", True, TODO_STATUSES, default="open"),
         Field("due", "date"),
         Field("completed", "date", automatic=True),
-        Field("about", "ref", targets=WORK),
+        Field("about", "ref", targets=PORTFOLIO),
         Field("source", "ref", targets=(None,)),
         _CREATED,
     ),
@@ -136,7 +136,7 @@ FIELDS: dict[EntityType | None, tuple[Field, ...]] = {
         Field("title", "text"),
         Field("date", "date"),
         _people("people"),
-        Field("about", "refs", targets=WORK),
+        Field("about", "refs", targets=PORTFOLIO),
         _LABELS_FIELD,
         _CREATED,
     ),
@@ -149,12 +149,28 @@ REFERENCE_FIELDS: dict[EntityType | None, tuple[str, ...]] = {
     t: tuple(f.name for f in fields if f.shape in ("ref", "refs")) for t, fields in FIELDS.items()
 }
 
+# Fields only the app writes (§4.2, §4.3).
+AUTOMATIC = frozenset(f.name for fields in FIELDS.values() for f in fields if f.automatic)
+
 # Fields a Template never supplies (§7.2): the app or the caller sets them.
 NOT_FROM_TEMPLATES: dict[EntityType | None, frozenset[str]] = {
-    t: frozenset({"title", "created", "completed"})
-    | {f.name for f in fields if f.required and f.shape == "ref"}
+    t: frozenset({"title"})
+    | {f.name for f in fields if f.automatic or (f.required and f.shape == "ref")}
     for t, fields in FIELDS.items()
 }
+
+
+def type_named(name: str) -> EntityType | None:
+    """An API or Template type name: `note` is None; `glossary` is the Template spelling."""
+    if name == "note":
+        return None
+    if name == "glossary":
+        return EntityType.GLOSSARY_TERM
+    try:
+        return EntityType(name)
+    except ValueError:
+        allowed = ", ".join(["note", *EntityType])
+        raise Validation(f"Unknown type {name!r}: one of {allowed}") from None
 
 
 def check_fields(entity_type: EntityType | None, fields: Mapping[str, Any]) -> list[FieldProblem]:
@@ -162,7 +178,7 @@ def check_fields(entity_type: EntityType | None, fields: Mapping[str, Any]) -> l
     errors: list[FieldProblem] = []
     for spec in FIELDS[entity_type]:
         value = fields.get(spec.name)
-        if _missing(value):
+        if is_missing(value):
             if spec.required:
                 errors.append(FieldProblem(spec.name, f"{spec.name} is required"))
             continue
@@ -224,5 +240,6 @@ def _is_id(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
-def _missing(value: Any) -> bool:
-    return value is None or (isinstance(value, str) and not value.strip())
+def is_missing(value: Any) -> bool:
+    """No value: absent, null, blank text or an empty list."""
+    return value is None or (isinstance(value, str) and not value.strip()) or value == []

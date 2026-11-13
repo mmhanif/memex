@@ -11,7 +11,7 @@ import { html, reloadTree } from "./state.js";
 
 /**
  * @typedef {{type: string, prefill?: Record<string, any>}} NewRequest
- * @typedef {{key: string, name: string, label: string, default: boolean, hidden: boolean,
+ * @typedef {{key: string, name: string, display_name: string, default: boolean, hidden: boolean,
  *   error: string | null, fields: Record<string, any>, body: string}} TemplateInfo
  */
 
@@ -27,11 +27,6 @@ export function NewDialog() {
   const req = newDialog.value;
   if (!req) return null;
   return html`<${NewForm} key=${req.type} type=${req.type} prefill=${req.prefill ?? {}} />`;
-}
-
-/** @param {string} type */
-function templateType(type) {
-  return type === "glossary-term" ? "glossary" : type;
 }
 
 /** @param {{type: string, prefill: Record<string, any>}} props */
@@ -54,7 +49,7 @@ function NewForm({ type, prefill }) {
 
   useEffect(() => {
     titleInput.current?.focus();
-    request("GET", `/api/templates?type=${templateType(type)}`).then(
+    request("GET", `/api/templates?type=${type}`).then(
       (data) => {
         const usable = data.templates.filter((/** @type {TemplateInfo} */ t) => !t.hidden && !t.error);
         setTemplates(usable);
@@ -133,7 +128,7 @@ function NewForm({ type, prefill }) {
               const next = templates.find((t) => t.key === key);
               if (next) choose(next, template);
             }}>
-            ${templates.map((t) => html`<option value=${t.key}>${t.label}</option>`)}
+            ${templates.map((t) => html`<option value=${t.key}>${t.display_name}</option>`)}
           </select>
 
           <label for="new-title">${type === "glossary-term" ? "Term" : type === "person" ? "Name" : "Title"}</label>
