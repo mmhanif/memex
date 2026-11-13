@@ -8,6 +8,7 @@ import { FilesPage } from "./files.js";
 import { Icon } from "./icons.js";
 import { NewDialog, openNew } from "./newform.js";
 import { route } from "./router.js";
+import { SettingsPage } from "./settings.js";
 import { html, openDoc, tree, treeError } from "./state.js";
 
 const RAIL = [
@@ -133,6 +134,7 @@ function View() {
   const current = route.value;
   if (current.name === "files") return html`<${FilesPage} path=${null} />`;
   if (current.name === "file") return html`<${FilesPage} path=${current.path ?? null} />`;
+  if (current.name === "settings") return html`<${SettingsPage} />`;
   if (current.name === "entity" && current.id) return html`<${EntityPage} key=${current.id} id=${current.id} />`;
   return html`<${Placeholder} name=${current.name} />`;
 }

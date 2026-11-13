@@ -12,7 +12,15 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from memex.web import api, entities_routes, errors, events, launcher_routes, setup_routes
+from memex.web import (
+    api,
+    entities_routes,
+    errors,
+    events,
+    launcher_routes,
+    settings_routes,
+    setup_routes,
+)
 from memex.web.security import SecurityMiddleware
 from memex.web.session import COOKIE
 from memex.web.state import STATIC, AppState
@@ -49,6 +57,7 @@ def create_app(state: AppState, *, watch: bool = True) -> FastAPI:
     errors.install(app)
     app.include_router(api.router)
     app.include_router(entities_routes.router)
+    app.include_router(settings_routes.router)
     app.include_router(events.router)
     app.include_router(launcher_routes.router)
     app.include_router(setup_routes.router)

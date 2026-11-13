@@ -442,3 +442,16 @@ select {
 .status { font-size: 12px; padding: 0 6px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); }
 .status-blocked { color: #c0392b; }
 .status-done, .status-cancelled { color: var(--muted); }
+
+/* Settings (§3.6) */
+.settings { max-width: 900px; padding: 16px 24px 48px; }
+.settings h2 { font-size: 17px; margin: 24px 0 6px; }
+.settings h3 { font-size: 14px; margin: 16px 0 4px; }
+.templates { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.templates td:nth-child(1) { width: 34%; }
+.templates td:nth-child(2) { width: 22%; }
+.templates td:nth-child(4) { width: 190px; }
+.templates td { padding: 4px 8px; border-top: 1px solid var(--border); vertical-align: middle; }
+.templates tr.inactive .template-name { color: var(--muted); }
+.template-actions { text-align: right; white-space: nowrap; }
+.template-actions > * { margin-left: 4px; }

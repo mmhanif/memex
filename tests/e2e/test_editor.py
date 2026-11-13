@@ -129,11 +129,28 @@ def test_new_file_from_the_files_page(app: Page, server: AppState, root: Path):
     app.get_by_role("treeitem").filter(has_text="notes").first.get_by_role("button").click()
 
     app.get_by_role("button", name="File").click()
-    app.get_by_label("New file in notes").fill("ideas")
-    app.get_by_role("button", name="OK").click()
+    app.get_by_label("Note title").fill("Ideas")
+    app.get_by_role("button", name="Create").click()
 
     expect(app.locator(".editor-path")).to_have_text("notes/ideas.md")
-    assert (root / "notes/ideas.md").read_text("utf-8") == ""
+    assert (root / "notes/ideas.md").read_text("utf-8") == (
+        "---\ntitle: Ideas\ncreated: 2026-11-12\n---\n"
+    )
+
+
+def test_new_file_here_uses_a_template_in_any_folder(app: Page, server: AppState, root: Path):
+    (root / "meetings").mkdir()
+    app.goto(f"{origin(server)}/#/files")
+    app.get_by_role("treeitem").filter(has_text="meetings").first.get_by_role("button").click()
+
+    app.get_by_role("button", name="File").click()
+    app.get_by_label("Note title").fill("Platform sync")
+    app.get_by_label("Template").select_option("meeting")
+    app.get_by_role("button", name="Create").click()
+
+    expect(app.locator(".editor-path")).to_have_text("meetings/2026-11-12-platform-sync.md")
+    text = (root / "meetings/2026-11-12-platform-sync.md").read_text("utf-8")
+    assert "## Agenda" in text
 
 
 def test_launch_code_sets_the_cookie_once(page: Page, server: AppState):

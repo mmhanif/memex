@@ -191,3 +191,54 @@ def test_customise_a_template(api: TestClient, root: Path):
     assert (root / ".memex/templates/note/meeting.md").exists()
     again = api.post("/api/templates/customise", json={"type": "note", "name": "meeting"})
     assert again.status_code == 409
+
+
+def test_create_a_note_in_a_folder(api: TestClient):
+    response = api.post(
+        "/api/entities",
+        json={"type": "note", "fields": {"title": "Retro"}, "folder": "meetings"},
+    )
+    assert response.status_code == 201
+    assert response.json()["path"] == "meetings/retro.md"
+    bad = api.post(
+        "/api/entities", json={"type": "note", "fields": {"title": "R"}, "folder": "projects"}
+    )
+    assert bad.status_code == 400
+    assert bad.json()["error"]["code"] == "bad_path"
+
+
+def test_settings_read_and_hide_a_template(api: TestClient, root: Path):
+    settings = api.get("/api/settings").json()
+    assert settings["workspace"]["me"] == "ada-lovelace"
+    assert settings["workspace"]["hidden_templates"] == []
+    assert settings["version"]
+
+    response = api.put(
+        "/api/settings",
+        json={"workspace": {"hidden_templates": ["note/meeting"]}},
+        headers={"If-Match": settings["hash"]},
+    )
+    assert response.status_code == 200
+    [meeting] = [
+        t
+        for t in api.get("/api/templates", params={"type": "note"}).json()["templates"]
+        if t["name"] == "meeting"
+    ]
+    assert meeting["hidden"] is True
+
+    stale = api.put(
+        "/api/settings",
+        json={"workspace": {"hidden_templates": []}},
+        headers={"If-Match": settings["hash"]},
+    )
+    assert stale.status_code == 409
+
+
+def test_settings_bad_value_is_422(api: TestClient):
+    settings = api.get("/api/settings").json()
+    response = api.put(
+        "/api/settings",
+        json={"workspace": {"hidden_templates": ["note/blank"]}},
+        headers={"If-Match": settings["hash"]},
+    )
+    assert response.status_code == 422

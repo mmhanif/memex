@@ -23,6 +23,18 @@ export function openNew(type, prefill) {
   newDialog.value = { type, prefill };
 }
 
+/**
+ * The Templates a picker offers for a type (hidden and broken ones left out), and its default.
+ * @param {string} type
+ * @returns {Promise<{usable: TemplateInfo[], fallback: TemplateInfo}>}
+ */
+export async function fetchTemplates(type) {
+  const data = await request("GET", `/api/templates?type=${encodeURIComponent(type)}`);
+  /** @type {TemplateInfo[]} */
+  const usable = data.templates.filter((/** @type {TemplateInfo} */ t) => !t.hidden && !t.error);
+  return { usable, fallback: usable.find((t) => t.key === data.default) ?? usable[0] };
+}
+
 export function NewDialog() {
   const req = newDialog.value;
   if (!req) return null;
@@ -49,11 +61,10 @@ function NewForm({ type, prefill }) {
 
   useEffect(() => {
     titleInput.current?.focus();
-    request("GET", `/api/templates?type=${type}`).then(
-      (data) => {
-        const usable = data.templates.filter((/** @type {TemplateInfo} */ t) => !t.hidden && !t.error);
+    fetchTemplates(type).then(
+      ({ usable, fallback }) => {
         setTemplates(usable);
-        choose(usable.find((/** @type {TemplateInfo} */ t) => t.key === data.default) ?? usable[0], null);
+        choose(fallback, null);
       },
       (e) => setError(describe(e)),
     );

@@ -295,6 +295,7 @@ ALL_GETS = [
     "/api/entities/ada-lovelace",
     "/api/entities/missing",
     "/api/templates?type=note",
+    "/api/settings",
 ]
 
 

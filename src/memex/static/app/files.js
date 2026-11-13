@@ -5,6 +5,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { ApiError, describe, fileUrl, request } from "./api.js";
 import { OpenDoc } from "./doc.js";
+import { fetchTemplates, openNew } from "./newform.js";
 import { renderMarkdown, splitFrontmatter } from "./markdown.js";
 import { entityHref, fileHref, isUnder, navigate } from "./router.js";
 import { Icon } from "./icons.js";
@@ -52,12 +53,7 @@ function Actions({ selection, onSelect }) {
     const name = value.trim().replace(/^\/+|\/+$/g, "");
     if (!name) return;
     try {
-      if (action === "new-file") {
-        const path = join(folder, name.endsWith(".md") ? name : `${name}.md`);
-        await request("POST", "/api/files", { json: { path, content: "" } });
-        await reloadTree();
-        navigate(fileHref(path));
-      } else if (action === "new-folder") {
+      if (action === "new-folder") {
         const path = join(folder, name);
         await request("POST", "/api/folders", { json: { path } });
         await reloadTree();
@@ -100,7 +96,16 @@ function Actions({ selection, onSelect }) {
   return html`
     <div class="files-actions">
       <div class="toolbar">
-        <button type="button" title="New file here" onClick=${() => setAction("new-file")}>
+        <button
+          type="button"
+          title="New file here"
+          onClick=${() => {
+            // Inside a type folder a new file is an Entity of that type: use its form.
+            const type = TYPE_FOLDERS[folder];
+            if (type) openNew(type);
+            else setAction("new-file");
+          }}
+        >
           <${Icon} name="file-plus" /> File
         </button>
         <button type="button" title="New folder here" onClick=${() => setAction("new-folder")}>
@@ -113,10 +118,13 @@ function Actions({ selection, onSelect }) {
           <${Icon} name="trash-2" /> Delete
         </button>
       </div>
+      ${action === "new-file" &&
+      html`<${NewNoteForm} folder=${folder} onDone=${() => setAction(null)} />`}
       ${action &&
+      action !== "new-file" &&
       html`<${PathForm}
         key=${action}
-        label=${action === "move" ? "New path" : `New ${action === "new-file" ? "file" : "folder"} in ${folder || "the Workspace"}`}
+        label=${action === "move" ? "New path" : `New folder in ${folder || "the Workspace"}`}
         initial=${initial}
         onSubmit=${submit}
         onCancel=${() => setAction(null)}
@@ -143,6 +151,74 @@ async function moveSelection(selection, to, onSelect) {
     openDoc.value = null;
     navigate(fileHref(to + doc.path.slice(selection.path.length)));
   }
+}
+
+/** @type {Record<string, string>} */
+const TYPE_FOLDERS = {
+  themes: "theme",
+  projects: "project",
+  deliverables: "deliverable",
+  people: "person",
+  todos: "todo",
+  glossary: "glossary-term",
+};
+
+/**
+ * New file here (§7.4, §11.8): a Note in the browsed folder, from a Template.
+ * @param {{folder: string, onDone: () => void}} props
+ */
+function NewNoteForm({ folder, onDone }) {
+  const [templates, setTemplates] = useState(/** @type {import("./newform.js").TemplateInfo[]} */ ([]));
+  const [template, setTemplate] = useState("");
+  const [title, setTitle] = useState("");
+  const [error, setError] = useState(/** @type {string | null} */ (null));
+  const input = useRef(/** @type {HTMLInputElement | null} */ (null));
+  useEffect(() => {
+    input.current?.focus();
+    fetchTemplates("note").then(
+      ({ usable, fallback }) => {
+        setTemplates(usable);
+        setTemplate(fallback.name);
+      },
+      (e) => setError(describe(e)),
+    );
+  }, []);
+
+  /** @param {Event} e */
+  async function submit(e) {
+    e.preventDefault();
+    try {
+      const created = await request("POST", "/api/entities", {
+        json: { type: "note", fields: { title: title.trim() }, template, folder },
+      });
+      await reloadTree();
+      onDone();
+      navigate(fileHref(created.path));
+    } catch (err) {
+      setError(describe(err));
+    }
+  }
+
+  return html`
+    <form class="path-form" onSubmit=${submit}
+      onKeyDown=${(/** @type {KeyboardEvent} */ e) => e.key === "Escape" && onDone()}>
+      <label>
+        New Note in ${folder || "the Workspace"}
+        <input ref=${input} aria-label="Note title" placeholder="Title" value=${title}
+          onInput=${(/** @type {Event} */ e) => setTitle(/** @type {HTMLInputElement} */ (e.currentTarget).value)} />
+      </label>
+      <label>
+        Template
+        <select value=${template}
+          onChange=${(/** @type {Event} */ e) => setTemplate(/** @type {HTMLSelectElement} */ (e.currentTarget).value)}>
+          ${templates.map((t) => html`<option value=${t.name}>${t.display_name}</option>`)}
+        </select>
+      </label>
+      <button type="submit" class="primary" disabled=${!template}>Create</button>
+      <button type="button" onClick=${onDone}>Cancel</button>
+      ${error && html`<p class="error-text" role="alert">${error}</p>`}
+    </form>
+  `;
 }
 
 /** @param {{label: string, initial: string, onSubmit: (v: string) => void, onCancel: () => void}} props */

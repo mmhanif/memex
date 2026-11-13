@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from memex.core.entities import append_body, create_entity, find, replace_body, update_fields
-from memex.core.errors import AmbiguousId, Conflict, UnknownReference, Validation
+from memex.core.errors import AmbiguousId, BadPath, Conflict, UnknownReference, Validation
 from memex.core.schema import WORK_STATUSES, EntityType
 from tests.core.builder import Builder
 
@@ -196,3 +196,21 @@ def test_an_ambiguous_id_names_no_file(b: Builder):
         find(b.ws, "alice")
     with pytest.raises(UnknownReference):
         create_entity(b.ws, EntityType.TODO, {"title": "x", "owner": "alice"})
+
+
+def test_a_note_can_be_created_in_another_folder(b: Builder):
+    created = create_entity(b.ws, None, {"title": "Retro"}, folder="meetings/2026")
+    assert created.rel == "meetings/2026/retro.md"
+    assert b.ws.cache.get(created.rel) is not None
+    assert create_entity(b.ws, None, {"title": "Top"}, folder="").rel == "top.md"
+
+
+@pytest.mark.parametrize("folder", ["projects", ".memex", "notes/../..", "people"])
+def test_a_note_cant_be_created_in_a_type_or_hidden_folder(b: Builder, folder: str):
+    with pytest.raises((BadPath, Validation)):
+        create_entity(b.ws, None, {"title": "Retro"}, folder=folder)
+
+
+def test_only_notes_take_a_folder(b: Builder):
+    with pytest.raises(Validation):
+        create_entity(b.ws, EntityType.PROJECT, {"title": "X"}, folder="notes")

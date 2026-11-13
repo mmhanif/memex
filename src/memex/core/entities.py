@@ -8,6 +8,7 @@ import datetime as dt
 import difflib
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 from typing import Any, Literal
 
 from ruamel.yaml.comments import CommentedSeq
@@ -16,6 +17,7 @@ from memex.core import frontmatter
 from memex.core.cache import CachedFile, FileWarning
 from memex.core.errors import (
     AmbiguousId,
+    BadPath,
     Conflict,
     FieldProblem,
     MeNotSet,
@@ -68,13 +70,16 @@ def create_entity(
     fields: Mapping[str, Any],
     body: str | None = None,
     template: str | None = None,
+    folder: str | None = None,
 ) -> Saved:
     """Create an Entity, or a Note when `entity_type` is None (§8.1).
 
     Template defaults first, the caller's fields over them, then validate, pick the
-    Id, and write with `created: today`.
+    Id, and write with `created: today`. A Note goes in `notes/` unless `folder` names
+    another, `""` being the Workspace root (Files page "New file here", §7.4).
     """
     _refuse_automatic(fields)
+    folder = _note_folder(entity_type, folder)
     title = fields.get("title")
     title = title.strip() if isinstance(title, str) else ""
     chosen = templates_for(ws.root, entity_type, ws.config.hidden_templates).get(template)
@@ -105,11 +110,10 @@ def create_entity(
         template_key=chosen.key,
     )
 
-    folder = entity_type.folder if entity_type else NOTES_FOLDER
     dated = entity_type is EntityType.TODO or (entity_type is None and "date" in merged)
     date = today if entity_type is EntityType.TODO else parse_date(merged.get("date"))
     new_id = make_id(title, {f.id for f in ws.cache.files()}, date if dated else None)
-    rel = f"{folder}/{new_id}.md"
+    rel = f"{folder}/{new_id}.md" if folder else f"{new_id}.md"
     text = frontmatter.with_fields("", _ordered(entity_type, merged))
     new_hash = ws.store.create(rel, text + (t_body if body is None else body))
     return Saved(new_id, rel, new_hash)
@@ -166,6 +170,19 @@ def append_body(ws: Workspace, id: str, text: str) -> Saved:
         body += "\n"
     new_hash = ws.store.write(entry.rel, _with_body(current.text, body + text), current.hash)
     return Saved(entry.id, entry.rel, new_hash)
+
+
+def _note_folder(entity_type: EntityType | None, folder: str | None) -> str:
+    if entity_type is not None:
+        if folder is not None:
+            raise Validation(f"A {entity_type.display_name} always goes in {entity_type.folder}/")
+        return entity_type.folder
+    if folder is None:
+        return NOTES_FOLDER
+    parts = PurePosixPath(folder).parts
+    if EntityType.for_folder(folder) or any(p.startswith(".") for p in parts):
+        raise BadPath(folder, "Notes can't go in type folders or hidden folders")
+    return folder
 
 
 def body_of(version: FileVersion) -> FileVersion:

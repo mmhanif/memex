@@ -23,6 +23,7 @@ class NewEntity(BaseModel):
     fields: dict[str, Any] = Field(default_factory=dict)
     body: str | None = None
     template: str | None = None
+    folder: str | None = None  # Notes only: the Files page's "New file here" (§7.4)
 
 
 class FieldChanges(BaseModel):
@@ -88,7 +89,8 @@ def entity_detail(ws: WS, id: str, response: Response) -> dict:
 def create_entity(ws: WS, body: NewEntity, response: Response) -> dict:
     entity_type = type_named(body.type)
     return _saved(
-        response, entities.create_entity(ws, entity_type, body.fields, body.body, body.template)
+        response,
+        entities.create_entity(ws, entity_type, body.fields, body.body, body.template, body.folder),
     )
 
 
