@@ -457,7 +457,8 @@ def test_R18_html_carries_the_csp_and_nosniff(page_client: TestClient, path: str
 
 
 def test_R18_script_src_allows_self_and_exactly_the_import_maps_hash(page_client: TestClient):
-    html = page_client.get("/").text
+    # The HTML parser turns CRLF and CR into LF before Chrome hashes an inline script.
+    html = page_client.get("/").text.replace("\r\n", "\n").replace("\r", "\n")
     import_map = html.split('<script type="importmap">', 1)[1].split("</script>", 1)[0]
     digest = base64.b64encode(hashlib.sha256(import_map.encode()).digest()).decode()
 
@@ -501,11 +502,13 @@ def test_R15_deleting_the_workspace_root_is_refused(api: TestClient, root: Path,
     assert sorted(p.relative_to(root).as_posix() for p in root.rglob("*")) == before
 
 
-def test_R18_import_map_hash_is_of_the_bytes_served_even_with_crlf(tmp_path: Path):
-    # A Windows checkout may give index.html CRLF line endings; Chrome hashes them as served.
+def test_R18_import_map_hash_matches_chrome_even_with_crlf(tmp_path: Path):
+    # A Windows checkout may give index.html CRLF line endings. The HTML parser turns them
+    # into LF before Chrome hashes the inline script, so the hash must be of the LF text.
     import_map = '{"imports": {\r\n  "a": "/static/a.js"\r\n}}'
     index = tmp_path / "index.html"
     index.write_bytes(f'<script type="importmap">{import_map}</script>\r\n'.encode())
-    digest = base64.b64encode(hashlib.sha256(import_map.encode()).digest()).decode()
+    as_parsed = import_map.replace("\r\n", "\n")
+    digest = base64.b64encode(hashlib.sha256(as_parsed.encode()).digest()).decode()
 
     assert f"script-src 'self' 'sha256-{digest}'" in csp_for(index)

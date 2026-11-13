@@ -106,8 +106,11 @@ def test_ten_quick_writes_send_one_batched_event(server: AppState, events: Event
     changes = events.changes_for("notes/n0.md")
 
     assert {c["path"] for c in changes} >= {f"notes/n{i}.md" for i in range(10)}
-    with pytest.raises(queue.Empty):
-        events.next(timeout=1)
+    try:
+        extra = events.next(timeout=1)
+    except queue.Empty:
+        extra = None
+    assert extra is None
 
 
 def test_a_deleted_file_is_sent_with_a_null_hash(server: AppState, events: EventReader):

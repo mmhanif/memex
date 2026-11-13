@@ -4,6 +4,7 @@ Watcher events are hints only: each hinted path is reread and its hash published
 """
 
 import logging
+import os
 import threading
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -90,7 +91,14 @@ class ChangeFeed:
             ignore_permission_denied=True,
             raise_interrupt=False,
         ):
-            rels = [r for _, p in batch if (r := _relative(root, p)) is not None]
+            rels = [
+                r
+                for change, p in batch
+                # Windows also reports a folder as modified when its contents change; the
+                # files report themselves, so that adds nothing.
+                if not (change == watchfiles.Change.modified and os.path.isdir(p))
+                and (r := _relative(root, p)) is not None
+            ]
             try:
                 self.hint(ws, rels)
             except Exception:
