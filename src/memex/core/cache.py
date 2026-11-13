@@ -15,7 +15,7 @@ from typing import Any, Literal
 from memex.core import frontmatter
 from memex.core.errors import BadPath
 from memex.core.paths import resolve_workspace_path
-from memex.core.schema import REFERENCE_FIELDS, EntityType
+from memex.core.schema import REFERENCE_FIELDS, EntityType, check_fields
 from memex.core.store import content_hash, decode
 
 _HEADING = re.compile(r"^# (.+?)\s*$", re.MULTILINE)
@@ -28,7 +28,7 @@ _INLINE_CODE = re.compile(r"(?<!`)(`+)(?!`).+?(?<!`)\1(?!`)", re.DOTALL)
 class FileWarning:
     """A problem found reading a file. Flagged where shown; never fixed (§4.5)."""
 
-    kind: str  # "parse", "encoding"
+    kind: str  # "parse", "encoding", "validation"
     message: str
     line: int | None = None
 
@@ -237,6 +237,9 @@ def _load(root: Path, rel: str) -> CachedFile:
         body=parts.body,
         references=_references(base.type, fields),
         mentions=_mentions(parts.body),
+        warnings=tuple(
+            FileWarning("validation", e.message) for e in check_fields(base.type, fields)
+        ),
     )
 
 
