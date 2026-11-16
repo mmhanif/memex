@@ -55,7 +55,8 @@ def test_outline_creates_a_deliverable_inline_and_edits_due(
     box.fill("Cutover")
     box.press("Enter")
 
-    expect(app.get_by_role("row", name="Cutover")).to_be_visible()
+    # The new row's link, not the create row (whose box held "Cutover" until the write).
+    expect(app.get_by_role("link", name="Cutover", exact=True)).to_be_visible()
     text = (root / "deliverables/cutover.md").read_text("utf-8")
     assert "project: data-migration" in text
 
