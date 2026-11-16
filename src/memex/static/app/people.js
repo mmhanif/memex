@@ -3,9 +3,9 @@
 // the Person View (§11.6: header, Tagged on, the two To-do columns, 1:1s, the body).
 
 import { useState } from "preact/hooks";
-import { ApiError, describe, request } from "./api.js";
+import { describe } from "./api.js";
 import { BodySection, LinkList, Properties, Title, Warnings } from "./entity.js";
-import { initials, typeLabel, useCandidates } from "./fields.js";
+import { initials, typeLabel, useCandidates, writeField } from "./fields.js";
 import { Icon } from "./icons.js";
 import { openNew } from "./newform.js";
 import { entityHref, fileHref, personHref } from "./router.js";
@@ -192,16 +192,9 @@ function TagPicker({ person, name }) {
     const target = options.find((c) => c.id === item);
     if (!target) return;
     const current = Array.isArray(target.fields[role]) ? target.fields[role] : [];
-    try {
-      await request("PATCH", `/api/entities/${encodeURIComponent(target.id)}`, {
-        json: { set: { [role]: [...current, person] }, unset: [] },
-        ifMatch: target.hash,
-      });
-      setItem("");
-      setError(null);
-    } catch (err) {
-      setError(err instanceof ApiError && err.code === "conflict" ? "It changed on disk: try again" : describe(err));
-    }
+    const failed = await writeField(target, role, [...current, person]);
+    if (!failed) setItem("");
+    setError(failed);
     viewVersion.value += 1;
   }
 

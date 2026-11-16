@@ -241,7 +241,7 @@ def test_portfolio_outline(api: TestClient, portfolio: None):
     [project] = group["projects"]
     assert project["project"]["id"] == "migrate"
     assert [d["id"] for d in project["deliverables"]] == ["cutover"]
-    assert body["orphans"] == []
+    assert body["without_project"] == []
     assert [t["id"] for t in body["chips"]] == ["platform"]
 
 

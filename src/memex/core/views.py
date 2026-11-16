@@ -428,16 +428,11 @@ def portfolio_board(
 
 def theme_chips(ws: Workspace, include_archived: bool = False) -> tuple[CachedFile, ...]:
     """Themes by name; archived ones only when asked (§8.3)."""
-    return tuple(
-        sorted(
-            (
-                f
-                for f in ws.cache.files()
-                if f.type is EntityType.THEME and (include_archived or not f.fields.get("archived"))
-            ),
-            key=_by_title,
-        )
-    )
+    return tuple(t for t in _themes(ws) if include_archived or not t.fields.get("archived"))
+
+
+def _themes(ws: Workspace) -> list[CachedFile]:
+    return sorted((f for f in ws.cache.files() if f.type is EntityType.THEME), key=_by_title)
 
 
 def _under_themes(ws: Workspace, kind: EntityType, themes: Iterable[str]) -> list[CachedFile]:
@@ -477,7 +472,7 @@ class OutlineTheme:
 @dataclass(frozen=True)
 class Outline:
     themes: tuple[OutlineTheme, ...]
-    orphans: tuple[CachedFile, ...]  # Deliverables whose Project doesn't resolve
+    without_project: tuple[CachedFile, ...]  # Deliverables whose `project` is broken
     chips: tuple[CachedFile, ...]
 
 
@@ -493,11 +488,11 @@ def portfolio_outline(
     wanted = {t.casefold() for t in themes}
     files = ws.cache.files()
     deliverables: dict[str, list[CachedFile]] = {}
-    orphans: list[CachedFile] = []
+    without_project: list[CachedFile] = []
     for d in (f for f in files if f.type is EntityType.DELIVERABLE):
         project = _resolved(ws, d.fields.get("project"), EntityType.PROJECT)
         if project is None:
-            orphans.append(d)
+            without_project.append(d)
         else:
             deliverables.setdefault(project.rel, []).append(d)
     projects: dict[str | None, list[OutlineProject]] = {}
@@ -505,10 +500,7 @@ def portfolio_outline(
         theme = theme_of(ws, p)
         kids = tuple(sorted(deliverables.get(p.rel, ()), key=_by_title))
         projects.setdefault(theme.rel if theme else None, []).append(OutlineProject(p, kids))
-    all_themes = sorted(
-        (f for f in files if f.type is EntityType.THEME),
-        key=lambda t: (bool(t.fields.get("archived")), *_by_title(t)),
-    )
+    all_themes = sorted(_themes(ws), key=lambda t: bool(t.fields.get("archived")))
     groups = [
         OutlineTheme(t, tuple(projects.get(t.rel, ())))
         for t in all_themes
@@ -518,6 +510,6 @@ def portfolio_outline(
         groups.append(OutlineTheme(None, tuple(projects[None])))
     return Outline(
         tuple(groups),
-        () if wanted else tuple(sorted(orphans, key=_by_title)),
+        () if wanted else tuple(sorted(without_project, key=_by_title)),
         theme_chips(ws, include_archived),
     )

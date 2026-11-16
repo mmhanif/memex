@@ -37,6 +37,11 @@ def test_theme_chips_filter_the_board(app: Page, server: AppState, root: Path):
 
     expect(app.locator(".card", has_text="Loose end")).to_have_count(0)
     expect(app.locator(".card", has_text="Data migration")).to_be_visible()
+    # The filter is in the route, so it survives switching to the outline.
+    expect(app).to_have_url(f"{origin(server)}/#/portfolio/board?themes=platform")
+    app.get_by_role("link", name="Outline").click()
+    expect(app.get_by_role("button", name="Platform")).to_have_attribute("aria-pressed", "true")
+    expect(app.get_by_role("row", name="Loose end")).to_have_count(0)
 
 
 def test_outline_creates_a_deliverable_inline_and_edits_due(

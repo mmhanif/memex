@@ -105,7 +105,7 @@ def test_outline_nests_theme_project_deliverable_with_no_theme_last(b: Builder):
         ("legacy", [("old", [])]),
         (None, [("loose", []), ("lost", [])]),
     ]
-    assert [d.id for d in o.orphans] == ["stray"]
+    assert [d.id for d in o.without_project] == ["stray"]
     assert [t.id for t in o.chips] == ["growth", "platform"]
 
 
@@ -117,4 +117,4 @@ def test_outline_theme_filter_keeps_only_those_themes(b: Builder):
     b.deliverable("stray", project="gone")
     o = portfolio_outline(b.ws, themes=["platform"])
     assert outline(o) == [("platform", [("migrate", [])])]
-    assert o.orphans == ()
+    assert o.without_project == ()

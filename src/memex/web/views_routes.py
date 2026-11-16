@@ -161,7 +161,7 @@ def portfolio(
         *(f for g in outline.themes for f in ([g.theme] if g.theme else [])),
         *(p.project for g in outline.themes for p in g.projects),
         *(d for g in outline.themes for p in g.projects for d in p.deliverables),
-        *outline.orphans,
+        *outline.without_project,
     ]
     return {
         "mode": "outline",
@@ -178,14 +178,14 @@ def portfolio(
             }
             for g in outline.themes
         ],
-        "orphans": [summary(d) for d in outline.orphans],
+        "without_project": [summary(d) for d in outline.without_project],
         "chips": [summary(t) for t in outline.chips],
         "names": _work_names(ws, shown),
     }
 
 
 def _work_names(ws: Workspace, shown: Iterable[CachedFile]) -> dict[str, str]:
-    """Titles of the Themes, Projects, Leads and Tags named on the rows shown."""
+    """Titles of the Themes, Projects, Leads and Tagged Persons named on the rows shown."""
     ids: list[object] = []
     for f in shown:
         for field in _WORK_REFS:

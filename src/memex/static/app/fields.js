@@ -3,7 +3,7 @@
 // The server validates every write; this table only decides how each field is edited.
 
 import { useEffect, useRef, useState } from "preact/hooks";
-import { request } from "./api.js";
+import { ApiError, describe, request } from "./api.js";
 import { entityHref } from "./router.js";
 import { html, viewVersion } from "./state.js";
 
@@ -98,6 +98,26 @@ export const FIELDS = {
   ],
   "glossary-term": [{ name: "aliases", label: "Aliases", shape: "texts" }, LABELS],
 };
+
+/**
+ * One hash-checked field write from a list, row or card (§11.5); `null` unsets. Resolves
+ * to a message for the row, or null when it saved. The caller refetches its view.
+ * @param {Summary} item
+ * @param {string} name
+ * @param {any} value
+ * @returns {Promise<string | null>}
+ */
+export async function writeField(item, name, value) {
+  try {
+    await request("PATCH", `/api/entities/${encodeURIComponent(item.id)}`, {
+      json: value == null ? { set: {}, unset: [name] } : { set: { [name]: value }, unset: [] },
+      ifMatch: item.hash,
+    });
+    return null;
+  } catch (e) {
+    return e instanceof ApiError && e.code === "conflict" ? "It changed on disk: try again" : describe(e);
+  }
+}
 
 /** Every typed Entity, archived ones included, for pickers. Refetched on `changed`. */
 export function useCandidates() {

@@ -5,11 +5,11 @@
 import { signal } from "@preact/signals";
 import { openDoc } from "./state.js";
 
-/** @typedef {{name: string, path?: string, id?: string, view?: string}} Route */
+/** @typedef {{name: string, path?: string, id?: string, view?: string, query?: URLSearchParams}} Route */
 
 /** @param {string} hash */
 export function parseRoute(hash) {
-  const raw = hash.replace(/^#\/?/, "");
+  const [raw, search = ""] = hash.replace(/^#\/?/, "").split("?", 2);
   const [name, ...rest] = raw.split("/");
   if (name === "f" && rest.length) {
     return { name: "file", path: rest.map(decodeURIComponent).join("/") };
@@ -17,7 +17,9 @@ export function parseRoute(hash) {
   if (name === "e" && rest.length) return { name: "entity", id: decodeURIComponent(rest.join("/")) };
   if (name === "people" && rest.length) return { name: "person", id: decodeURIComponent(rest.join("/")) };
   if (name === "todos") return { name: "todos", view: rest[0] || "mine" };
-  if (name === "portfolio") return { name: "portfolio", view: rest[0] || "board" };
+  if (name === "portfolio") {
+    return { name: "portfolio", view: rest[0] || "board", query: new URLSearchParams(search) };
+  }
   return { name: name || "home" };
 }
 
