@@ -8,9 +8,11 @@ import { TYPES } from "./fields.js";
 import { FilesPage } from "./files.js";
 import { Icon } from "./icons.js";
 import { NewDialog, openNew } from "./newform.js";
+import { openPalette, Palette } from "./palette.js";
 import { PeoplePage, PersonPage } from "./people.js";
 import { PortfolioPage } from "./portfolio.js";
 import { route } from "./router.js";
+import { SearchPage } from "./search.js";
 import { SettingsPage } from "./settings.js";
 import { html, openDoc, tree, treeError } from "./state.js";
 import { TodosPage } from "./todos.js";
@@ -42,6 +44,7 @@ export function App() {
         </main>
       </div>
       <${NewDialog} />
+      <${Palette} />
     </div>
   `;
 }
@@ -80,7 +83,11 @@ function TopBar() {
     <header class="topbar">
       <label class="search">
         <${Icon} name="search" />
-        <input type="search" placeholder="Search (arrives with Ctrl-K)" disabled />
+        <input type="search" aria-label="Search" placeholder="Search (Ctrl-K)" value=""
+          onFocus=${(/** @type {FocusEvent} */ e) => {
+            /** @type {HTMLInputElement} */ (e.currentTarget).blur();
+            openPalette();
+          }} />
       </label>
       <${NewMenu} />
     </header>
@@ -147,6 +154,7 @@ function View() {
   if (current.name === "todos") return html`<${TodosPage} view=${current.view ?? "mine"} />`;
   if (current.name === "people") return html`<${PeoplePage} />`;
   if (current.name === "portfolio") return html`<${PortfolioPage} view=${current.view ?? "board"} query=${current.query} />`;
+  if (current.name === "search") return html`<${SearchPage} query=${current.query ?? new URLSearchParams()} />`;
   if (current.name === "person" && current.id) return html`<${PersonPage} key=${current.id} id=${current.id} />`;
   if (current.name === "entity" && current.id) return html`<${EntityPage} key=${current.id} id=${current.id} />`;
   return html`<${Placeholder} name=${current.name} />`;
