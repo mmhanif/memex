@@ -9,6 +9,7 @@ import { FilesPage } from "./files.js";
 import { Icon } from "./icons.js";
 import { NewDialog, openNew } from "./newform.js";
 import { PeoplePage, PersonPage } from "./people.js";
+import { PortfolioPage } from "./portfolio.js";
 import { route } from "./router.js";
 import { SettingsPage } from "./settings.js";
 import { html, openDoc, tree, treeError } from "./state.js";
@@ -145,6 +146,7 @@ function View() {
   if (current.name === "home") return html`<${Dashboard} />`;
   if (current.name === "todos") return html`<${TodosPage} view=${current.view ?? "mine"} />`;
   if (current.name === "people") return html`<${PeoplePage} />`;
+  if (current.name === "portfolio") return html`<${PortfolioPage} view=${current.view ?? "board"} />`;
   if (current.name === "person" && current.id) return html`<${PersonPage} key=${current.id} id=${current.id} />`;
   if (current.name === "entity" && current.id) return html`<${EntityPage} key=${current.id} id=${current.id} />`;
   return html`<${Placeholder} name=${current.name} />`;

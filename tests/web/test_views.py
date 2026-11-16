@@ -198,3 +198,55 @@ def test_todo_views_for_a_person_take_only_the_two_column_views(
     unset_me(state)
     response = api.get("/api/views/todos?view=waiting-on-them&person=alice-smith")
     assert response.status_code == 200
+
+
+@pytest.fixture
+def portfolio(state: AppState, alice: str) -> None:
+    put(state, "themes/platform.md", "---\ntitle: Platform\n---\n")
+    put(
+        state,
+        "projects/migrate.md",
+        "---\ntitle: Migrate\ntheme: platform\nstatus: blocked\nlead: alice-smith\n---\n",
+    )
+    put(
+        state,
+        "deliverables/cutover.md",
+        "---\ntitle: Cutover\nproject: migrate\nstatus: active\n---\n",
+    )
+
+
+def test_portfolio_board(api: TestClient, portfolio: None):
+    response = api.get("/api/views/portfolio?mode=board&kind=project&themes=platform,other")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["mode"] == "board"
+    assert body["kind"] == "project"
+    assert [c["status"] for c in body["columns"]] == [
+        "not-started",
+        "active",
+        "on-hold",
+        "blocked",
+        "done",
+    ]
+    assert [i["id"] for i in body["columns"][3]["items"]] == ["migrate"]
+    assert [t["id"] for t in body["chips"]] == ["platform"]
+    assert body["names"] == {"alice-smith": "Alice Smith", "platform": "Platform"}
+
+
+def test_portfolio_outline(api: TestClient, portfolio: None):
+    body = api.get("/api/views/portfolio?mode=outline").json()
+    assert body["mode"] == "outline"
+    [group] = body["themes"]
+    assert group["theme"]["id"] == "platform"
+    [project] = group["projects"]
+    assert project["project"]["id"] == "migrate"
+    assert [d["id"] for d in project["deliverables"]] == ["cutover"]
+    assert body["orphans"] == []
+    assert [t["id"] for t in body["chips"]] == ["platform"]
+
+
+def test_portfolio_errors(api: TestClient):
+    assert api.get("/api/views/portfolio?mode=list").json()["error"]["code"] == "validation"
+    response = api.get("/api/views/portfolio?mode=board&kind=theme")
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation"

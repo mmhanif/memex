@@ -1,4 +1,4 @@
-"""Quick-add and the view routes (SPEC §6.2, §6.3, §11.4, §11.6, §17.2)."""
+"""Quick-add and the view routes (SPEC §6.2, §6.3, §11.3, §11.4, §11.6, §17.2)."""
 
 from collections.abc import Iterable
 from typing import Annotated
@@ -125,6 +125,73 @@ def person(
         "notes": [summary(f) for f in p.notes],
         "names": _todo_names(ws, columns),
     }
+
+
+PORTFOLIO_MODES = ("board", "outline")
+# The references a Portfolio row shows by name.
+_WORK_REFS = ("theme", "project", "lead", "team", "stakeholders")
+
+
+@router.get("/views/portfolio")
+def portfolio(
+    ws: WS,
+    mode: Annotated[str, Query()] = "board",
+    kind: Annotated[str, Query()] = "project",
+    themes: Annotated[str, Query()] = "",
+    include_archived: Annotated[bool, Query()] = False,
+) -> dict:
+    """The board or the outline (§11.3). `themes` is a comma-separated list of Theme Ids."""
+    chosen = [t for t in (t.strip() for t in themes.split(",")) if t]
+    if mode == "board":
+        board = views.portfolio_board(ws, kind, chosen, include_archived)
+        shown = [f for c in board.columns for f in c.items]
+        return {
+            "mode": "board",
+            "kind": board.kind,
+            "columns": [
+                {"status": c.status, "items": [summary(f) for f in c.items]} for c in board.columns
+            ],
+            "chips": [summary(t) for t in board.chips],
+            "names": _work_names(ws, shown),
+        }
+    if mode != "outline":
+        raise Validation(f"Unknown Portfolio mode {mode!r}: one of {', '.join(PORTFOLIO_MODES)}")
+    outline = views.portfolio_outline(ws, chosen, include_archived)
+    shown = [
+        *(f for g in outline.themes for f in ([g.theme] if g.theme else [])),
+        *(p.project for g in outline.themes for p in g.projects),
+        *(d for g in outline.themes for p in g.projects for d in p.deliverables),
+        *outline.orphans,
+    ]
+    return {
+        "mode": "outline",
+        "themes": [
+            {
+                "theme": g.theme and summary(g.theme),
+                "projects": [
+                    {
+                        "project": summary(p.project),
+                        "deliverables": [summary(d) for d in p.deliverables],
+                    }
+                    for p in g.projects
+                ],
+            }
+            for g in outline.themes
+        ],
+        "orphans": [summary(d) for d in outline.orphans],
+        "chips": [summary(t) for t in outline.chips],
+        "names": _work_names(ws, shown),
+    }
+
+
+def _work_names(ws: Workspace, shown: Iterable[CachedFile]) -> dict[str, str]:
+    """Titles of the Themes, Projects, Leads and Tags named on the rows shown."""
+    ids: list[object] = []
+    for f in shown:
+        for field in _WORK_REFS:
+            value = f.fields.get(field)
+            ids.extend(value if isinstance(value, list) else [value])
+    return _names(ws, ids)
 
 
 def _groups(groups: Iterable[views.TodoGroup]) -> list[dict]:
