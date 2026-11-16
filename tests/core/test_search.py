@@ -217,3 +217,13 @@ def test_punctuated_terms_match_as_written(b: Builder):
     b.note("notes/m.md", "q3 is busy; plan later.\n")
     assert sorted(ids(b, "q3-pl")) == ["n", "q3-plan"]
     assert ids(b, "o'nei") == ["n"]
+
+
+def test_types_narrow_like_a_type_filter(b: Builder):
+    b.project("plan-a")
+    b.note("notes/plan.md", "x\n")
+    b.file("bookmarks.md", "- [Plan wiki](https://p.example)\n")
+    assert sorted(h.type for h in search(b.ws, "plan", types=["note", "bookmark"]).hits) == [
+        "bookmark",
+        "note",
+    ]

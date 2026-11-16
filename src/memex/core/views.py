@@ -62,6 +62,11 @@ def due_of(f: CachedFile) -> dt.date | None:
     return parse_date(f.fields.get("due"))
 
 
+def end_of_week(today: dt.date) -> dt.date:
+    """The Sunday that ends `today`'s week: "this week" runs through it."""
+    return today + dt.timedelta(days=6 - today.weekday())
+
+
 def by_due(f: CachedFile) -> tuple[dt.date, str, str]:
     """Soonest first, undated last, then by title."""
     return (due_of(f) or dt.date.max, f.title.casefold(), f.id)
@@ -69,7 +74,7 @@ def by_due(f: CachedFile) -> tuple[dt.date, str, str]:
 
 def _by_due(ws: Workspace, picked: list[CachedFile], include_done: bool) -> tuple[TodoGroup, ...]:
     today = ws.clock.today()
-    sunday = today + dt.timedelta(days=6 - today.weekday())
+    sunday = end_of_week(today)
     buckets: dict[str, list[CachedFile]] = {
         "Overdue": [],
         "This week": [],

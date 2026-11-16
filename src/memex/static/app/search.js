@@ -92,7 +92,7 @@ export function openHit(hit, how = {}) {
   }
   const href = hitHref(hit);
   if (how.newTab) {
-    window.open(`${window.location.pathname}${href}`, "_blank", "noopener");
+    openInNewTab(href);
     return;
   }
   const first = hit.snippets[0];
@@ -101,6 +101,11 @@ export function openHit(hit, how = {}) {
     flashText(first.text.slice(start, end));
   }
   navigate(href);
+}
+
+/** Open one of the app's own routes in a new browser tab. @param {string} href */
+export function openInNewTab(href) {
+  window.open(`${window.location.pathname}${href}`, "_blank", "noopener");
 }
 
 const FLASH_MS = 2500;
@@ -175,6 +180,16 @@ export function withoutToken(q, token) {
 }
 
 /**
+ * Swap one whitespace-separated token of a query for another, in place.
+ * @param {string} q
+ * @param {string} token
+ * @param {string} next
+ */
+export function replaceToken(q, token, next) {
+  return q.split(/\s+/).filter(Boolean).map((w) => (w === token ? next : w)).join(" ");
+}
+
+/**
  * Add a token to a query, unless it is there already.
  * @param {string} q
  * @param {string} token
@@ -236,8 +251,26 @@ export function SearchPage({ query }) {
 
   const filters = data?.query.filters ?? [];
   const has = (/** @type {string} */ kind) => filters.some((f) => f.kind === kind);
+  /** The `kind:` token already in the query, whose values a chip adds to (OR, §9.4). */
+  const tokenFor = (/** @type {string} */ prefix) =>
+    filters.find((f) => f.token.toLowerCase().startsWith(prefix));
   /** @param {string} prefix @param {string} value */
-  const add = (prefix, value) => value && go(withToken(q, `${prefix}${value}`));
+  const add = (prefix, value) => {
+    if (!value) return;
+    const existing = prefix === "@" ? undefined : tokenFor(prefix);
+    if (!existing) go(withToken(q, `${prefix}${value}`));
+    else if (!existing.values.includes(value)) {
+      go(replaceToken(q, existing.token, `${prefix}${[...existing.values, value].join(",")}`));
+    }
+  };
+  /** A type count toggles that type in the `type:` filter. @param {string} type */
+  const toggleType = (type) => {
+    const existing = tokenFor("type:");
+    if (!existing?.values.includes(type)) return add("type:", type);
+    const rest = existing.values.filter((v) => v !== type);
+    go(rest.length ? replaceToken(q, existing.token, `type:${rest.join(",")}`) : withoutToken(q, existing.token));
+  };
+  const typeShown = (/** @type {string} */ type) => Boolean(tokenFor("type:")?.values.includes(type));
 
   return html`
     <section class="page search-page">
@@ -276,11 +309,7 @@ export function SearchPage({ query }) {
       html`<div class="type-counts" aria-label="Results by type">
         ${Object.entries(data.counts).map(
           ([type, n]) => html`<button type="button" class="chip"
-            aria-pressed=${q.split(/\s+/).includes(`type:${type}`)}
-            onClick=${() => {
-              const token = `type:${type}`;
-              go(q.split(/\s+/).includes(token) ? withoutToken(q, token) : withToken(q, token));
-            }}>${typeName(type)} <span class="muted">${n}</span></button>`,
+            aria-pressed=${typeShown(type)} onClick=${() => toggleType(type)}>${typeName(type)} <span class="muted">${n}</span></button>`,
         )}
       </div>`}
       ${data && !q.trim() && html`<p class="hint">Type words to find, or filters like type:project @alice due:this-week.</p>`}
@@ -296,7 +325,7 @@ export function SearchPage({ query }) {
 
 /** @param {{hit: SearchHit}} props */
 function ResultRow({ hit }) {
-  const finished = hit.finished || hit.status === "archived";
+  const finished = hit.finished;
   const href = hit.bookmark ? hit.bookmark.url : hitHref(hit);
   const external = Boolean(hit.bookmark);
   return html`

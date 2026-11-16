@@ -19,7 +19,8 @@ from memex.core.cache import Cache, CachedFile
 from memex.core.entities import refers
 from memex.core.names import fold, match_person
 from memex.core.schema import TODO_STATUSES, WORK_STATUSES, EntityType, parse_date
-from memex.core.textindex import BODY, NAME, Term, TextIndex, find_term
+from memex.core.textindex import BODY, NAME, Term, TextIndex, find_term, texts
+from memex.core.views import due_of, end_of_week
 from memex.core.workspace import BOOKMARKS, Workspace
 
 # Tiers (§9.5): where the text matched, EXACT … BODY (see `textindex`). 0 is a query of
@@ -106,11 +107,14 @@ def search(
     offset: int = 0,
     include_archived: bool = True,
     hide_completed: bool = False,
+    types: Iterable[str] = (),
 ) -> SearchResult:
     """Ranked hits for `query`. Archived and finished items are demoted, not hidden,
     unless `include_archived` is off or `hide_completed` is on (an explicit `status:`
-    filter overrides `hide_completed`). A token error means no hits (§9.4)."""
-    parsed = parse_query(ws, query)
+    filter overrides `hide_completed`). `types` narrows like a `type:` token. A token
+    error means no hits (§9.4)."""
+    types = list(types)
+    parsed = parse_query(ws, f"{query} type:{','.join(types)}" if types else query)
     if parsed.errors or not (parsed.terms or parsed.filters):
         return SearchResult((), 0, {}, parsed)
     hide_completed = hide_completed and not any(f.kind == "status" for f in parsed.filters)
@@ -242,11 +246,11 @@ def _passes(flt: Filter, f: CachedFile, bookmark: Bookmark | None, today: dt.dat
         case "person":
             return bookmark is None and refers(f, PERSON_FIELDS, flt.values[0])
         case "label":
-            labels = bookmark.labels if bookmark else _texts(f.fields.get("labels"))
+            labels = bookmark.labels if bookmark else texts(f.fields.get("labels"))
             wanted = {fold(v) for v in flt.values}
             return any(fold(label) in wanted for label in labels)
         case "due":
-            due = None if bookmark else parse_date(f.fields.get("due"))
+            due = None if bookmark else due_of(f)
             return any(_due_matches(v, due, f, today) for v in flt.values)
 
 
@@ -269,12 +273,7 @@ def _due_matches(value: str, due: dt.date | None, f: CachedFile, today: dt.date)
         return due == today
     if value == "overdue":
         return due < today and status_group(f) != 2
-    sunday = today + dt.timedelta(days=6 - today.weekday())
-    return today <= due <= sunday  # this-week
-
-
-def _texts(value: object) -> list[str]:
-    return [v for v in value if isinstance(v, str)] if isinstance(value, list) else []
+    return today <= due <= end_of_week(today)  # this-week
 
 
 def type_key(f: CachedFile, bookmark: Bookmark | None = None) -> str:

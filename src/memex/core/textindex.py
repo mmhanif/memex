@@ -83,8 +83,8 @@ class _Doc:
 
 def _fold_file(id: int, f: CachedFile) -> _Doc:
     names = (fold(f.id), fold(f.title))
-    aliases = tuple(fold(a) for a in _texts(f.fields.get("aliases")))
-    values = (*_texts(f.fields.get("labels")), *(str(f.fields.get(k) or "") for k in _FIELD_TEXT))
+    aliases = tuple(fold(a) for a in texts(f.fields.get("aliases")))
+    values = (*texts(f.fields.get("labels")), *(str(f.fields.get(k) or "") for k in _FIELD_TEXT))
     fields = tuple(fold(v) for v in values if v)
     body = fold(f.body)
     words = set(_WORD.findall(body))
@@ -93,7 +93,8 @@ def _fold_file(id: int, f: CachedFile) -> _Doc:
     return _Doc(id, f.hash, names, aliases, fields, body, " ".join(words))
 
 
-def _texts(value: object) -> list[str]:
+def texts(value: object) -> list[str]:
+    """The strings of a YAML list; nothing for anything else."""
     return [v for v in value if isinstance(v, str)] if isinstance(value, list) else []
 
 

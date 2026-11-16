@@ -51,3 +51,17 @@ def test_see_all_opens_the_search_page_with_chips_and_counts(
     expect(app.locator(".result")).to_have_count(1)
     expect(app.locator(".filter-chip", has_text="type:note")).to_be_visible()
     expect(app.locator(".result mark", has_text="warehouse")).to_be_visible()
+
+
+def test_two_type_chips_widen_one_filter(app: Page, server: AppState, root: Path):
+    put(root, "projects/data-migration.md", PROJECT)
+    put(root, "notes/standup.md", "# Standup\n\nThe warehouse move slipped.\n")
+    app.goto(f"{origin(server)}/#/search?q=warehouse")
+    expect(app.locator(".result")).to_have_count(2)
+
+    app.get_by_label("Add Type filter").select_option("note")
+    expect(app.locator(".result")).to_have_count(1)
+    app.get_by_label("Add Type filter").select_option("project")
+
+    expect(app.locator(".filter-chip", has_text="type:note,project")).to_be_visible()
+    expect(app.locator(".result")).to_have_count(2)

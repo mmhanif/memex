@@ -15,6 +15,7 @@ import {
   hitContext,
   isTextHit,
   openHit,
+  openInNewTab,
   searchHref,
   SnippetText,
   typeIcon,
@@ -36,6 +37,7 @@ const GO_TO_MAX = 8;
 const COMMANDS_MAX = 4;
 const IN_TEXT_MAX = 5;
 const RECENT_MAX = 8;
+const SEARCH_LIMIT = 200; // the API's maximum
 const RECENT_KEY = "memex.recent";
 
 /** Whether the palette is open, and the text it opened with. */
@@ -122,7 +124,7 @@ const VIEW_COMMANDS = VIEWS.map(([label, href, icon]) => ({
  * @param {boolean} [newTab]
  */
 function go(href, newTab) {
-  if (newTab) window.open(`${window.location.pathname}${href}`, "_blank", "noopener");
+  if (newTab) openInNewTab(href);
   else navigate(href);
 }
 
@@ -218,7 +220,7 @@ function hitRow(hit, section) {
     title: hit.title,
     context: hitContext(hit),
     snippet: section === "In text" ? hit.snippets[0] : undefined,
-    finished: hit.finished || hit.status === "archived",
+    finished: hit.finished,
     run: (how) => openHit(hit, how),
   });
 }
@@ -264,7 +266,8 @@ function PaletteBox({ initial }) {
           const next = await request("POST", "/api/parse/quick-add", { json: { text: q } });
           if (n === latest.current) setPreview(next);
         } else {
-          const next = await fetchSearch(q, { limit: 30 });
+          // Wide enough that body hits still reach "In text" behind many name hits.
+          const next = await fetchSearch(q, { limit: SEARCH_LIMIT });
           if (n !== latest.current) return;
           setHits(next.hits);
           setErrors(next.query.errors.map((e) => `${e.token}: ${e.message}`));
@@ -321,15 +324,20 @@ function PaletteBox({ initial }) {
         title: r.title,
         run: (how) => go(r.href, how.newTab),
       })),
-      ...allCommands.slice(0, 4).map((c) => commandRow(c, "Commands")),
+      ...allCommands.slice(0, COMMANDS_MAX).map((c) => commandRow(c, "Commands")),
     ];
   } else {
     const found = hits ?? [];
     const views = matchCommands(VIEW_COMMANDS, q).slice(0, 3).map((c) => commandRow(c, "Go to"));
-    const goTo = found.filter((h) => !isTextHit(h)).map((h) => hitRow(h, "Go to"));
+    const goTo = [...found.filter((h) => !isTextHit(h)).map((h) => hitRow(h, "Go to")), ...views]
+      .slice(0, GO_TO_MAX);
     rows = [
-      ...[...goTo, ...views].slice(0, GO_TO_MAX),
-      ...matchCommands([...commands, QUIT], q).slice(0, COMMANDS_MAX).map((c) => commandRow(c, "Commands")),
+      ...goTo,
+      // Every named view is a command too (§9.6); skip ones Go to already shows.
+      ...matchCommands(allCommands, q)
+        .filter((c) => !c.href || !goTo.some((r) => r.key === `Go to:${c.label}`))
+        .slice(0, COMMANDS_MAX)
+        .map((c) => commandRow(c, "Commands")),
       ...found.filter(isTextHit).slice(0, IN_TEXT_MAX).map((h) => hitRow(h, "In text")),
       {
         key: "see-all",
