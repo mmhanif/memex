@@ -1,4 +1,4 @@
-# SPEC §16.9: the two required jobs. perf and package arrive with steps 8 and 12.
+# SPEC §16.9: the two required jobs, and perf on pushes to main. package arrives with step 12.
 # Playwright (the e2e marker) runs on Windows only, as §16.9 lists it there.
 name: CI
 
@@ -53,3 +53,16 @@ jobs:
         run: uv run playwright install chromium
       - name: pytest (full suite, including windows-marked tests)
         run: uv run pytest
+
+  perf:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          enable-cache: true
+      - run: uv sync --locked --python 3.14
+      - name: search p95 within budget (SPEC §16.8)
+        run: uv run pytest tests/perf --run-perf -s

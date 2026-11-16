@@ -5,6 +5,8 @@ starting with the query, then a word of the title starting with it, then fuzzy
 subsequence (`dmig` → `data-migration`), tighter matches first.
 """
 
+import functools
+import sys
 import unicodedata
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -18,17 +20,27 @@ Rank = tuple[int, int]
 
 def fold(text: str) -> str:
     """Lowercase ASCII-ish text for comparing: "José" → "jose"."""
-    decomposed = unicodedata.normalize("NFKD", text)
-    return "".join(c for c in decomposed if not unicodedata.combining(c)).casefold()
+    if text.isascii():
+        return text.lower()  # the same as casefold for ASCII, and much faster
+    return unicodedata.normalize("NFKD", text).translate(_combining_marks()).casefold()
+
+
+@functools.cache
+def _combining_marks() -> dict[int, None]:
+    """A `str.translate` table deleting every combining mark (built once, when needed)."""
+    return {c: None for c in range(sys.maxunicode + 1) if unicodedata.combining(chr(c))}
 
 
 def name_rank(query: str, names: Iterable[str]) -> Rank | None:
     """How well `query` matches the best of `names`; lower is better, None is no match."""
-    q = fold(query)
+    return rank_folded(fold(query), [fold(n) for n in names])
+
+
+def rank_folded(q: str, names: Iterable[str]) -> Rank | None:
+    """`name_rank` for a query and names already folded."""
     if not q:
         return None
-    ranks = [r for n in names if (r := _rank(q, fold(n))) is not None]
-    return min(ranks, default=None)
+    return min((r for n in names if (r := _rank(q, n)) is not None), default=None)
 
 
 def _rank(q: str, name: str) -> Rank | None:

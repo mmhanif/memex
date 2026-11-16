@@ -12,12 +12,14 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from memex.core import search
 from memex.web import (
     api,
     entities_routes,
     errors,
     events,
     launcher_routes,
+    search_routes,
     settings_routes,
     setup_routes,
     views_routes,
@@ -40,6 +42,10 @@ def create_app(state: AppState, *, watch: bool = True) -> FastAPI:
         watcher = threading.Thread(target=_watch, args=(state, stop), name="memex-watch")
         if watch:
             watcher.start()
+            if state.workspace is not None:
+                threading.Thread(
+                    target=search.warm, args=(state.workspace,), name="memex-search", daemon=True
+                ).start()
         try:
             yield
         finally:
@@ -63,6 +69,7 @@ def create_app(state: AppState, *, watch: bool = True) -> FastAPI:
     app.include_router(launcher_routes.router)
     app.include_router(setup_routes.router)
     app.include_router(views_routes.router)
+    app.include_router(search_routes.router)
 
     @app.get("/", include_in_schema=False)
     def index() -> FileResponse:

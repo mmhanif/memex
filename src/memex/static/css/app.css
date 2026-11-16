@@ -532,3 +532,26 @@ select {
 .outline-row.create-row input:focus { border-color: var(--border); background: var(--surface); }
 .icon-button { border: none; background: none; padding: 0; width: 18px; height: 18px; }
 .icon-spacer { display: inline-flex; width: 18px; color: var(--muted); }
+
+/* Search: the Ctrl-K palette and the search page (§9.6, §9.7) */
+.palette { padding: 8px; }
+.palette-input { width: 100%; font-size: 16px; padding: 8px 10px; }
+.palette-rows { list-style: none; margin: 6px 0 0; padding: 0; max-height: 60vh; overflow: auto; }
+.palette-section { padding: 8px 8px 2px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.palette-row { display: flex; gap: 8px; align-items: flex-start; padding: 6px 8px; border-radius: var(--radius); cursor: pointer; }
+.palette-row.selected { background: var(--selected); }
+.palette-row.finished .palette-title, .result.finished .result-head a { color: var(--muted); }
+.palette-text { display: flex; flex-direction: column; min-width: 0; }
+.palette-context { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.snippet mark { background: var(--warn-bg); color: inherit; border-radius: 2px; }
+::highlight(search-hit) { background-color: #ffe08a; color: inherit; }
+.search-box { display: flex; gap: 8px; align-items: center; }
+.search-box .search { max-width: none; }
+.search-chips, .type-counts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; }
+.filter-chip { padding: 1px 4px 1px 8px; }
+.type-counts .chip { padding: 1px 8px; }
+.type-counts .chip[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.search-results { list-style: none; margin: 12px 0; padding: 0; }
+.result { padding: 8px 0; border-top: 1px solid var(--border); }
+.result-head { display: flex; align-items: center; gap: 8px; }
+.result-context, .result-snippet { font-size: 13px; margin-left: 26px; }

@@ -36,6 +36,7 @@ markers = [
     "windows: needs Windows; skipped elsewhere",
     "slow: real watcher or other slow tests",
     "e2e: Playwright journeys in a real browser",
+    "perf: the search perf job (SPEC §16.8); runs only with --run-perf",
 ]
 
 [tool.ruff]

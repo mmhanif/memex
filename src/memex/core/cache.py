@@ -74,6 +74,7 @@ class Cache:
         self._by_id: defaultdict[str, set[str]] = defaultdict(set)
         # Request threads and the watcher thread share the cache.
         self._lock = threading.RLock()
+        self.generation = 0  # moves on every change, so derived state can tell it is stale
 
     @classmethod
     def build(cls, root: Path, ignore: Sequence[str] = ()) -> Cache:
@@ -165,6 +166,7 @@ class Cache:
         self._put(entry)
 
     def _drop(self, rel: str) -> None:
+        self.generation += 1
         entry = self._files.pop(rel, None)
         if entry is not None:
             key = entry.id.casefold()
@@ -173,6 +175,7 @@ class Cache:
                 del self._by_id[key]
 
     def _put(self, entry: CachedFile) -> None:
+        self.generation += 1
         self._files[entry.rel] = entry
         self._by_id[entry.id.casefold()].add(entry.rel)
 
