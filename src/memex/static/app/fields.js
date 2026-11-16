@@ -3,7 +3,7 @@
 // The server validates every write; this table only decides how each field is edited.
 
 import { useEffect, useRef, useState } from "preact/hooks";
-import { request } from "./api.js";
+import { ApiError, describe, request } from "./api.js";
 import { entityHref } from "./router.js";
 import { html, viewVersion } from "./state.js";
 
@@ -39,7 +39,7 @@ export function typeLabel(type) {
   return TYPES.find((t) => t.key === type)?.label ?? type;
 }
 
-const WORK_STATUSES = ["not-started", "active", "on-hold", "blocked", "done", "cancelled"];
+export const WORK_STATUSES = ["not-started", "active", "on-hold", "blocked", "done", "cancelled"];
 const TODO_STATUSES = ["open", "done", "cancelled"];
 const WORK = ["theme", "project", "deliverable"];
 
@@ -99,6 +99,26 @@ export const FIELDS = {
   "glossary-term": [{ name: "aliases", label: "Aliases", shape: "texts" }, LABELS],
 };
 
+/**
+ * One hash-checked field write from a list, row or card (§11.5); `null` unsets. Resolves
+ * to a message for the row, or null when it saved. The caller refetches its view.
+ * @param {Summary} item
+ * @param {string} name
+ * @param {any} value
+ * @returns {Promise<string | null>}
+ */
+export async function writeField(item, name, value) {
+  try {
+    await request("PATCH", `/api/entities/${encodeURIComponent(item.id)}`, {
+      json: value == null ? { set: {}, unset: [name] } : { set: { [name]: value }, unset: [] },
+      ifMatch: item.hash,
+    });
+    return null;
+  } catch (e) {
+    return e instanceof ApiError && e.code === "conflict" ? "It changed on disk: try again" : describe(e);
+  }
+}
+
 /** Every typed Entity, archived ones included, for pickers. Refetched on `changed`. */
 export function useCandidates() {
   const [all, setAll] = useState(/** @type {Summary[]} */ ([]));
@@ -127,6 +147,8 @@ export function useCandidates() {
  *   showArchived?: boolean,
  *   disabled?: boolean,
  *   placeholder?: string,
+ *   inputId?: string,
+ *   ariaLabel?: string,
  * }} InputProps
  */
 
@@ -136,13 +158,13 @@ export function useCandidates() {
  * @param {InputProps} props
  */
 export function FieldInput(props) {
-  const { spec, value, onChange, disabled } = props;
-  const id = `field-${spec.name}`;
+  const { spec, value, onChange, disabled, ariaLabel } = props;
+  const id = props.inputId ?? `field-${spec.name}`;
   if (spec.readOnly) return html`<span class="field-value" id=${id}>${display(props)}</span>`;
   switch (spec.shape) {
     case "enum":
       return html`
-        <select id=${id} value=${value ?? ""} disabled=${disabled}
+        <select id=${id} value=${value ?? ""} disabled=${disabled} aria-label=${ariaLabel}
           onChange=${(/** @type {Event} */ e) => onChange(target(e).value || null)}>
           ${!spec.required && html`<option value="">—</option>`}
           ${value && !spec.allowed?.includes(value) && html`<option value=${value}>${value} (invalid)</option>`}
@@ -151,12 +173,15 @@ export function FieldInput(props) {
       `;
     case "date":
       return html`<input id=${id} type="date" value=${typeof value === "string" ? value : ""} disabled=${disabled}
+        aria-label=${ariaLabel}
         onChange=${(/** @type {Event} */ e) => onChange(target(e).value || null)} />`;
     case "text":
       return html`<${TextInput} id=${id} value=${value == null ? "" : String(value)} disabled=${disabled}
+        ariaLabel=${ariaLabel}
         placeholder=${props.placeholder} onCommit=${(/** @type {string} */ v) => onChange(v.trim() || null)} />`;
     case "texts":
       return html`<${TextInput} id=${id} value=${Array.isArray(value) ? value.join(", ") : ""} disabled=${disabled}
+        ariaLabel=${ariaLabel}
         placeholder="comma, separated"
         onCommit=${(/** @type {string} */ v) => {
           const list = v.split(",").map((s) => s.trim()).filter(Boolean);
@@ -191,12 +216,12 @@ function target(e) {
   return /** @type {HTMLInputElement} */ (e.currentTarget);
 }
 
-/** @param {{id: string, value: string, disabled?: boolean, placeholder?: string, onCommit: (v: string) => void}} props */
-function TextInput({ id, value, disabled, placeholder, onCommit }) {
+/** @param {{id: string, value: string, disabled?: boolean, placeholder?: string, ariaLabel?: string, onCommit: (v: string) => void}} props */
+function TextInput({ id, value, disabled, placeholder, ariaLabel, onCommit }) {
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
   const commit = () => draft !== value && onCommit(draft);
-  return html`<input id=${id} value=${draft} disabled=${disabled} placeholder=${placeholder}
+  return html`<input id=${id} value=${draft} disabled=${disabled} placeholder=${placeholder} aria-label=${ariaLabel}
     onInput=${(/** @type {Event} */ e) => setDraft(target(e).value)}
     onBlur=${commit}
     onKeyDown=${(/** @type {KeyboardEvent} */ e) => e.key === "Enter" && (e.preventDefault(), commit())} />`;
@@ -218,7 +243,7 @@ function RefSelect(props) {
   const options = choices(props, value);
   const known = !value || options.some((c) => c.id === value);
   return html`
-    <select id=${id} value=${value ?? ""} disabled=${disabled}
+    <select id=${id} value=${value ?? ""} disabled=${disabled} aria-label=${props.ariaLabel}
       class=${props.broken?.has(value) ? "broken" : ""}
       onChange=${(/** @type {Event} */ e) => onChange(target(e).value || null)}>
       <option value="">${props.placeholder ?? "—"}</option>
@@ -255,7 +280,7 @@ function RefChecklist(props) {
   };
   return html`
     <details class="checklist" id=${id} ref=${box}>
-      <summary class=${disabled ? "disabled" : ""}>
+      <summary class=${disabled ? "disabled" : ""} aria-label=${props.ariaLabel}>
         ${list.length
           ? list.map((v) => html`<span class="chip ${broken?.has(v) ? "broken" : ""}" title=${title(v)}>
               <span class="avatar">${initials(title(v))}</span>${title(v)}

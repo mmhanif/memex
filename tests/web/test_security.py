@@ -300,6 +300,8 @@ ALL_GETS = [
     "/api/views/todos?view=waiting-on-me&person=ada-lovelace&include_done=true",
     "/api/views/dashboard",
     "/api/views/people",
+    "/api/views/portfolio?mode=board&kind=deliverable&themes=x",
+    "/api/views/portfolio?mode=outline&include_archived=true",
     "/api/views/person/ada-lovelace",
 ]
 

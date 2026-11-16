@@ -3,7 +3,8 @@
 // with its three-way switch. Ticking a row edits the To-do file (§6.1).
 
 import { useEffect, useRef, useState } from "preact/hooks";
-import { ApiError, describe, request } from "./api.js";
+import { describe, request } from "./api.js";
+import { writeField } from "./fields.js";
 import { entityHref, personHref } from "./router.js";
 import { html, meId, reloadTree, sameId, useView, viewVersion } from "./state.js";
 
@@ -50,15 +51,7 @@ export function TodoRow({ todo, names, hide }) {
   const name = (/** @type {string} */ id) => names[id] ?? id;
 
   async function toggle() {
-    try {
-      await request("PATCH", `/api/entities/${encodeURIComponent(todo.id)}`, {
-        json: { set: { status: finished ? "open" : "done" }, unset: [] },
-        ifMatch: todo.hash,
-      });
-      setError(null);
-    } catch (e) {
-      setError(e instanceof ApiError && e.code === "conflict" ? "It changed on disk: try again" : describe(e));
-    }
+    setError(await writeField(todo, "status", finished ? "open" : "done"));
     viewVersion.value += 1;
   }
 

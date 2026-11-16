@@ -506,3 +506,29 @@ select {
 .tagged li { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; padding: 2px 0; }
 .tag-picker { display: flex; flex-wrap: wrap; gap: 6px; }
 .tag-picker select:first-child { flex: 1; min-width: 0; }
+
+/* Portfolio (§11.3) */
+.portfolio-page { max-width: none; }
+.theme-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 12px 0; }
+.theme-chip { border-radius: 999px; padding: 2px 12px; font-size: 13px; }
+.theme-chip[aria-pressed="true"] { background: var(--selected); border-color: var(--accent); color: var(--accent); }
+.link-button { border: none; background: none; color: var(--accent); padding: 2px 4px; }
+.board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(220px, 1fr); gap: var(--gap); overflow-x: auto; align-items: start; }
+.board-column { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; min-height: 120px; }
+.board-column.invalid { border-color: #c0392b; }
+.board-column h2 { font-size: 13px; margin: 0 0 8px; display: flex; gap: 6px; }
+.board-card { margin-bottom: 8px; padding: 8px 10px; }
+.card-title { display: block; font-weight: 600; }
+.card-parent { font-size: 12px; }
+.card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+.card-meta select { font-size: 12px; }
+.outline td { vertical-align: middle; }
+.outline-name { display: flex; align-items: center; gap: 4px; min-width: 240px; }
+.outline-row.depth-1 .outline-name { padding-left: 22px; }
+.outline-row.depth-2 .outline-name { padding-left: 44px; }
+.outline-row.theme > td, .outline-row.no-theme > td { background: var(--bg); font-weight: 600; }
+.outline-row.create-row td { border-top: none; padding-top: 0; }
+.outline-row.create-row input { border-color: transparent; background: transparent; }
+.outline-row.create-row input:focus { border-color: var(--border); background: var(--surface); }
+.icon-button { border: none; background: none; padding: 0; width: 18px; height: 18px; }
+.icon-spacer { display: inline-flex; width: 18px; color: var(--muted); }
