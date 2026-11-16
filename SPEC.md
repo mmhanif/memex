@@ -638,7 +638,7 @@ Decided in [Search & command palette](https://github.com/mmhanif/memex/issues/13
 
 ### 9.1 One engine
 
-- There is one core `search(query, types?, limit?, offset?, include_archived?)`, shared by REST and MCP. It runs over the parse cache (§5.2), so there is no separate index.
+- There is one core `search(query, types?, limit?, offset?, include_archived?)`, shared by REST and MCP. It runs over the parse cache (§5.2): an in-memory word index derived from that cache, updated per file and never written to disk, keeps it within budget ([ADR 0001](docs/adr/0001-in-memory-word-index-for-search.md)).
 - **Performance budget:** p95 ≤ 50 ms on a 5,000-file / 50 MB Workspace (§16.8). Exceeding it is the trigger for adding SQLite FTS5 as a disposable cache stored **outside** the Workspace. No FTS5 until then.
 - **Query parsing** (free text and filter tokens) is server-only. The response includes the parsed filter state and any token errors, so chips can render them.
 
