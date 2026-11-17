@@ -62,3 +62,7 @@ class Builder:
 
     def read(self, rel: str) -> str:
         return (self.root / rel).read_text()
+
+    def config_me(self, id: str) -> None:
+        """Point `me` in the Workspace config at `id`."""
+        self.ws.save_config(self.ws.config_hash(), {"me": id})

@@ -285,6 +285,8 @@ ALL_GETS = [
     "/static/index.html",
     "/relaunch",
     "/auth?code=wrong",
+    "/api/trash",
+    "/api/broken-references",
     "/api/tree",
     "/api/files?path=bookmarks.md",
     "/api/files?path=people/ada-lovelace.md",

@@ -9,6 +9,7 @@ import { fetchTemplates, openNew } from "./newform.js";
 import { renderMarkdown, splitFrontmatter } from "./markdown.js";
 import { entityHref, fileHref, isUnder, navigate } from "./router.js";
 import { Icon } from "./icons.js";
+import { openLifecycle } from "./lifecycle.js";
 import { html, openDoc, reloadTree, resolveMention, tree } from "./state.js";
 
 /**
@@ -83,11 +84,17 @@ function Actions({ selection, onSelect }) {
       setError(null);
       await reloadTree();
     } catch (e) {
-      if (e instanceof ApiError && e.code === "has_references") {
+      const file = tree.value?.files.find((f) => f.path === selection.path);
+      if (!(e instanceof ApiError && e.code === "has_references")) {
+        setError(describe(e));
+      } else if (file) {
+        // Something refers to this file: the guided delete with its impact preview (§8.4).
+        setError(null);
+        openLifecycle("delete", { ...file, type: file.type ?? "note" }, "#/files");
+      } else {
+        // A folder: refused while anything inside is referred to from outside.
         const referrers = e.body.impact?.referrers ?? [];
         setError(`${e.message}: ${referrers.join(", ")}. Remove those references first.`);
-      } else {
-        setError(describe(e));
       }
     }
   }

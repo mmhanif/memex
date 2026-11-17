@@ -19,6 +19,7 @@ from memex.web import (
     errors,
     events,
     launcher_routes,
+    lifecycle_routes,
     search_routes,
     settings_routes,
     setup_routes,
@@ -70,6 +71,7 @@ def create_app(state: AppState, *, watch: bool = True) -> FastAPI:
     app.include_router(setup_routes.router)
     app.include_router(views_routes.router)
     app.include_router(search_routes.router)
+    app.include_router(lifecycle_routes.router)
 
     @app.get("/", include_in_schema=False)
     def index() -> FileResponse:

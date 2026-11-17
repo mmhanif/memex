@@ -4,7 +4,7 @@ Works on text with LF line endings and no BOM; the Store handles file bytes.
 """
 
 import io
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -70,11 +70,24 @@ def with_fields(text: str, set: Mapping[str, Any] | None = None, unset: Iterable
     New keys go at the end of the existing frontmatter. Raises FrontmatterError
     if the existing frontmatter doesn't parse.
     """
+
+    def change(data: CommentedMap) -> None:
+        for key, value in (set or {}).items():
+            data[key] = value
+        for key in unset:
+            data.pop(key, None)
+
+    return edited(text, change)
+
+
+def edited(text: str, change: Callable[[CommentedMap], None]) -> str:
+    """Return `text` with its frontmatter changed in place by `change`; every body byte is kept.
+
+    Editing the round-trip map in place keeps comments, quoting and list styles.
+    Raises FrontmatterError if the existing frontmatter doesn't parse.
+    """
     data, parts = parse(text)
-    for key, value in (set or {}).items():
-        data[key] = value
-    for key in unset:
-        data.pop(key, None)
+    change(data)
     out = io.StringIO()
     if data:
         _yaml().dump(data, out)

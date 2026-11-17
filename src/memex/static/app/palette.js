@@ -107,7 +107,7 @@ const VIEWS = [
   ["Files", "#/files", "folder"],
   ["Search", "#/search", "search"],
   ["Settings", "#/settings", "settings"],
-  ["Broken references", "#/broken-references", "circle-alert"],
+  ["Broken references", "#/broken", "circle-alert"],
   ["Trash", "#/trash", "trash-2"],
 ];
 

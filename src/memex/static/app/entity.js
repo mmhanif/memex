@@ -9,6 +9,8 @@ import { BodyDoc } from "./doc.js";
 import { FIELDS, FieldInput, typeLabel, useCandidates } from "./fields.js";
 import { DocBanners, RawText, SaveStatus } from "./files.js";
 import { Icon } from "./icons.js";
+import { Actions, ArchivedBar } from "./lifecycle.js";
+import { InlineRepairs } from "./repair.js";
 import { renderMarkdown } from "./markdown.js";
 import { openNew } from "./newform.js";
 import { entityHref, fileHref, personHref } from "./router.js";
@@ -26,6 +28,8 @@ import { html, openDoc, resolveMention, tree, viewVersion } from "./state.js";
  *   todos: Summary[],
  *   notes: Summary[],
  *   mentioned_in: Summary[],
+ *   archivable: boolean,
+ *   loose_ends: import("./lifecycle.js").LooseEnd[],
  * }} Detail
  */
 
@@ -63,7 +67,9 @@ export function EntityPage({ id }) {
         <span class="type-badge">${typeLabel(detail.type)}</span>
         <${Title} detail=${detail} readOnly=${readOnly} onSaved=${load} />
         <a class="button" href=${fileHref(detail.path)} title="Open the raw file"><${Icon} name="file-text" /> Open file</a>
+        <${Actions} detail=${detail} readOnly=${readOnly} />
       </header>
+      <${ArchivedBar} detail=${detail} readOnly=${readOnly} onSaved=${load} />
       <${Warnings} detail=${detail} />
       <${Properties} detail=${detail} readOnly=${readOnly} onSaved=${load} />
       <${BodySection} detail=${detail} readOnly=${readOnly} />
@@ -72,8 +78,13 @@ export function EntityPage({ id }) {
   `;
 }
 
-/** Validation warnings and Broken References, each in a bar. @param {{detail: Detail}} props */
+/**
+ * Validation warnings and Broken References, each in a bar; Broken References offer their
+ * repairs inline (§8.5, §11.5).
+ * @param {{detail: Detail}} props
+ */
 export function Warnings({ detail }) {
+  const repairable = detail.broken.filter((b) => b.status !== "wrong_type").map((b) => b.id);
   return html`
     ${detail.warnings.map(
       (w) => html`<div class="banner warn" role="status">${w.message}${w.line ? ` (line ${w.line})` : ""}</div>`,
@@ -81,7 +92,8 @@ export function Warnings({ detail }) {
     ${detail.broken.length > 0 &&
     html`<div class="banner warn" role="status">
       <span>Broken references: ${detail.broken.map((b) => `${b.field} → ${b.id} (${brokenLabel(b.status)})`).join("; ")}</span>
-    </div>`}
+    </div>
+    <${InlineRepairs} ids=${repairable} />`}
   `;
 }
 
