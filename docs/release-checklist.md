@@ -1,6 +1,6 @@
 # Release checklist
 
-A manual check of about ten minutes, run on the real Windows workstation before a Memex version is announced as usable. It covers what GitHub-hosted runners can't: the corporate mirror, endpoint and antivirus file locks, execution policy, and the real Chrome build. See [SPEC.md §16.10](../SPEC.md#1610-release-check).
+Install steps are in [install.md](install.md). A manual check of about ten minutes, run on the real Windows workstation before a Memex version is announced as usable. It covers what GitHub-hosted runners can't: the corporate mirror, endpoint and antivirus file locks, execution policy, and the real Chrome build. See [SPEC.md §16.10](../SPEC.md#1610-release-check).
 
 Version under test: `________`  Date: `________`  Result: pass / fail
 
@@ -30,6 +30,7 @@ Version under test: `________`  Date: `________`  Result: pass / fail
 
 - [ ] Run `memex` again in a second console: it prints "Memex is already running; opened it in your browser" and a working tab opens.
 - [ ] **Quit Memex** from Ctrl-K stops the server, and the console returns to the prompt.
+- [ ] `memex shortcuts` adds **Memex** to the Start menu and it launches Memex; `memex shortcuts --remove` takes it away.
 
 ## Air-gap
 

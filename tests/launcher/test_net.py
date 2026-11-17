@@ -1,31 +1,9 @@
 import socket
 import sys
-from collections.abc import Iterator
 
 import pytest
 
 from memex.launcher.net import PORT_ATTEMPTS, AllPortsBusy, bind_first_free, bind_loopback
-
-
-@pytest.fixture
-def free_run() -> Iterator[int]:
-    """A starting port with the next PORT_ATTEMPTS ports free (best effort)."""
-    for _ in range(50):
-        probe = socket.socket()
-        probe.bind(("127.0.0.1", 0))
-        start = probe.getsockname()[1]
-        probe.close()
-        if start + PORT_ATTEMPTS > 65535:
-            continue
-        try:
-            held = [bind_loopback(p) for p in range(start, start + PORT_ATTEMPTS)]
-        except OSError:
-            continue
-        for s in held:
-            s.close()
-        yield start
-        return
-    pytest.skip("no run of free ports")
 
 
 def test_R01_binds_loopback_only(free_run: int):

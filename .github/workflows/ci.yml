@@ -1,4 +1,4 @@
-# SPEC §16.9: the two required jobs, and perf on pushes to main. package arrives with step 12.
+# SPEC §16.9: the two required jobs, and perf and package on pushes to main.
 # Playwright (the e2e marker) runs on Windows only, as §16.9 lists it there.
 name: CI
 
@@ -66,3 +66,31 @@ jobs:
       - run: uv sync --locked --python 3.14
       - name: search p95 within budget (SPEC §16.8)
         run: uv run pytest tests/perf --run-perf -s
+
+  package:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          enable-cache: true
+      - name: Build the wheel
+        run: uv build --wheel --python 3.14 -o dist
+      - name: VERSIONS files present, no outbound URLs (SPEC §13.6, §16.5)
+        run: uv run --no-project --python 3.14 python -I scripts/check_wheel.py dist/memex-*.whl
+      - name: Build a local wheelhouse of the runtime dependencies
+        run: |
+          uv export --locked --no-dev --no-emit-project --no-hashes --format requirements-txt > reqs.txt
+          # uv has no `download`; pip only fetches wheels here, it installs nothing.
+          uvx --python 3.14 pip download -r reqs.txt -d wheelhouse --only-binary :all:
+      - name: Install offline into a fresh venv
+        run: |
+          uv venv --python 3.14 fresh
+          uv pip install --python fresh/Scripts/python.exe --no-index --find-links wheelhouse dist/memex-*.whl
+      - name: Smoke test (GET /, one vendored file, quit)
+        run: fresh/Scripts/python.exe -I scripts/smoke.py fresh/Scripts/memex.exe
