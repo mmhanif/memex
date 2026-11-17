@@ -30,6 +30,7 @@ Version under test: `________`  Date: `________`  Result: pass / fail
 
 - [ ] Run `memex` again in a second console: it prints "Memex is already running; opened it in your browser" and a working tab opens.
 - [ ] **Quit Memex** from Ctrl-K stops the server, and the console returns to the prompt.
+- [ ] `memex shortcuts` adds **Memex** to the Start menu and it launches Memex; `memex shortcuts --remove` takes it away.
 
 ## Air-gap
 
