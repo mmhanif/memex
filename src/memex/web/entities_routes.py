@@ -7,10 +7,10 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Header, Query, Response
 from pydantic import BaseModel, Field
 
-from memex.core import entities, lifecycle
+from memex.core import capture, entities, lifecycle
 from memex.core.cache import CachedFile
 from memex.core.entities import BrokenReference, Saved
-from memex.core.schema import type_named
+from memex.core.schema import EntityType, type_named
 from memex.core.templates import Template, customise_template, render, templates_for
 from memex.core.workspace import Workspace
 from memex.web.api import WS, expected_hash
@@ -87,12 +87,20 @@ def detail_json(ws: Workspace, detail: entities.EntityDetail) -> dict:
         "todos": [summary(f) for f in detail.todos],
         "notes": [summary(f) for f in detail.notes],
         "mentioned_in": [summary(f) for f in detail.mentioned_in],
+        # Mentioned To-dos, so a converted task item renders as a live To-do row (§6.4).
+        "mentioned_todos": [summary(f) for f in _mentioned_todos(ws, detail.file)],
         # Archive (§8.3): Themes and Persons, and what it would leave hanging.
         "archivable": detail.file.type in lifecycle.ARCHIVABLE,
         "loose_ends": [
             {"label": e.label, "items": [summary(f) for f in e.items]}
             for e in lifecycle.loose_ends(ws, detail.file.id)
         ],
+        # Notes: task items "Create N To-dos" would offer (§6.4).
+        **(
+            {"unconverted_todos": len(capture.task_items(ws, detail.file.body))}
+            if detail.file.type is None
+            else {}
+        ),
     }
 
 
@@ -189,6 +197,11 @@ def _template(t: Template, ws: Workspace, me: str | None) -> dict:
         "fields": jsonable(fields),
         "body": body,
     }
+
+
+def _mentioned_todos(ws: Workspace, f: CachedFile) -> list[CachedFile]:
+    found = (ws.cache.resolve(m).file for m in dict.fromkeys(m.casefold() for m in f.mentions))
+    return [t for t in found if t is not None and t.type is EntityType.TODO]
 
 
 def _broken(b: BrokenReference) -> dict:

@@ -296,6 +296,7 @@ ALL_GETS = [
     "/api/entities?type=project&due_before=2026-12-01",
     "/api/entities/ada-lovelace",
     "/api/entities/missing",
+    "/api/notes/missing/capture",
     "/api/templates?type=note",
     "/api/settings",
     "/api/views/todos?view=mine",

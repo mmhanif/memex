@@ -5,8 +5,9 @@
 
 import { useEffect, useState } from "preact/hooks";
 import { ApiError, describe, request } from "./api.js";
+import { openCapture } from "./capture.js";
 import { BodyDoc } from "./doc.js";
-import { FIELDS, FieldInput, typeLabel, useCandidates } from "./fields.js";
+import { FIELDS, FieldInput, typeLabel, useCandidates, writeField } from "./fields.js";
 import { DocBanners, RawText, SaveStatus } from "./files.js";
 import { Icon } from "./icons.js";
 import { Actions, ArchivedBar } from "./lifecycle.js";
@@ -14,7 +15,7 @@ import { InlineRepairs } from "./repair.js";
 import { renderMarkdown } from "./markdown.js";
 import { openNew } from "./newform.js";
 import { entityHref, fileHref, personHref } from "./router.js";
-import { html, openDoc, resolveMention, tree, viewVersion } from "./state.js";
+import { html, meId, openDoc, resolveMention, sameId, tree, viewVersion } from "./state.js";
 
 /**
  * @typedef {import("./fields.js").Summary} Summary
@@ -28,6 +29,8 @@ import { html, openDoc, resolveMention, tree, viewVersion } from "./state.js";
  *   todos: Summary[],
  *   notes: Summary[],
  *   mentioned_in: Summary[],
+ *   mentioned_todos: Summary[],
+ *   unconverted_todos?: number,
  *   archivable: boolean,
  *   loose_ends: import("./lifecycle.js").LooseEnd[],
  * }} Detail
@@ -103,22 +106,57 @@ export function Warnings({ detail }) {
  */
 export function BodySection({ detail, readOnly }) {
   const [editing, setEditing] = useState(false);
+  const [error, setError] = useState(/** @type {string | null} */ (null));
   const id = detail.id;
   useEffect(() => () => closeBody(id), [id]);
+  const todos = new Map((detail.mentioned_todos ?? []).map((t) => [t.id.toLowerCase(), t]));
+  const unconverted = detail.unconverted_todos ?? 0;
+
+  /** Ticking a live To-do row edits the To-do file, never the Note (§6.4). @param {Event} e */
+  async function tick(e) {
+    const box = /** @type {HTMLInputElement} */ (e.target);
+    const todo = todos.get(box.dataset.todo?.toLowerCase() ?? "");
+    if (!todo) return;
+    const finished = ["done", "cancelled"].includes(todo.fields.status);
+    const failed = await writeField(todo, "status", finished ? "open" : "done");
+    if (failed) box.checked = finished; // the same HTML won't be re-applied, so put it back
+    setError(failed);
+    viewVersion.value += 1;
+  }
+
   return html`
     <section class="entity-body">
       <div class="section-head">
         <h2>${detail.type === "glossary-term" ? "Definition" : "Body"}</h2>
+        ${!readOnly && !editing && unconverted > 0 &&
+        html`<button type="button" onClick=${() => void openCapture({ id, title: detail.title })}>
+          <${Icon} name="plus" /> Create ${unconverted} To-do${unconverted === 1 ? "" : "s"}</button>`}
         ${!readOnly &&
         html`<button type="button" aria-pressed=${editing} onClick=${() => {
           if (editing) closeBody(id);
           setEditing(!editing);
         }}><${Icon} name="pencil" /> ${editing ? "Done" : "Edit"}</button>`}
       </div>
-      ${editing ? html`<${BodyEditor} id=${id} />` : html`<div class="markdown"
-        dangerouslySetInnerHTML=${{ __html: renderMarkdown(detail.body, resolveMention) }}></div>`}
+      ${error && html`<p class="error-text" role="alert">${error}</p>`}
+      ${editing ? html`<${BodyEditor} id=${id} />` : html`<div class="markdown" onChange=${tick}
+        dangerouslySetInnerHTML=${{ __html: renderMarkdown(detail.body, resolveMention, (todoId) => todoRow(todos.get(todoId.toLowerCase()))) }}></div>`}
     </section>
   `;
+}
+
+/**
+ * What a converted task item shows for its To-do: real status, title, Owner and due.
+ * @param {Summary | undefined} todo
+ */
+function todoRow(todo) {
+  if (!todo) return null;
+  const { status, owner, due } = todo.fields;
+  const finished = status === "done" || status === "cancelled";
+  const meta = [];
+  if (status === "cancelled") meta.push({ class: "status status-cancelled", text: "cancelled" });
+  if (owner && !sameId(owner, meId())) meta.push({ class: "party", text: `→ ${resolveMention(owner)?.title ?? owner}` });
+  if (due) meta.push({ class: "due", text: `due ${due}` });
+  return { finished, title: todo.title, meta };
 }
 
 /** @param {Broken["status"]} status */

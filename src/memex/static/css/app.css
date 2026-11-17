@@ -272,6 +272,8 @@ input, textarea {
 .markdown pre { background: var(--bg); padding: 8px; border-radius: var(--radius); overflow: auto; }
 .markdown code { font-family: var(--mono); }
 .markdown .task-list-item { list-style: none; }
+.markdown .todo-ref.finished > p > a.mention { color: var(--muted); text-decoration: line-through; }
+.markdown .todo-ref .party, .markdown .todo-ref .due { color: var(--muted); font-size: 13px; }
 
 .diff {
   margin: 8px var(--gap) 0;
@@ -598,3 +600,12 @@ ul.bookmarks li.flash { animation: flash 2s ease-out; }
 .glossary-group dt { font-weight: 600; margin-top: 10px; }
 .glossary-group dd { margin: 2px 0 0 0; }
 .glossary-group .aliases { margin: 0; font-size: 13px; }
+
+/* Inline To-do capture (§6.4) */
+.capture-rows { list-style: none; margin: 0; padding: 0; }
+.capture-row { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.capture-row.has-errors { border-left: 3px solid #c0392b; padding-left: 8px; }
+.capture-row.unticked .capture-title strong { color: var(--muted); text-decoration: line-through; }
+.capture-row .form-grid { margin: 6px 0 0 22px; }
+.capture-body { margin: 6px 0 0 22px; font-size: 12px; white-space: pre-wrap; color: var(--muted); }
+.capture-reminder { margin: 0 0 12px; }

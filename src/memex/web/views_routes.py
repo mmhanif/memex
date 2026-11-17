@@ -1,17 +1,21 @@
-"""Quick-add and the view routes (SPEC §6.2, §6.3, §10.2, §11.3, §11.4, §11.6, §17.2)."""
+"""Quick-add, inline capture and the view routes.
+
+SPEC §6.2, §6.3, §6.4, §10.2, §11.3, §11.4, §11.6, §17.2.
+"""
 
 from collections.abc import Iterable
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel, Field
 
-from memex.core import entities, quickadd, views
+from memex.core import capture, entities, quickadd, views
 from memex.core.cache import CachedFile
 from memex.core.errors import Validation
+from memex.core.quickadd import QuickAddError
 from memex.core.workspace import Workspace
 from memex.web.api import WS
-from memex.web.entities_routes import detail_json, summary
+from memex.web.entities_routes import detail_json, saved_json, summary
 
 router = APIRouter(prefix="/api")
 
@@ -31,16 +35,17 @@ def parse_quick_add(ws: WS, body: QuickAddText) -> dict:
         "owner": parsed.owner,
         "requester": parsed.requester,
         "due": parsed.due.isoformat() if parsed.due else None,
-        "errors": [
-            {
-                "field": e.field,
-                "token": e.token,
-                "message": e.message,
-                "candidates": list(e.candidates),
-            }
-            for e in parsed.errors
-        ],
+        "errors": [_token_error(e) for e in parsed.errors],
         "names": _names(ws, [parsed.owner, parsed.requester]),
+    }
+
+
+def _token_error(e: QuickAddError) -> dict:
+    return {
+        "field": e.field,
+        "token": e.token,
+        "message": e.message,
+        "candidates": list(e.candidates),
     }
 
 
@@ -49,6 +54,53 @@ def quick_add(ws: WS, body: QuickAddText, response: Response) -> dict:
     saved = quickadd.quick_add(ws, body.text, body.defaults)
     response.headers["ETag"] = f'"{saved.hash}"'
     return {"id": saved.id, "path": saved.rel, "hash": saved.hash}
+
+
+class CaptureRow(BaseModel):
+    index: int
+    edits: dict[str, Any] = Field(default_factory=dict)  # owner, requester, due, about
+
+
+class CaptureConfirm(BaseModel):
+    hash: str
+    rows: list[CaptureRow]
+
+
+@router.get("/notes/{id}/capture")
+def capture_preview(ws: WS, id: str, response: Response) -> dict:
+    """The "Create N To-dos" preview (§6.4), with the Note's hash to confirm against."""
+    p = capture.preview(ws, id)
+    response.headers["ETag"] = f'"{p.hash}"'
+    return {
+        "id": p.note.id,
+        "hash": p.hash,
+        "rows": [
+            {
+                "index": r.index,
+                "line": r.line,
+                "text": r.text,
+                "title": r.title,
+                "owner": r.owner,
+                "requester": r.requester,
+                "due": r.due.isoformat() if r.due else None,
+                "about": r.about,
+                "body": r.body,
+                "errors": [_token_error(e) for e in r.errors],
+            }
+            for r in p.rows
+        ],
+        "names": _names(ws, [x for r in p.rows for x in (r.owner, r.requester, r.about)]),
+    }
+
+
+@router.post("/notes/{id}/capture", status_code=201)
+def capture_confirm(ws: WS, id: str, body: CaptureConfirm, response: Response) -> dict:
+    rows = [capture.RowChoice(r.index, r.edits) for r in body.rows]
+    done = capture.confirm(ws, id, body.hash, rows)
+    return {
+        "note": saved_json(response, done.note),
+        "todos": [{"id": t.id, "path": t.rel, "hash": t.hash} for t in done.todos],
+    }
 
 
 @router.get("/views/todos")
@@ -91,6 +143,7 @@ def dashboard(ws: WS) -> dict:
             for c in d.directs
         ],
         "recent_notes": [summary(f) for f in d.recent_notes],
+        "capture_notes": [summary(f) for f in d.capture_notes],
         "get_started": d.get_started,
         "names": _todo_names(ws, groups, shown_todos),
     }

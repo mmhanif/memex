@@ -11,9 +11,13 @@ const SAFE_URL = /^(https?:|mailto:|#|data:image\/(png|gif|jpeg|webp);)/i;
 md.validateLink = (url) => SAFE_URL.test(url.trim());
 
 // A small in-house task-list rule: `- [ ] x` and `- [x] x` render as disabled checkboxes.
+// An item whose only content is a To-do Mention renders as a live To-do row instead
+// (§6.4): its box shows and edits the To-do's status, never the Note's `[ ]`.
 const TASK = /^\[([ xX])\] /;
+const SOLE_MENTION = /^\[[ xX]\] \[\[([^\[\]\n]+?)\]\]\s*$/;
 md.core.ruler.after("inline", "task-lists", (state) => {
   const tokens = state.tokens;
+  const resolveTodo = /** @type {TodoResolver | undefined} */ (state.env.resolveTodo);
   for (let i = 2; i < tokens.length; i++) {
     const inline = tokens[i];
     if (
@@ -27,14 +31,37 @@ md.core.ruler.after("inline", "task-lists", (state) => {
     const match = first?.type === "text" ? TASK.exec(first.content) : null;
     if (!first || !inline.children || !match) continue;
     first.content = first.content.slice(match[0].length);
+    const sole = SOLE_MENTION.exec(inline.content);
+    const todo = sole && resolveTodo ? resolveTodo(sole[1].trim()) : null;
     const box = new state.Token("html_inline", "", 0);
-    const checked = match[1] === " " ? "" : " checked";
-    box.content = `<input type="checkbox" disabled${checked}> `;
+    if (todo) {
+      const id = escape(sole?.[1].trim() ?? "");
+      const checked = todo.finished ? " checked" : "";
+      box.content = `<input type="checkbox" data-todo="${id}" aria-label="Done: ${escape(todo.title)}"${checked}> `;
+      const meta = new state.Token("html_inline", "", 0);
+      meta.content = todo.meta.map((m) => ` <span class="${escape(m.class)}">${escape(m.text)}</span>`).join("");
+      inline.children.push(meta);
+      tokens[i - 2].attrJoin("class", `task-list-item todo-ref${todo.finished ? " finished" : ""}`);
+    } else {
+      const checked = match[1] === " " ? "" : " checked";
+      box.content = `<input type="checkbox" disabled${checked}> `;
+      tokens[i - 2].attrJoin("class", "task-list-item");
+    }
     inline.children.unshift(box);
-    tokens[i - 2].attrJoin("class", "task-list-item");
   }
   return false;
 });
+
+/** @param {string} text */
+function escape(text) {
+  return md.utils.escapeHtml(text);
+}
+
+/**
+ * A To-do a converted task item names: whether it's finished, its title, and the bits
+ * shown after it (status, Owner, due), or null when the Id names no To-do.
+ * @typedef {(id: string) => {finished: boolean, title: string, meta: {class: string, text: string}[]} | null} TodoResolver
+ */
 
 /**
  * What a Mention names: its title, or nothing when it's a Broken Reference (§4.4, §4.6).
@@ -82,9 +109,10 @@ DOMPurify.addHook("afterSanitizeAttributes", (node) => {
  * heading can never clobber a global like `window.foo`.
  * @param {string} source
  * @param {MentionResolver} [resolveMention]
+ * @param {TodoResolver} [resolveTodo]
  */
-export function renderMarkdown(source, resolveMention) {
-  return DOMPurify.sanitize(md.render(source, { resolveMention }), {
+export function renderMarkdown(source, resolveMention, resolveTodo) {
+  return DOMPurify.sanitize(md.render(source, { resolveMention, resolveTodo }), {
     SANITIZE_NAMED_PROPS: true,
     FORBID_TAGS: ["style", "form"],
     FORBID_ATTR: ["style"],

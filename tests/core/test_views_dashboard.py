@@ -81,3 +81,10 @@ def test_without_me_the_me_cards_are_empty_but_work_cards_remain(b: Builder):
     assert view.directs is None
     assert [f.id for f in view.blocked] == ["stuck"]
     assert [f.id for f in view.due_soon] == ["stuck"]
+
+
+def test_notes_with_todos_to_create_are_listed(b: Builder):
+    b.note("notes/standup.md", "- [ ] Draft plan\n", title="Standup")
+    b.note("notes/done.md", "- [x] Done\n- [ ] [[2026-11-01-old]]\n", title="Done")
+    b.todo("2026-11-01-old", owner="ada")
+    assert [n.id for n in dashboard(b.ws).capture_notes] == ["standup"]

@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Literal, cast
 
 from memex.core.cache import CachedFile
+from memex.core.capture import task_items
 from memex.core.entities import find, refers
 from memex.core.errors import NotFound, Validation
 from memex.core.names import fold
@@ -332,6 +333,7 @@ class Dashboard:
     blocked: tuple[CachedFile, ...]
     directs: tuple[DirectCounts, ...] | None
     recent_notes: tuple[CachedFile, ...]
+    capture_notes: tuple[CachedFile, ...]  # Notes with To-dos to create (§6.4)
     get_started: bool  # no Entity besides Me yet
 
 
@@ -375,6 +377,7 @@ def dashboard(ws: Workspace) -> Dashboard:
         ),
         directs=directs,
         recent_notes=tuple(notes[:RECENT_NOTES]),
+        capture_notes=tuple(sorted((n for n in notes if task_items(ws, n.body)), key=_by_title)),
         get_started=not any(f.type is not None and (me is None or f.rel != me.rel) for f in files),
     )
 
