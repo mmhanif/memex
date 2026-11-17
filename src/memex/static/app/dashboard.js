@@ -19,6 +19,7 @@ import { TodoGroups, TodoRow, isOverdue } from "./todos.js";
  *   blocked: Summary[],
  *   directs: {person: Summary, waiting_on_them: number, waiting_on_me: number}[] | null,
  *   recent_notes: Summary[],
+ *   capture_notes: Summary[],
  *   get_started: boolean,
  *   names: Record<string, string>,
  * }} DashboardData
@@ -35,6 +36,7 @@ export function Dashboard() {
     <section class="page dashboard">
       <header class="page-head"><h1>Home</h1></header>
       ${d.get_started && html`<${GetStarted} />`}
+      ${d.capture_notes.length > 0 && html`<${CaptureReminder} notes=${d.capture_notes} />`}
       <div class="cards">
         <${Card} title="Due within 7 days">
           ${d.due_soon.length
@@ -95,6 +97,20 @@ export function Dashboard() {
         <//>
       </div>
     </section>
+  `;
+}
+
+/**
+ * A quiet line: "N Notes have To-dos to create", linking to them (§6.4).
+ * @param {{notes: Summary[]}} props
+ */
+function CaptureReminder({ notes }) {
+  const n = notes.length;
+  return html`
+    <p class="muted capture-reminder">
+      ${n} Note${n === 1 ? " has" : "s have"} To-dos to create:
+      ${notes.map((note, i) => html`${i ? ", " : " "}<a href=${entityHref(note.id)}>${note.title}</a>`)}
+    </p>
   `;
 }
 

@@ -280,7 +280,7 @@ class MentionSpan:
 
 def mention_spans(body: str) -> list[MentionSpan]:
     """Every Mention in `body`, outside fenced and inline code (SPEC Appendix A.7)."""
-    masked = _INLINE_CODE.sub(lambda m: _blank(m.group()), _without_fenced_code(body))
+    masked = _INLINE_CODE.sub(lambda m: _blank(m.group()), without_fenced_code(body))
     return [MentionSpan(m.start(), m.end(), m.group(1).strip()) for m in _MENTION.finditer(masked)]
 
 
@@ -289,7 +289,7 @@ def _blank(text: str) -> str:
     return "".join(c if c == "\n" else " " for c in text)
 
 
-def _without_fenced_code(body: str) -> str:
+def without_fenced_code(body: str) -> str:
     """`body` with fenced code blanked out (same length)."""
     kept: list[str] = []
     fence: str | None = None

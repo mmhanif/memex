@@ -6,6 +6,7 @@
 import { signal } from "@preact/signals";
 import { useEffect, useState } from "preact/hooks";
 import { ApiError, describe, request } from "./api.js";
+import { openCapture } from "./capture.js";
 import { typeLabel, useCandidates } from "./fields.js";
 import { Icon } from "./icons.js";
 import { entityHref, fileHref, navigate } from "./router.js";
@@ -15,7 +16,8 @@ import { html, meId, reloadTree, sameId, viewVersion } from "./state.js";
  * @typedef {import("./fields.js").Summary} Summary
  * @typedef {{label: string, items: Summary[]}} LooseEnd
  * @typedef {{id: string, title: string, type: string, path: string, hash?: string,
- *   fields?: Record<string, any>, archivable?: boolean, loose_ends?: LooseEnd[]}} Target
+ *   fields?: Record<string, any>, archivable?: boolean, loose_ends?: LooseEnd[],
+ *   unconverted_todos?: number}} Target
  * @typedef {{path: string, title: string, hash: string, fields: string[], count: number}} Edit
  * @typedef {{path: string, title: string, field: string}} Blocker
  * @typedef {{summary: string, references: number, edits: Edit[], blocked: Blocker[]}} Impact
@@ -75,6 +77,11 @@ export function Actions({ detail, readOnly }) {
       </button>
       ${open &&
       html`<ul class="menu" role="menu" onKeyDown=${(/** @type {KeyboardEvent} */ e) => e.key === "Escape" && setOpen(false)}>
+        ${(detail.unconverted_todos ?? 0) > 0 &&
+        html`<li><button type="button" role="menuitem" onClick=${() => {
+          setOpen(false);
+          void openCapture({ id: detail.id, title: detail.title });
+        }}><${Icon} name="plus" /> Create ${detail.unconverted_todos} To-do${detail.unconverted_todos === 1 ? "" : "s"}…</button></li>`}
         <li><button type="button" role="menuitem" onClick=${() => pick("rename")}><${Icon} name="pencil" /> Rename id…</button></li>
         ${detail.archivable &&
         !detail.fields?.archived &&

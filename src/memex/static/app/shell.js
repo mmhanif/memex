@@ -9,6 +9,7 @@ import { TYPES } from "./fields.js";
 import { FilesPage } from "./files.js";
 import { GlossaryPage } from "./glossary.js";
 import { Icon } from "./icons.js";
+import { CaptureDialog } from "./capture.js";
 import { LifecycleDialog } from "./lifecycle.js";
 import { NewDialog, openNew } from "./newform.js";
 import { openPalette, Palette } from "./palette.js";
@@ -50,6 +51,7 @@ export function App() {
       </div>
       <${NewDialog} />
       <${LifecycleDialog} />
+      <${CaptureDialog} />
       <${Palette} />
     </div>
   `;
