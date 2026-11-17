@@ -86,6 +86,7 @@ jobs:
       - name: Build a local wheelhouse of the runtime dependencies
         run: |
           uv export --locked --no-dev --no-emit-project --no-hashes --format requirements-txt > reqs.txt
+          # uv has no `download`; pip only fetches wheels here, it installs nothing.
           uvx --python 3.14 pip download -r reqs.txt -d wheelhouse --only-binary :all:
       - name: Install offline into a fresh venv
         run: |

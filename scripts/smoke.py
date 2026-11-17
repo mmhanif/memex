@@ -3,7 +3,7 @@
 Starts it against a fresh temp home with no Workspace (so it serves Setup), signs in
 with the printed code, fetches `/` and one vendored file, then quits it.
 
-    python scripts/smoke.py PATH/TO/memex[.exe]
+    VENV/python -I scripts/smoke.py VENV/memex[.exe]   (any Python works: stdlib only)
 """
 
 import http.client

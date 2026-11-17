@@ -59,3 +59,12 @@ def test_a_url_in_python_code_fails(tmp_path: Path):
 
     assert result.returncode != 0
     assert "memex/core/leak.py: http://telemetry.example.org/v1" in result.stdout
+
+
+def test_a_namespace_host_in_python_code_fails(tmp_path: Path):
+    py = {"memex/web/leak.py": 'URL = "http://www.w3.org/fetch-me"\n'}
+
+    result = check(wheel_of(tmp_path / "memex.whl", extra=py))
+
+    assert result.returncode != 0
+    assert "memex/web/leak.py" in result.stdout

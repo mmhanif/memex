@@ -12,6 +12,7 @@ import secrets
 import socket
 import sys
 import threading
+import time
 import webbrowser
 from importlib import metadata
 from pathlib import Path
@@ -21,7 +22,7 @@ import uvicorn
 from memex.core.config import load_app_config, locate_workspace, memex_home
 from memex.launcher import handoff
 from memex.launcher.logs import configure_logging
-from memex.launcher.net import HOST, AllPortsBusy, bind_first_free, bind_loopback
+from memex.launcher.net import HOST, PORT_ATTEMPTS, AllPortsBusy, bind_first_free, bind_loopback
 from memex.launcher.runfile import RunInfo, read_run_file, remove_run_file, write_run_file
 from memex.web.app import AppState, create_app
 
@@ -39,7 +40,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         sock = bind_loopback(port)
     except OSError:
-        handed_off = _hand_off(home, workspace, open_browser=not args.no_browser)
+        handed_off = _hand_off(home, port, workspace, open_browser=not args.no_browser)
         if handed_off is not None:
             return handed_off
         try:
@@ -80,14 +81,18 @@ def _version() -> str:
     return metadata.version("memex")
 
 
-def _hand_off(home: Path, workspace: Path | None, *, open_browser: bool) -> int | None:
+def _hand_off(home: Path, port: int, workspace: Path | None, *, open_browser: bool) -> int | None:
     """If a verified Memex holds the port, open it (or refuse) and return the exit code.
 
     None means the listener is a stranger, so the caller falls back to the next port.
     """
     info = read_run_file(home)
-    running = handoff.verify(info) if info is not None else None
-    if info is None or running is None:
+    # The recorded instance may itself have fallen back from this port (§13.3); one on
+    # any other port isn't the Memex holding ours.
+    if info is None or not port <= info.port < port + PORT_ATTEMPTS:
+        return None
+    running = handoff.verify(info)
+    if running is None:
         return None
     if workspace is not None and (
         running.workspace is None or not handoff.same_workspace(running.workspace, workspace)
@@ -146,7 +151,7 @@ def _announce(server: uvicorn.Server, state: AppState, open_browser: bool) -> No
     while not server.started:
         if server.should_exit:
             return
-        threading.Event().wait(0.05)
+        time.sleep(0.05)
     if state.workspace is not None:
         print(f"Workspace: {state.workspace.root}")
     else:

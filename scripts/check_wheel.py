@@ -18,8 +18,8 @@ VERSIONS = "memex/static/vendor/VERSIONS"
 URL = re.compile(r"https?://[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+[^\s\"'`)<>\\]*")
 TEXT_SUFFIXES = {".py", ".js", ".mjs", ".css", ".html", ".svg", ".json", ".md", ".txt", ""}
 
-# XML namespace names are identifiers, not requests.
-ALLOWED_HOSTS = {"www.w3.org"}
+# XML namespace names are identifiers, not requests; allowed in static files only.
+NAMESPACE_HOSTS = {"www.w3.org"}
 # Links in comments of vendored files, by file and URL.
 ALLOWED = {
     (
@@ -65,7 +65,8 @@ def outbound_urls(whl: zipfile.ZipFile) -> list[tuple[str, str]]:
         text = whl.read(name).decode("utf-8", errors="replace")
         for url in URL.findall(text):
             host = url.split("://", 1)[1].split("/", 1)[0]
-            if host not in ALLOWED_HOSTS and (name, url) not in ALLOWED:
+            namespace = host in NAMESPACE_HOSTS and name.startswith("memex/static/")
+            if not namespace and (name, url) not in ALLOWED:
                 found.append((name, url))
     return found
 

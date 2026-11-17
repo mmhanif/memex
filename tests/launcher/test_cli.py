@@ -96,13 +96,13 @@ def test_quit_stops_the_process_and_removes_run_json(
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX file modes")
-def test_run_json_is_private(launch: Launch, home: Path, ws: Path, free_run: int):
+def test_R07_run_json_is_private(launch: Launch, home: Path, ws: Path, free_run: int):
     launch("--workspace", str(ws), "--port", str(free_run))
 
     assert stat.S_IMODE((home / RUN_FILE).stat().st_mode) == 0o600
 
 
-def test_log_has_no_note_content_or_secret(launch: Launch, home: Path, ws: Path, free_run: int):
+def test_R07_log_has_no_note_content_or_secret(launch: Launch, home: Path, ws: Path, free_run: int):
     memex = launch("--workspace", str(ws), "--port", str(free_run))
     body = "Confidential-body-text about the reorg"
     status, created = memex.api(
@@ -136,3 +136,15 @@ def test_version(home: Path):
 
     assert result.returncode == 0
     assert result.stdout.strip() == f"memex {metadata.version('memex')}"
+
+
+def test_a_memex_outside_the_fallback_range_is_not_handed_off_to(
+    launch: Launch, home: Path, ws: Path, free_run: int
+):
+    launch("--workspace", str(ws), "--port", str(free_run + 5))
+    stranger_port = free_run - 20
+
+    with bind_loopback(stranger_port):
+        second = launch("--port", str(stranger_port))
+
+    assert second.port == stranger_port + 1
