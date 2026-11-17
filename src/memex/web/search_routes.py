@@ -7,6 +7,7 @@ from fastapi import APIRouter, Query
 from memex.core.search import Hit, Snippet, context_of, search, status_group
 from memex.core.workspace import Workspace
 from memex.web.api import WS
+from memex.web.views_routes import bookmark_json
 
 router = APIRouter(prefix="/api")
 
@@ -51,13 +52,7 @@ def _hit(ws: Workspace, h: Hit) -> dict:
             "title": b.title or b.url,
             "path": h.file.rel,
             "tier": h.tier,
-            "bookmark": {
-                "line": b.line,
-                "title": b.title,
-                "url": b.url,
-                "note": b.note,
-                "labels": list(b.labels),
-            },
+            "bookmark": bookmark_json(b),
             "snippets": snippets,
         }
     status = h.file.fields.get("status")

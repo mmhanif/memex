@@ -1,4 +1,5 @@
-"""Quick-add and the view routes (SPEC §6.2, §6.3, §11.3, §11.4, §11.6, §17.2)."""
+"""Quick-add, the view routes, and Bookmarks (SPEC §6.2, §6.3, §10, §11.3, §11.4, §11.6,
+§17.2)."""
 
 from collections.abc import Iterable
 from typing import Annotated
@@ -6,16 +7,24 @@ from typing import Annotated
 from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel, Field
 
-from memex.core import entities, quickadd, views
+from memex.core import bookmarks, entities, quickadd, views
+from memex.core.bookmarks import Bookmark
 from memex.core.cache import CachedFile
 from memex.core.errors import Validation
-from memex.core.workspace import Workspace
+from memex.core.workspace import BOOKMARKS, Workspace
 from memex.web.api import WS
 from memex.web.entities_routes import detail_json, summary
 
 router = APIRouter(prefix="/api")
 
 PERSON_COLUMNS = ("waiting-on-them", "waiting-on-me")
+
+
+class NewBookmark(BaseModel):
+    url: str
+    title: str = ""
+    note: str = ""
+    labels: list[str] = Field(default_factory=list)
 
 
 class QuickAddText(BaseModel):
@@ -181,6 +190,57 @@ def portfolio(
         "without_project": [summary(d) for d in outline.without_project],
         "chips": [summary(t) for t in outline.chips],
         "names": _work_names(ws, shown),
+    }
+
+
+@router.get("/views/glossary")
+def glossary(ws: WS) -> dict:
+    return {
+        "groups": [
+            {
+                "letter": g.letter,
+                "terms": [
+                    {
+                        "id": t.file.id,
+                        "title": t.title,
+                        "path": t.file.rel,
+                        "aliases": list(t.aliases),
+                        "definition": t.definition,
+                    }
+                    for t in g.terms
+                ],
+            }
+            for g in views.glossary_view(ws).groups
+        ]
+    }
+
+
+@router.get("/bookmarks")
+def bookmark_list(ws: WS, label: Annotated[str | None, Query()] = None) -> dict:
+    view = bookmarks.bookmarks_view(ws, label or None)
+    return {
+        "lines": [
+            {"line": n.line, "text": n.text, "bookmark": n.bookmark and bookmark_json(n.bookmark)}
+            for n in view.lines
+        ],
+        "labels": list(view.labels),
+    }
+
+
+@router.post("/bookmarks", status_code=201)
+def add_bookmark(ws: WS, body: NewBookmark, response: Response) -> dict:
+    saved = bookmarks.add_bookmark(ws, body.url, body.title, body.note, body.labels)
+    response.headers["ETag"] = f'"{saved}"'
+    return {"path": BOOKMARKS, "hash": saved}
+
+
+def bookmark_json(b: Bookmark) -> dict:
+    return {
+        "line": b.line,
+        "title": b.title,
+        "url": b.url,
+        "note": b.note,
+        "labels": list(b.labels),
     }
 
 

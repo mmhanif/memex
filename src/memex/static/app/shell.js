@@ -2,10 +2,12 @@
 // The shell (SPEC §11.2): icon rail, top bar, banners, and the routed view.
 
 import { useState } from "preact/hooks";
+import { BookmarksPage } from "./bookmarks.js";
 import { Dashboard } from "./dashboard.js";
 import { EntityPage } from "./entity.js";
 import { TYPES } from "./fields.js";
 import { FilesPage } from "./files.js";
+import { GlossaryPage } from "./glossary.js";
 import { Icon } from "./icons.js";
 import { LifecycleDialog } from "./lifecycle.js";
 import { NewDialog, openNew } from "./newform.js";
@@ -160,6 +162,8 @@ function View() {
   if (current.name === "portfolio") return html`<${PortfolioPage} view=${current.view ?? "board"} query=${current.query} />`;
   if (current.name === "broken") return html`<${BrokenPage} />`;
   if (current.name === "trash") return html`<${TrashPage} />`;
+  if (current.name === "glossary") return html`<${GlossaryPage} />`;
+  if (current.name === "bookmarks") return html`<${BookmarksPage} query=${current.query ?? new URLSearchParams()} />`;
   if (current.name === "search") return html`<${SearchPage} query=${current.query ?? new URLSearchParams()} />`;
   if (current.name === "person" && current.id) return html`<${PersonPage} key=${current.id} id=${current.id} />`;
   if (current.name === "entity" && current.id) return html`<${EntityPage} key=${current.id} id=${current.id} />`;
