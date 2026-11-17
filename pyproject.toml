@@ -41,6 +41,7 @@ markers = [
     "slow: real watcher or other slow tests",
     "e2e: Playwright journeys in a real browser",
     "perf: the search perf job (SPEC §16.8); runs only with --run-perf",
+    "lan: lifts the air-gap guard to reach this machine's own non-loopback address",
 ]
 
 [tool.ruff]

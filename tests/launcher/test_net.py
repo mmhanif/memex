@@ -12,6 +12,7 @@ def test_R01_binds_loopback_only(free_run: int):
         assert sock.getsockname() == ("127.0.0.1", port)
 
 
+@pytest.mark.lan  # it connects to this machine's own LAN address
 def test_R01_not_reachable_on_another_local_address(free_run: int):
     lan = _lan_address()
     if lan is None:
