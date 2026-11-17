@@ -531,10 +531,6 @@ class GlossaryTerm:
     aliases: tuple[str, ...]
     definition: str  # the body
 
-    @property
-    def title(self) -> str:
-        return self.file.title
-
 
 @dataclass(frozen=True)
 class GlossaryGroup:

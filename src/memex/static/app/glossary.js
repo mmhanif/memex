@@ -8,7 +8,7 @@ import { entityHref } from "./router.js";
 import { html, resolveMention, tree, useView } from "./state.js";
 
 /**
- * @typedef {{id: string, title: string, path: string, aliases: string[], definition: string}} Term
+ * @typedef {{id: string, title: string, aliases: string[], definition: string}} Term
  * @typedef {{letter: string, terms: Term[]}} Group
  */
 
@@ -21,7 +21,7 @@ export function GlossaryPage() {
     <section class="glossary-page">
       <header class="page-head">
         <h1>Glossary</h1>
-        ${!readOnly && html`<button type="button" onClick=${() => openNew("glossary-term")}>New Term</button>`}
+        ${!readOnly && html`<button type="button" onClick=${() => openNew("glossary-term")}>New Glossary Term</button>`}
       </header>
       ${error && html`<p class="error-text" role="alert">${describe(error)}</p>`}
       ${groups && !groups.length && html`<p class="muted">No Glossary Terms yet.</p>`}

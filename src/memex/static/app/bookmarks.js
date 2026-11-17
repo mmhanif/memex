@@ -15,6 +15,11 @@ import { html, tree, useView } from "./state.js";
 
 const FILE = "bookmarks.md";
 
+/** Labels compare ignoring case and accents, as the server's filter does. @param {string} s */
+function fold(s) {
+  return s.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
+}
+
 /** @param {{query: URLSearchParams}} props */
 export function BookmarksPage({ query }) {
   const label = query.get("label") ?? "";
@@ -51,7 +56,7 @@ export function BookmarksPage({ query }) {
         <button type="button" class="chip" aria-pressed=${!label} onClick=${() => filterBy("")}>All</button>
         ${view.labels.map(
           (l) => html`<button type="button" class="chip" key=${l}
-            aria-pressed=${l.toLowerCase() === label.toLowerCase()} onClick=${() => filterBy(l)}>#${l}</button>`,
+            aria-pressed=${fold(l) === fold(label)} onClick=${() => filterBy(l)}>#${l}</button>`,
         )}
       </div>`}
       ${error && html`<p class="error-text" role="alert">${describe(error)}</p>`}

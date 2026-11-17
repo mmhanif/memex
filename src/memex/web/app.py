@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from memex.core import search
 from memex.web import (
     api,
+    bookmarks_routes,
     entities_routes,
     errors,
     events,
@@ -72,6 +73,7 @@ def create_app(state: AppState, *, watch: bool = True) -> FastAPI:
     app.include_router(views_routes.router)
     app.include_router(search_routes.router)
     app.include_router(lifecycle_routes.router)
+    app.include_router(bookmarks_routes.router)
 
     @app.get("/", include_in_schema=False)
     def index() -> FileResponse:

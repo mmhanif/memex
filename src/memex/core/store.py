@@ -118,6 +118,25 @@ class Store:
             self._changed(rel)
             return content_hash(raw)
 
+    def append_line(self, rel: str, line: str) -> str:
+        """Read, append one line and write under the per-path lock, creating the file if
+        it is missing. Every existing byte is kept; an unended last line is ended first."""
+        path = self._writable_path(rel)
+        with self._lock(path):
+            if not (path.exists() or path.is_symlink()):
+                raw = NEW_FILE_SHAPE.encode(f"{line}\n")
+                path.parent.mkdir(parents=True, exist_ok=True)
+            else:
+                current = _read_bytes(path, rel)
+                shape = _Shape.of(current)
+                text = shape.decode(current)
+                if text and not text.endswith("\n"):
+                    text += "\n"
+                raw = shape.encode(f"{text}{line}\n")
+            atomic_write(path, raw, rel)
+            self._changed(rel)
+            return content_hash(raw)
+
     def update_fields(
         self,
         rel: str,

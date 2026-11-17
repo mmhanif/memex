@@ -10,7 +10,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from memex.core.errors import Conflict, Exists, FieldProblem, NotFound, Validation
+from memex.core.errors import FieldProblem, Validation
 from memex.core.names import fold
 from memex.core.workspace import BOOKMARKS, Workspace
 
@@ -68,25 +68,21 @@ def bookmarks_view(ws: Workspace, label: str | None = None) -> BookmarksView:
     """Every line, in file order. With `label`, only the Bookmarks carrying it
     (ignoring case and accents, as search's `label:` does)."""
     f = ws.cache.get(BOOKMARKS)
-    lines = [
+    rows = [
         BookmarkLine(n, text, parse_bookmark(text, n))
         for n, text in enumerate(f.body.splitlines() if f else (), 1)
     ]
     labels: dict[str, str] = {}
-    for found in lines:
-        for name in found.bookmark.labels if found.bookmark else ():
+    for row in rows:
+        for name in row.bookmark.labels if row.bookmark else ():
             labels.setdefault(fold(name), name)
     if label is not None:
         wanted = fold(label)
-        lines = [
-            n for n in lines if n.bookmark and any(fold(x) == wanted for x in n.bookmark.labels)
-        ]
-    return BookmarksView(tuple(lines), tuple(sorted(labels.values(), key=fold)))
+        rows = [r for r in rows if r.bookmark and any(fold(x) == wanted for x in r.bookmark.labels)]
+    return BookmarksView(tuple(rows), tuple(sorted(labels.values(), key=fold)))
 
 
 _URL = re.compile(r"https?://[^\s()]+", re.IGNORECASE)
-# Another writer changing the file between read and write: re-read and append again.
-_APPEND_ATTEMPTS = 3
 
 
 def add_bookmark(
@@ -96,31 +92,14 @@ def add_bookmark(
     note: str = "",
     labels: Sequence[str] = (),
 ) -> str:
-    """Append one Bookmark line to `bookmarks.md` through the hash-checked write,
-    leaving every other byte as it was. Returns the file's new hash."""
-    line = bookmark_line(url, title, note, labels)
-    for attempt in range(_APPEND_ATTEMPTS):
-        try:
-            current = ws.store.read(BOOKMARKS)
-        except NotFound:
-            try:
-                return ws.store.create(BOOKMARKS, line)
-            except Exists:
-                continue
-        text = current.text
-        if text and not text.endswith("\n"):
-            text += "\n"
-        try:
-            return ws.store.write(BOOKMARKS, f"{text}{line}\n", current.hash)
-        except Conflict:
-            if attempt == _APPEND_ATTEMPTS - 1:
-                raise
-    raise AssertionError("unreachable")
+    """Append one Bookmark line to `bookmarks.md`, rereading and writing under the
+    per-path lock (§14.3), leaving every other byte as it was. Returns the new hash."""
+    return ws.store.append_line(BOOKMARKS, bookmark_line(url, title, note, labels))
 
 
 def bookmark_line(url: str, title: str = "", note: str = "", labels: Sequence[str] = ()) -> str:
     """The list line for a Bookmark. Raises Validation for anything that wouldn't
-    parse back to the same Bookmark."""
+    parse back to the same Bookmark (runs of spaces in the note read back as one)."""
     url, title, note = url.strip(), title.strip(), note.strip()
     names = [name.strip().removeprefix("#") for name in labels]
     problems: list[FieldProblem] = []
@@ -130,8 +109,8 @@ def bookmark_line(url: str, title: str = "", note: str = "", labels: Sequence[st
         )
     if "]" in title or "\n" in title:
         problems.append(FieldProblem("title", "One line, with no ]"))
-    if "\n" in note:
-        problems.append(FieldProblem("note", "One line"))
+    if "\n" in note or _LABEL.search(note):
+        problems.append(FieldProblem("note", "One line, with no #word: put Labels in Labels"))
     if any(not n or any(c.isspace() or c == "#" for c in n) for n in names):
         problems.append(FieldProblem("labels", "Each Label is one word, with no #"))
     if problems:

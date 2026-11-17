@@ -97,6 +97,7 @@ def test_adding_recreates_a_missing_bookmarks_file(b: Builder):
         ("https://a.example", "a]b", "", [], "title"),
         ("https://a.example", "two\nlines", "", [], "title"),
         ("https://a.example", "", "two\nlines", [], "note"),
+        ("https://a.example", "", "see #2", [], "note"),
         ("https://a.example", "", "", ["two words"], "labels"),
         ("https://a.example", "", "", ["a#b"], "labels"),
     ],

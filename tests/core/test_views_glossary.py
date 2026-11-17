@@ -21,7 +21,7 @@ def test_terms_are_grouped_a_to_z_ignoring_case_and_accents(b: Builder):
     b.entity("glossary", "2fa", title="2FA")
     b.note("notes/slo-notes.md", "# Not a term\n")
     view = glossary_view(b.ws)
-    assert [(g.letter, [t.title for t in g.terms]) for g in view.groups] == [
+    assert [(g.letter, [t.file.title for t in g.terms]) for g in view.groups] == [
         ("#", ["2FA"]),
         ("A", ["Apex", "api"]),
         ("E", ["Étape"]),
@@ -47,4 +47,4 @@ def test_each_term_carries_its_aliases_and_its_definition(b: Builder):
 def test_a_term_with_bad_aliases_still_shows(b: Builder):
     b.file("glossary/odd.md", "---\ntitle: Odd\naliases: 7\n---\nStill here.\n")
     [group] = glossary_view(b.ws).groups
-    assert [(t.title, t.aliases) for t in group.terms] == [("Odd", ())]
+    assert [(t.file.title, t.aliases) for t in group.terms] == [("Odd", ())]

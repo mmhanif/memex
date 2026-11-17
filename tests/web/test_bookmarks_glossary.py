@@ -73,7 +73,7 @@ def test_glossary_lists_terms_by_letter_with_aliases_and_definitions(
     [group] = body["groups"]
     assert group["letter"] == "S"
     [term] = group["terms"]
-    assert (term["id"], term["title"], term["path"]) == ("slo", "SLO", "glossary/slo.md")
+    assert (term["id"], term["title"]) == ("slo", "SLO")
     assert term["aliases"] == ["SLOs"]
     assert term["definition"] == "Uptime target.\n"
 
@@ -81,5 +81,12 @@ def test_glossary_lists_terms_by_letter_with_aliases_and_definitions(
 def test_glossary_without_a_workspace_is_404(api: TestClient, state: AppState):
     state.workspace = None
     response = api.get("/api/views/glossary")
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "not_found"
+
+
+def test_bookmarks_without_a_workspace_is_404(api: TestClient, state: AppState):
+    state.workspace = None
+    response = api.get("/api/bookmarks")
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "not_found"

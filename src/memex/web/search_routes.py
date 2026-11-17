@@ -7,7 +7,7 @@ from fastapi import APIRouter, Query
 from memex.core.search import Hit, Snippet, context_of, search, status_group
 from memex.core.workspace import Workspace
 from memex.web.api import WS
-from memex.web.views_routes import bookmark_json
+from memex.web.bookmarks_routes import bookmark_json
 
 router = APIRouter(prefix="/api")
 
