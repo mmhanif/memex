@@ -87,20 +87,19 @@ def detail_json(ws: Workspace, detail: entities.EntityDetail) -> dict:
         "todos": [summary(f) for f in detail.todos],
         "notes": [summary(f) for f in detail.notes],
         "mentioned_in": [summary(f) for f in detail.mentioned_in],
-        # What archiving would leave hanging (§8.3): Themes and Persons only.
+        # Archive (§8.3): Themes and Persons, and what it would leave hanging.
+        "archivable": detail.file.type in lifecycle.ARCHIVABLE,
         "loose_ends": [
             {"label": e.label, "items": [summary(f) for f in e.items]}
             for e in lifecycle.loose_ends(ws, detail.file.id)
-        ]
-        if detail.file.type in lifecycle.ARCHIVABLE
-        else [],
+        ],
     }
 
 
 @router.post("/entities", status_code=201)
 def create_entity(ws: WS, body: NewEntity, response: Response) -> dict:
     entity_type = type_named(body.type)
-    return _saved(
+    return saved_json(
         response,
         entities.create_entity(ws, entity_type, body.fields, body.body, body.template, body.folder),
     )
@@ -115,7 +114,7 @@ def update_fields(
     if_match: Annotated[str | None, Header()] = None,
 ) -> dict:
     saved = entities.update_fields(ws, id, expected_hash(if_match), body.set, body.unset)
-    return _saved(response, saved)
+    return saved_json(response, saved)
 
 
 @router.put("/entities/{id}/body")
@@ -126,7 +125,7 @@ def replace_body(
     response: Response,
     if_match: Annotated[str | None, Header()] = None,
 ) -> dict:
-    return _saved(response, entities.replace_body(ws, id, body.body, expected_hash(if_match)))
+    return saved_json(response, entities.replace_body(ws, id, body.body, expected_hash(if_match)))
 
 
 @router.get("/templates")
@@ -196,6 +195,6 @@ def _broken(b: BrokenReference) -> dict:
     return {"field": b.field, "id": b.id, "status": b.status}
 
 
-def _saved(response: Response, saved: Saved) -> dict:
+def saved_json(response: Response, saved: Saved) -> dict:
     response.headers["ETag"] = f'"{saved.hash}"'
     return {"id": saved.id, "path": saved.rel, "hash": saved.hash}

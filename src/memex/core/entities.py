@@ -19,8 +19,8 @@ from memex.core.errors import (
     AmbiguousId,
     BadPath,
     Conflict,
-    Exists,
     FieldProblem,
+    IdTaken,
     MeNotSet,
     NotFound,
     UnknownReference,
@@ -117,8 +117,7 @@ def create_entity(
     dated = entity_type is EntityType.TODO or (entity_type is None and "date" in merged)
     date = today if entity_type is EntityType.TODO else parse_date(merged.get("date"))
     if id is not None:
-        if ws.cache.resolve(id).status != "missing":
-            raise Exists(f"Id {id}")
+        require_free_id(ws, id)
         new_id = id
     else:
         new_id = make_id(title, {f.id for f in ws.cache.files()}, date if dated else None)
@@ -147,7 +146,7 @@ def update_fields(
             set["completed"] = ws.clock.today()
         elif set["status"] == "open":
             unset.append("completed")
-    if set.get("archived") and (me := ws.me()) is not None and me.rel == entry.rel:
+    if set.get("archived") and ws.is_me(entry):
         raise Validation("Me can't be archived", [FieldProblem("archived", "Me can't be archived")])
     _validate(ws, entry.type, merged, changed=[*set, *unset], self_id=entry.id)
     new_hash = ws.store.update_fields(
@@ -181,6 +180,12 @@ def append_body(ws: Workspace, id: str, text: str) -> Saved:
         body += "\n"
     new_hash = ws.store.write(entry.rel, _with_body(current.text, body + text), current.hash)
     return Saved(entry.id, entry.rel, new_hash)
+
+
+def require_free_id(ws: Workspace, id: str) -> None:
+    """No file has `id`, ignoring case; files in trash don't count (§4.1). IdTaken otherwise."""
+    if ws.cache.resolve(id).status != "missing":
+        raise IdTaken(id)
 
 
 def _note_folder(entity_type: EntityType | None, folder: str | None) -> str:

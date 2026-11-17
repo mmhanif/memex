@@ -1,24 +1,28 @@
 // @ts-check
-// `#/broken` (SPEC §8.5): every Broken Reference and ambiguous reference, grouped by Id,
-// each with Replace with…, Remove and Create. `#/trash` (§8.4): deletes, with Restore.
+// Broken Reference repair (SPEC §8.5): the `#/broken` page, and the same repairs inline on
+// an Entity page. Each group offers Replace with…, Remove and Create; Replace and Remove
+// show the impact preview first, then apply against its hashes.
 
 import { useState } from "preact/hooks";
 import { describe, request } from "./api.js";
 import { typeLabel, useCandidates } from "./fields.js";
+import { ImpactList } from "./lifecycle.js";
 import { entityHref, fileHref } from "./router.js";
 import { html, reloadTree, tree, useView, viewVersion } from "./state.js";
 
 /**
- * @typedef {{path: string, title: string, type: string | null, field: string}} Use
+ * @typedef {{path: string, id: string | null, title: string, type: string | null, field: string}} Use
  * @typedef {{id: string, status: "missing" | "ambiguous", uses: Use[], create_types: string[],
  *   types: string[]}} Group
- * @typedef {{entry: string, path: string, files: string[], deleted: string | null}} Trashed
+ * @typedef {import("./lifecycle.js").Outcome} Outcome
+ * @typedef {{action: "replace" | "remove", replacement: string | null, outcome: Outcome}} Pending
  */
 
+const BROKEN_URL = "/api/broken-references";
+
 export function BrokenPage() {
-  const { data, error, reload } = useView("/api/broken-references");
+  const { data, error } = useView(BROKEN_URL);
   const groups = /** @type {{groups: Group[]} | null} */ (data)?.groups;
-  const readOnly = tree.value?.workspace.read_only ?? false;
   return html`
     <section class="repair-page">
       <h1>Broken references</h1>
@@ -26,61 +30,93 @@ export function BrokenPage() {
         automatically: pick a repair for each.</p>
       ${error && html`<p class="error-text" role="alert">${describe(error)}</p>`}
       ${groups && !groups.length && html`<p class="muted">No broken references.</p>`}
-      ${groups?.map((g) => html`<${BrokenGroup} key=${g.id} group=${g} readOnly=${readOnly} onDone=${reload} />`)}
+      ${groups?.map((g) => html`<${BrokenGroup} key=${g.id} group=${g} />`)}
     </section>
   `;
 }
 
-/** @param {Use} use */
-function useHref(use) {
-  if (use.type === null) return "#/settings";
-  return entityHref(use.path.split("/").pop()?.replace(/\.md$/, "") ?? "", use.type);
+/**
+ * The repairs for an Entity page's own Broken References (§11.5): the same groups,
+ * filtered to the Ids it names.
+ * @param {{ids: string[]}} props
+ */
+export function InlineRepairs({ ids }) {
+  const { data } = useView(BROKEN_URL);
+  const wanted = new Set(ids.map((i) => i.toLowerCase()));
+  const groups = /** @type {{groups: Group[]} | null} */ (data)?.groups.filter((g) => wanted.has(g.id.toLowerCase()));
+  if (!groups?.length) return null;
+  return html`<div class="inline-repairs">${groups.map((g) => html`<${BrokenGroup} key=${g.id} group=${g} compact />`)}</div>`;
 }
 
-/** @param {{group: Group, readOnly: boolean, onDone: () => void}} props */
-function BrokenGroup({ group, readOnly, onDone }) {
+/** @param {Use} use */
+function useHref(use) {
+  return use.id === null || use.type === null ? "#/settings" : entityHref(use.id, use.type);
+}
+
+/** @param {{group: Group, compact?: boolean}} props */
+function BrokenGroup({ group, compact = false }) {
   const candidates = useCandidates();
   const [replacement, setReplacement] = useState("");
   const [createType, setCreateType] = useState(group.create_types[0] ?? "");
+  const [pending, setPending] = useState(/** @type {Pending | null} */ (null));
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const [busy, setBusy] = useState(false);
+  const readOnly = tree.value?.workspace.read_only ?? false;
   const fits = candidates.filter((c) => group.types.includes(c.type) && c.id.toLowerCase() !== group.id.toLowerCase());
 
-  /** @param {"replace" | "remove" | "create"} action */
-  async function repair(action) {
-    if (action === "remove" && !window.confirm(`Remove every reference to ${group.id}?`)) return;
+  /** @param {Record<string, any>} json */
+  async function send(json) {
     setBusy(true);
     try {
-      await request("POST", "/api/broken-references/repair", {
-        json: {
-          id: group.id,
-          action,
-          replacement: action === "replace" ? replacement : null,
-          type: action === "create" ? createType : null,
-        },
-      });
+      const outcome = /** @type {Outcome} */ (await request("POST", "/api/broken-references/repair", { json: { id: group.id, ...json } }));
       setError(null);
-      await reloadTree();
-      viewVersion.value += 1;
-      onDone();
+      return outcome;
     } catch (e) {
       setError(describe(e));
+      return null;
     } finally {
       setBusy(false);
     }
   }
 
+  /** @param {Outcome | null} outcome */
+  async function finish(outcome) {
+    if (!outcome) return;
+    setPending(null);
+    if (outcome.skipped.length) {
+      setError(`Skipped: ${outcome.skipped.map((s) => `${s.path} (${s.message})`).join("; ")}`);
+    }
+    await reloadTree();
+    viewVersion.value += 1;
+  }
+
+  /** @param {"replace" | "remove"} action */
+  async function preview(action) {
+    const r = action === "replace" ? replacement : null;
+    const outcome = await send({ action, replacement: r });
+    if (outcome) setPending({ action, replacement: r, outcome });
+  }
+
+  async function confirm() {
+    if (!pending) return;
+    const { action, replacement: r, outcome } = pending;
+    await finish(await send({ action, replacement: r, dry_run: false, hashes: outcome.hashes }));
+  }
+
   const creatable = group.create_types.length > 0;
+  const blocked = pending?.action === "remove" ? pending.outcome.impact.blocked : [];
   return html`
-    <article class="broken-group" aria-label=${`Broken reference ${group.id}`}>
-      <h2><code>${group.id}</code> <span class="status status-blocked">${group.status === "ambiguous" ? "ambiguous" : "missing"}</span></h2>
-      <ul>
+    <article class="broken-group ${compact ? "compact" : ""}" aria-label=${`Broken reference ${group.id}`}>
+      <h2><code>${group.id}</code> <span class="status status-blocked">${group.status}</span></h2>
+      ${!compact &&
+      html`<ul>
         ${group.uses.map(
           (u) => html`<li><a href=${useHref(u)}>${u.title}</a> <span class="muted">${u.field === "mention" ? "[[Mention]]" : u.field}</span>
-            ${u.type !== null && html` · <a class="muted" href=${fileHref(u.path)}>${u.path}</a>`}</li>`,
+            ${u.id !== null && html` · <a class="muted" href=${fileHref(u.path)}>${u.path}</a>`}</li>`,
         )}
-      </ul>
+      </ul>`}
       ${!readOnly &&
+      !pending &&
       html`<div class="repair-actions">
         <span>
           <select aria-label="Replace with" value=${replacement}
@@ -88,64 +124,35 @@ function BrokenGroup({ group, readOnly, onDone }) {
             <option value="">Replace with…</option>
             ${fits.map((c) => html`<option value=${c.id}>${c.title} (${typeLabel(c.type)})</option>`)}
           </select>
-          <button type="button" disabled=${busy || !replacement} onClick=${() => repair("replace")}>Replace</button>
+          <button type="button" disabled=${busy || !replacement} onClick=${() => preview("replace")}>Replace…</button>
         </span>
-        <button type="button" disabled=${busy} onClick=${() => repair("remove")}>Remove</button>
+        <button type="button" disabled=${busy} onClick=${() => preview("remove")}>Remove…</button>
         <span title=${creatable ? "" : group.status === "ambiguous" ? "A file already has this Id" : "The references disagree about the type"}>
           ${group.create_types.length > 1 &&
           html`<select aria-label="Type to create" value=${createType}
             onChange=${(/** @type {Event} */ e) => setCreateType(/** @type {HTMLSelectElement} */ (e.currentTarget).value)}>
             ${group.create_types.map((t) => html`<option value=${t}>${typeLabel(t)}</option>`)}
           </select>`}
-          <button type="button" disabled=${busy || !creatable} onClick=${() => repair("create")}>
+          <button type="button" disabled=${busy || !creatable}
+            onClick=${async () => finish(await send({ action: "create", type: createType, dry_run: false }))}>
             Create${group.create_types.length === 1 ? ` ${typeLabel(group.create_types[0])}` : ""}
           </button>
         </span>
       </div>`}
+      ${pending &&
+      html`<div class="repair-preview">
+        <${ImpactList} impact=${pending.outcome.impact} />
+        ${blocked.length > 0 &&
+        html`<p class="hint">Remove is blocked by required references:
+          ${blocked.map((b) => `${b.title} (${b.field})`).join(", ")}. Use Replace with… instead.</p>`}
+        <div class="repair-actions">
+          <button type="button" onClick=${() => setPending(null)}>Cancel</button>
+          <button type="button" class="primary" disabled=${busy || blocked.length > 0} onClick=${confirm}>
+            ${pending.action === "replace" ? "Replace" : "Remove"}
+          </button>
+        </div>
+      </div>`}
       ${error && html`<p class="error-text" role="alert">${error}</p>`}
     </article>
-  `;
-}
-
-export function TrashPage() {
-  const { data, error, reload } = useView("/api/trash");
-  const entries = /** @type {{entries: Trashed[]} | null} */ (data)?.entries;
-  const [problem, setProblem] = useState(/** @type {string | null} */ (null));
-  const readOnly = tree.value?.workspace.read_only ?? false;
-
-  /** @param {Trashed} t */
-  async function restore(t) {
-    try {
-      await request("POST", "/api/trash/restore", { json: { entry: t.entry } });
-      setProblem(null);
-      await reloadTree();
-      reload();
-    } catch (e) {
-      setProblem(`Can't restore ${t.path}: ${describe(e)}`);
-    }
-  }
-
-  return html`
-    <section class="repair-page">
-      <h1>Trash</h1>
-      <p class="hint">Deleted files, newest first. Restore puts a file back where it was if its path and Id are
-        still free; references rewritten when it was deleted stay as they are. Trash is never emptied automatically.</p>
-      ${(error || problem) && html`<p class="error-text" role="alert">${problem ?? describe(error)}</p>`}
-      ${entries && !entries.length && html`<p class="muted">The trash is empty.</p>`}
-      ${entries && entries.length > 0 &&
-      html`<table class="trash">
-        <thead><tr><th>Deleted</th><th>Path</th><th>Files</th><th></th></tr></thead>
-        <tbody>
-          ${entries?.map(
-            (t) => html`<tr key=${t.entry}>
-              <td>${t.deleted ? t.deleted.replace("T", " ") : t.entry}</td>
-              <td>${t.path}</td>
-              <td>${t.files.length}</td>
-              <td>${!readOnly && html`<button type="button" onClick=${() => restore(t)}>Restore</button>`}</td>
-            </tr>`,
-          )}
-        </tbody>
-      </table>`}
-    </section>
   `;
 }

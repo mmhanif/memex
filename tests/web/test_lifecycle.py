@@ -190,12 +190,16 @@ def test_broken_references_list_and_create_repair(api: TestClient, state: AppSta
     assert group == {
         "id": "zed",
         "status": "missing",
-        "uses": [{"path": "todos/t1.md", "title": "T", "type": "todo", "field": "owner"}],
+        "uses": [
+            {"path": "todos/t1.md", "id": "t1", "title": "T", "type": "todo", "field": "owner"}
+        ],
         "types": ["person"],
         "create_types": ["person"],
     }
 
-    response = api.post("/api/broken-references/repair", json={"id": "zed", "action": "create"})
+    response = api.post(
+        "/api/broken-references/repair", json={"id": "zed", "action": "create", "dry_run": False}
+    )
 
     assert response.status_code == 200, response.text
     assert response.json()["path"] == "people/zed.md"
@@ -206,3 +210,107 @@ def test_repairing_an_id_that_isnt_broken_is_404(api: TestClient):
     response = api.post("/api/broken-references/repair", json={"id": "zed", "action": "remove"})
 
     assert response.status_code == 404
+
+
+# Archive
+
+
+def test_archive_and_unarchive(api: TestClient, root: Path):
+    alice = person(api, "Alice")
+    detail = api.get(f"/api/entities/{alice}").json()
+    assert detail["archivable"] is True
+
+    archived = api.post(
+        f"/api/entities/{alice}/archive",
+        json={"archived": True},
+        headers={"If-Match": detail["hash"]},
+    )
+    assert archived.status_code == 200, archived.text
+    assert "archived: 2026-11-12" in (root / "people/alice.md").read_text()
+
+    response = api.post(
+        f"/api/entities/{alice}/archive",
+        json={"archived": False},
+        headers={"If-Match": archived.json()["hash"]},
+    )
+    assert response.status_code == 200
+    assert "archived" not in (root / "people/alice.md").read_text()
+
+
+def test_archiving_me_is_422(api: TestClient):
+    me = api.get("/api/entities/ada-lovelace").json()
+
+    response = api.post(
+        "/api/entities/ada-lovelace/archive",
+        json={"archived": True},
+        headers={"If-Match": me["hash"]},
+    )
+
+    assert response.status_code == 422
+
+
+# Repair: Replace and Remove
+
+
+def broken_owner(state: AppState) -> None:
+    assert state.workspace is not None
+    text = "---\ntitle: T\nowner: zed\nrequester: ada-lovelace\nstatus: open\n---\nAsk [[zed]].\n"
+    put(state.workspace.root, "todos/t1.md", text)
+    state.workspace.changed("todos/t1.md")
+
+
+def test_repair_replace_previews_then_rewrites(api: TestClient, state: AppState, root: Path):
+    broken_owner(state)
+    zoe = person(api, "Zoe")
+
+    preview = api.post(
+        "/api/broken-references/repair", json={"id": "zed", "action": "replace", "replacement": zoe}
+    ).json()
+    assert preview["applied"] is False
+    assert preview["impact"]["summary"] == "updates 2 references in 1 file"
+
+    done = api.post(
+        "/api/broken-references/repair",
+        json={
+            "id": "zed",
+            "action": "replace",
+            "replacement": zoe,
+            "dry_run": False,
+            "hashes": preview["hashes"],
+        },
+    ).json()
+
+    assert done["applied"] is True
+    assert (
+        (root / "todos/t1.md")
+        .read_text()
+        .endswith("owner: zoe\nrequester: ada-lovelace\nstatus: open\n---\nAsk [[zoe]].\n")
+    )
+
+
+def test_repair_replace_with_the_wrong_type_is_422(api: TestClient, state: AppState):
+    broken_owner(state)
+    api.post("/api/entities", json={"type": "theme", "fields": {"title": "Platform"}})
+
+    response = api.post(
+        "/api/broken-references/repair",
+        json={"id": "zed", "action": "replace", "replacement": "platform", "dry_run": False},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "unknown_reference"
+
+
+def test_repair_remove_blocked_by_a_required_reference_is_422(api: TestClient, state: AppState):
+    broken_owner(state)
+
+    preview = api.post("/api/broken-references/repair", json={"id": "zed", "action": "remove"})
+    assert preview.json()["impact"]["blocked"] == [
+        {"path": "todos/t1.md", "title": "T", "field": "owner"}
+    ]
+    response = api.post(
+        "/api/broken-references/repair", json={"id": "zed", "action": "remove", "dry_run": False}
+    )
+
+    assert response.status_code == 422
+    assert "Remove is blocked" in response.json()["error"]["message"]

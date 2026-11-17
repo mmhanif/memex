@@ -141,6 +141,11 @@ class Workspace:
             return None
         return found.file
 
+    def is_me(self, f: CachedFile) -> bool:
+        """Whether `f` is Me's file."""
+        me = self.me()
+        return me is not None and me.rel == f.rel
+
     def require_me(self) -> CachedFile:
         if (me := self.me()) is None:
             raise MeNotSet()

@@ -15,11 +15,19 @@ from typing import Any, Literal
 
 from memex.core import frontmatter
 from memex.core.cache import CachedFile, mention_spans
-from memex.core.entities import Saved, create_entity, describe_targets, find, refers, update_fields
+from memex.core.entities import (
+    Saved,
+    create_entity,
+    describe_targets,
+    find,
+    refers,
+    require_free_id,
+    update_fields,
+)
 from memex.core.errors import (
     CoreError,
-    Exists,
     HasReferences,
+    NotBroken,
     NotFound,
     ReadOnly,
     UnknownReference,
@@ -27,10 +35,13 @@ from memex.core.errors import (
 )
 from memex.core.ids import is_valid_id
 from memex.core.schema import FIELD_BY_NAME, FINISHED_TODO, REFERENCE_FIELDS, EntityType, Target
-from memex.core.store import WORKSPACE_CONFIG
+from memex.core.store import TRASH, WORKSPACE_CONFIG
 from memex.core.workspace import Workspace
 
 CONFIG_TITLE = "Workspace config"
+# Where a reference is written, besides a frontmatter field's name:
+MENTION = "mention"  # `[[id]]` in a body
+ME = "me"  # `me` in the Workspace config
 
 
 @dataclass(frozen=True)
@@ -40,7 +51,7 @@ class Edit:
     rel: str
     title: str
     hash: str
-    fields: tuple[str, ...]  # frontmatter fields; "mention" for the body; "me" for the config
+    fields: tuple[str, ...]  # frontmatter fields, MENTION, or ME
     count: int  # references rewritten
 
 
@@ -170,7 +181,7 @@ def _rewrite_text(entity_type: EntityType | None, text: str, rw: _Rewrite) -> _R
     for m in reversed(mentions):
         body = body[: m.start] + (f"[[{rw.new}]]" if rw.new else rw.label) + body[m.end :]
     if mentions:
-        fields.append("mention")
+        fields.append(MENTION)
         count += len(mentions)
     return _Rewritten(head + body, tuple(fields), count, tuple(blocked))
 
@@ -179,14 +190,17 @@ def _hits(values: list[Any], rw: _Rewrite) -> list[int]:
     return [i for i, v in enumerate(values) if rw.names_old(v)]
 
 
-def _impact(ws: Workspace, rw: _Rewrite, skip: str | None = None) -> Impact:
-    """What rewriting would change, read from disk now. `skip`: a file left out (the one
+def _referring(ws: Workspace, rw: _Rewrite, skip: str | None) -> list[CachedFile]:
+    """Files whose references or Mentions name `rw.old`. `skip`: a file left out (the one
     being deleted)."""
+    return [f for f in ws.cache.referrers([rw.old]) if f.rel != skip]
+
+
+def _impact(ws: Workspace, rw: _Rewrite, skip: str | None = None) -> Impact:
+    """What rewriting would change, read from disk now."""
     edits: list[Edit] = []
     blocked: list[Blocker] = []
-    for f in ws.cache.referrers([rw.old]):
-        if f.rel == skip:
-            continue
+    for f in _referring(ws, rw, skip):
         current = ws.store.read(f.rel)
         result = _rewrite_text(f.type, current.text, rw)
         blocked.extend(Blocker(f.rel, f.title, name) for name in result.blocked)
@@ -194,9 +208,9 @@ def _impact(ws: Workspace, rw: _Rewrite, skip: str | None = None) -> Impact:
             edits.append(Edit(f.rel, f.title, current.hash, result.fields, result.count))
     if rw.names_old(ws.config.me):
         if rw.new is None:
-            blocked.append(Blocker(WORKSPACE_CONFIG, CONFIG_TITLE, "me"))
+            blocked.append(Blocker(WORKSPACE_CONFIG, CONFIG_TITLE, ME))
         else:
-            edits.append(Edit(WORKSPACE_CONFIG, CONFIG_TITLE, ws.config_hash(), ("me",), 1))
+            edits.append(Edit(WORKSPACE_CONFIG, CONFIG_TITLE, ws.config_hash(), (ME,), 1))
     return Impact(tuple(edits), tuple(blocked))
 
 
@@ -204,13 +218,17 @@ def _apply(
     ws: Workspace, rw: _Rewrite, expected: Mapping[str, str], skip: str | None = None
 ) -> tuple[Skipped, ...]:
     """Rewrite each file through the hash-checked write, against the preview's hash when
-    given; files that fail are skipped and reported (§5.5)."""
+    given; files that fail are skipped and reported (§5.5).
+
+    `me` goes first, and if it can't be written nothing else is: Me pointing at nothing
+    is worse than one stale file, so that failure raises instead of being skipped.
+    """
     if ws.read_only:
         raise ReadOnly()
+    if rw.new is not None and rw.names_old(ws.config.me):
+        ws.save_config(expected.get(WORKSPACE_CONFIG, ws.config_hash()), {ME: rw.new})
     skipped: list[Skipped] = []
-    for f in ws.cache.referrers([rw.old]):
-        if f.rel == skip:
-            continue
+    for f in _referring(ws, rw, skip):
         try:
             current = ws.store.read(f.rel)
             result = _rewrite_text(f.type, current.text, rw)
@@ -218,11 +236,6 @@ def _apply(
                 ws.store.write(f.rel, result.text, expected.get(f.rel, current.hash))
         except CoreError as e:
             skipped.append(Skipped(f.rel, e.code, e.message))
-    if rw.new is not None and rw.names_old(ws.config.me):
-        try:
-            ws.save_config(expected.get(WORKSPACE_CONFIG, ws.config_hash()), {"me": rw.new})
-        except CoreError as e:
-            skipped.append(Skipped(WORKSPACE_CONFIG, e.code, e.message))
     return tuple(skipped)
 
 
@@ -238,7 +251,7 @@ def rename_id(
 ) -> Outcome:
     """Preview, or apply, giving an Entity or Note a new Id.
 
-    Applying rewrites every reference, Mention and `me`, then renames the file.
+    Applying rewrites `me`, then every reference and Mention, then renames the file.
     Pass the preview's `hashes` as `expected` so files changed since are skipped.
     """
     entry = find(ws, id)
@@ -248,8 +261,7 @@ def rename_id(
         raise Validation(message)
     if new_id == entry.id:
         raise Validation(f"{entry.title} already has the Id {new_id}")
-    if ws.cache.resolve(new_id).status != "missing":
-        raise Exists(f"Id {new_id}")
+    require_free_id(ws, new_id)
     parent = PurePosixPath(entry.rel).parent.as_posix()
     new_rel = f"{new_id}.md" if parent == "." else f"{parent}/{new_id}.md"
     rw = _Rewrite(entry.id, new_id)
@@ -305,8 +317,8 @@ def loose_ends(ws: Workspace, id: str) -> tuple[LooseEnd, ...]:
         todos = [t for t in named((EntityType.TODO,), "owner") if t.fields.get("status") == "open"]
         work = (EntityType.PROJECT, EntityType.DELIVERABLE)
         led = [f for f in named(work, "lead") if unfinished(f)]
-        reports = named((EntityType.PERSON,), "manager")
-        directs = [p for p in reports if not p.fields.get("archived")]
+        managed = named((EntityType.PERSON,), "manager")
+        directs = [p for p in managed if not p.fields.get("archived")]
         ends = [
             LooseEnd(f"Owner of {_count(len(todos), 'open To-do')}", tuple(todos)),
             LooseEnd(f"Lead on {len(led)} active {_work_noun(len(led))}", tuple(led)),
@@ -343,7 +355,7 @@ def delete_entity(
     required references. The preview of `remove` is the impact preview for all three.
     """
     entry = find(ws, id)
-    if (me := ws.me()) is not None and me.rel == entry.rel:
+    if ws.is_me(entry):
         raise Validation("Me can't be deleted: change Me in Settings first")
     if mode == "replace":
         rw = _Rewrite(entry.id, _replacement(ws, entry, replacement))
@@ -407,12 +419,10 @@ def restore(ws: Workspace, entry: str) -> Trashed:
     """
     found = next((t for t in list_trash(ws) if t.entry == entry), None)
     if found is None:
-        raise NotFound(f"trash entry {entry}")
+        raise NotFound(f"{TRASH}/{entry}")
     for rel in found.files:
         if ws.cache.is_indexed(rel):
-            id = PurePosixPath(rel).stem
-            if ws.cache.resolve(id).status != "missing":
-                raise Exists(f"Id {id}")
+            require_free_id(ws, PurePosixPath(rel).stem)
     ws.store.restore(entry)
     return found
 
@@ -434,16 +444,17 @@ class Use:
     """One place a Broken Reference is written."""
 
     rel: str
+    id: str | None  # the referring file's Id; None for the Workspace config
     title: str
     type: EntityType | None  # the referring file's type
-    field: str  # a frontmatter field, "mention", or "me" in the config
+    field: str  # a frontmatter field, MENTION, or ME
 
     @property
     def targets(self) -> tuple[Target, ...]:
         """What this use says the Id should be. A Mention says nothing."""
-        if self.field == "me":
+        if self.field == ME:
             return (EntityType.PERSON,)
-        if self.field == "mention":
+        if self.field == MENTION:
             return ALL_TARGETS
         return FIELD_BY_NAME[self.type][self.field].targets
 
@@ -471,24 +482,24 @@ class BrokenGroup:
 
 def broken_references(ws: Workspace) -> list[BrokenGroup]:
     """Every Broken Reference and ambiguous reference, grouped by Id, ignoring case."""
-    groups: dict[str, tuple[str, str, list[Use]]] = {}
+    groups: dict[str, BrokenGroup] = {}
 
     def note(id: str, use: Use) -> None:
-        status = ws.cache.resolve(id).status
-        if status != "found":
-            groups.setdefault(id.casefold(), (id, status, []))[2].append(use)
+        found = ws.cache.resolve(id)
+        if found.status == "found":
+            return
+        key = id.casefold()
+        group = groups.get(key) or BrokenGroup(id, found.status, ())
+        groups[key] = BrokenGroup(group.id, group.status, (*group.uses, use))
 
     for f in ws.cache.files():
         for ref in f.references:
-            note(ref.id, Use(f.rel, f.title, f.type, ref.field))
+            note(ref.id, Use(f.rel, f.id, f.title, f.type, ref.field))
         for mention in dict.fromkeys(f.mentions):
-            note(mention, Use(f.rel, f.title, f.type, "mention"))
+            note(mention, Use(f.rel, f.id, f.title, f.type, MENTION))
     if ws.config.me:
-        note(ws.config.me, Use(WORKSPACE_CONFIG, CONFIG_TITLE, None, "me"))
-    return [
-        BrokenGroup(id, status, tuple(uses))  # type: ignore[arg-type]
-        for _, (id, status, uses) in sorted(groups.items())
-    ]
+        note(ws.config.me, Use(WORKSPACE_CONFIG, None, CONFIG_TITLE, None, ME))
+    return [groups[key] for key in sorted(groups)]
 
 
 RepairAction = Literal["replace", "remove", "create"]
@@ -499,20 +510,21 @@ def repair(
     id: str,
     action: RepairAction,
     replacement: str | None = None,
-    type: Target | Literal["infer"] = "infer",
-    dry_run: bool = False,
+    as_type: Target | Literal["infer"] = "infer",
+    dry_run: bool = True,
     expected: Mapping[str, str] | None = None,
 ) -> Outcome:
-    """Repair one Broken Reference group: Replace with…, Remove, or Create (§8.5).
+    """Preview, or apply, one repair of a Broken Reference group: Replace with…, Remove,
+    or Create (§8.5).
 
-    No automatic guessing: Create needs every use to agree on the type, or `type` naming
-    one they allow.
+    No automatic guessing: Create needs every use to agree on the type, or `as_type`
+    naming one they allow.
     """
     group = next((g for g in broken_references(ws) if g.id.casefold() == id.casefold()), None)
     if group is None:
-        raise NotFound(f"Broken reference {id}")
+        raise NotBroken(id)
     if action == "create":
-        return _create_for(ws, group, type, dry_run)
+        return _create_for(ws, group, as_type, dry_run)
     if action == "replace":
         target = find(ws, replacement) if replacement else None
         if target is None:
@@ -534,20 +546,20 @@ def repair(
 
 
 def _create_for(
-    ws: Workspace, group: BrokenGroup, type: Target | Literal["infer"], dry_run: bool
+    ws: Workspace, group: BrokenGroup, as_type: Target | Literal["infer"], dry_run: bool
 ) -> Outcome:
     allowed = group.create_types
     if group.status != "missing":
         raise Validation(f"{group.id} names more than one file, so it can't be created")
-    if type == "infer":
+    if as_type == "infer":
         if len(allowed) != 1:
             why = "pick a type" if allowed else "the references disagree about its type"
             raise Validation(f"Can't create {group.id}: {why}")
-        type = allowed[0]
-    if type not in allowed:
+        as_type = allowed[0]
+    if as_type not in allowed:
         raise Validation(f"Can't create {group.id} as that type: its references need another")
     if dry_run:
         return Outcome(Impact(), applied=False, id=group.id)
     title = group.id.replace("-", " ").strip().title() or group.id
-    saved = create_entity(ws, type, {"title": title}, id=group.id)
+    saved = create_entity(ws, as_type, {"title": title}, id=group.id)
     return Outcome(Impact(), applied=True, id=saved.id, rel=saved.rel)

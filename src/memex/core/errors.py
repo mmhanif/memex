@@ -59,6 +59,26 @@ class HasReferences(CoreError):
         self.referrers = referrers
 
 
+class IdTaken(CoreError):
+    """A file already has this Id, ignoring case (§4.1)."""
+
+    code = "exists"
+
+    def __init__(self, id: str) -> None:
+        super().__init__(f"The Id {id!r} is taken")
+        self.id = id
+
+
+class NotBroken(CoreError):
+    """Nothing refers to this Id as a Broken or ambiguous reference (§8.5)."""
+
+    code = "not_found"
+
+    def __init__(self, id: str) -> None:
+        super().__init__(f"No broken reference to {id!r}")
+        self.id = id
+
+
 class Locked(CoreError):
     """Another program holds the file open, so it can't be replaced (Windows)."""
 

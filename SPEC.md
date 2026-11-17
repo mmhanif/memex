@@ -1272,8 +1272,9 @@ Error body: `{"error": {"code", "message", "field_errors"?: [{field, message, al
 | `POST /api/entities` `{type, fields, body?, template?}` | Create (§8.1) |
 | `PATCH /api/entities/{id}` `{set?, unset?}` + `If-Match` | Field update |
 | `PUT /api/entities/{id}/body` `{body}` + `If-Match` | Body replace |
-| `POST /api/entities/{id}/rename` `{new_id, dry_run}` | Rename id |
-| `POST /api/entities/{id}/delete` `{mode: "plain"\|"replace"\|"remove", replacement?, dry_run}` | Guided delete |
+| `POST /api/entities/{id}/rename` `{new_id, dry_run, hashes?}` | Rename id (`hashes`: the preview's, by path) |
+| `POST /api/entities/{id}/delete` `{mode: "plain"\|"replace"\|"remove", replacement?, dry_run, hashes?}` | Guided delete |
+| `POST /api/entities/{id}/archive` `{archived}` + `If-Match` | Archive (`archived: <today>`) or Unarchive (§8.3) |
 | `POST /api/parse/quick-add` `{text, defaults?}` | Quick-add preview |
 | `POST /api/todos/quick-add` `{text, defaults?}` | Create a To-do from quick-add text |
 | `GET /api/notes/{id}/capture` / `POST /api/notes/{id}/capture` `{hash, rows}` | Inline capture preview and confirm |
@@ -1285,7 +1286,7 @@ Error body: `{"error": {"code", "message", "field_errors"?: [{field, message, al
 | `GET /api/views/glossary` | Glossary |
 | `GET /api/search?q=&limit=&offset=&include_archived=` | Search results plus parsed filters and token errors |
 | `GET /api/bookmarks?label=` / `POST /api/bookmarks` | Bookmarks list and add |
-| `GET /api/broken-references` / `POST /api/broken-references/repair` `{id, action, replacement?}` | Broken references and repair |
+| `GET /api/broken-references` / `POST /api/broken-references/repair` `{id, action, replacement?, type?, dry_run, hashes?}` | Broken references and repair |
 | `GET /api/trash` / `POST /api/trash/restore` `{entry}` | Trash list and restore |
 | `GET /api/templates?type=` / `POST /api/templates/customise` `{type, name}` | Templates |
 | `GET /api/settings` / `PUT /api/settings` + `If-Match` | Both config files (the app-config part needs a relaunch) |
@@ -1366,3 +1367,10 @@ Choices made while writing this spec that no ticket decided. All were reviewed a
 19. **Windows lock retry:** 5 attempts over about 1 s.
 20. **`MEMEX_HOME`** overrides the per-user folder (for tests).
 21. **The built-in Person Template sets `kind: [team-member]`.** `kind` is required, and [Templates for new Entities](https://github.com/mmhanif/memex/issues/20) listed no frontmatter defaults for it.
+22. **Lifecycle details** (§5.5, §8):
+    - A delete whose rewrite skips any file keeps the deleted file, so no Broken References are left behind. Retrying rewrites the rest.
+    - Rename id and repair write `me` first. If that write fails, nothing else changes.
+    - Every rewrite previews first (`dry_run` defaults to true), and the apply sends the preview's hashes back.
+    - **Create** may offer a choice of type when every use allows several (for example, only Mentions). It never guesses.
+    - Archive has its own route, so the server's clock sets the date and only Themes and Persons can be archived.
+    - Each delete gets its own trash entry folder, which restores as one.

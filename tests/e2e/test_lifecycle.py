@@ -53,3 +53,34 @@ def test_delete_with_replace_then_restore_from_trash(app: Page, server: AppState
     app.get_by_role("row", name="themes/old.md").get_by_role("button", name="Restore").click()
     expect(app.get_by_text("The trash is empty.")).to_be_visible()
     assert (root / "themes/old.md").exists()
+
+
+def test_an_entity_pages_broken_reference_is_repaired_inline_after_a_preview(
+    app: Page, server: AppState, root: Path
+):
+    put(root, "projects/p.md", "---\ntitle: P\nstatus: active\nteam: [zed]\n---\nAsk [[zed]].\n")
+    app.goto(f"{origin(server)}/#/e/p")
+
+    group = app.get_by_role("article", name="Broken reference zed")
+    group.get_by_role("button", name="Remove…").click()
+    expect(group).to_contain_text("This updates 2 references in 1 file")
+    group.get_by_role("button", name="Remove", exact=True).click()
+
+    wait_for_disk(root / "projects/p.md", "---\ntitle: P\nstatus: active\n---\nAsk zed.\n")
+
+
+def test_archive_from_the_entity_page_then_unarchive(app: Page, server: AppState, root: Path):
+    put(root, "themes/old.md", "---\ntitle: Old theme\n---\n")
+    put(root, "projects/p.md", "---\ntitle: P\nstatus: active\ntheme: old\n---\n")
+    app.goto(f"{origin(server)}/#/e/old")
+
+    app.get_by_role("button", name="Actions").click()
+    app.get_by_role("menuitem", name="Archive…").click()
+    dialog = app.get_by_role("dialog", name="Archive Old theme")
+    expect(dialog).to_contain_text("1 Project not done or cancelled")
+    dialog.get_by_role("button", name="Archive").click()
+
+    expect(app.get_by_text("Archived on 2026-11-12")).to_be_visible()
+    app.get_by_role("button", name="Unarchive").click()
+    expect(app.get_by_text("Archived on")).to_have_count(0)
+    wait_for_disk(root / "themes/old.md", "---\ntitle: Old theme\n---\n")

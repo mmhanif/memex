@@ -8,7 +8,15 @@ import pytest
 from memex.core import lifecycle
 from memex.core.clock import FixedClock
 from memex.core.entities import entity_detail, list_entities, update_fields
-from memex.core.errors import Exists, HasReferences, NotFound, UnknownReference, Validation
+from memex.core.errors import (
+    Conflict,
+    Exists,
+    HasReferences,
+    IdTaken,
+    NotFound,
+    UnknownReference,
+    Validation,
+)
 from memex.core.schema import EntityType
 from memex.core.search import status_group
 from memex.core.views import people_view
@@ -268,7 +276,7 @@ def test_restore_fails_cleanly_when_the_id_has_since_been_reused(b: Builder):
     lifecycle.delete_entity(b.ws, "alice", dry_run=False)
     b.note("notes/alice.md", "# Someone else\n")
 
-    with pytest.raises(Exists, match="alice"):
+    with pytest.raises(IdTaken, match="alice"):
         lifecycle.restore(b.ws, "20261112-000000")
 
     assert (b.root / STAMP / "people/alice.md").exists()
@@ -321,7 +329,7 @@ def test_create_makes_the_entity_the_references_imply(b: Builder):
     [group] = lifecycle.broken_references(b.ws)
     assert group.create_types == (EntityType.PERSON,)
 
-    done = lifecycle.repair(b.ws, "zed", "create")
+    done = lifecycle.repair(b.ws, "zed", "create", dry_run=False)
 
     assert done.rel == "people/zed.md"
     assert b.ws.cache.resolve("zed").status == "found"
@@ -335,7 +343,7 @@ def test_create_is_disabled_when_the_references_disagree_about_the_type(b: Build
     assert group.create_types == ()
 
     with pytest.raises(Validation, match="disagree"):
-        lifecycle.repair(b.ws, "zed", "create")
+        lifecycle.repair(b.ws, "zed", "create", dry_run=False)
 
 
 def test_repair_replace_rewrites_every_occurrence(b: Builder):
@@ -370,3 +378,41 @@ def test_repair_remove_follows_the_delete_rules(b: Builder):
 
     project = b.ws.cache.get("projects/p.md")
     assert project is not None and "team" not in project.fields and project.body == "See zed.\n"
+
+
+def test_rename_changes_nothing_when_me_cant_be_updated(b: Builder):
+    b.person("alice")
+    b.config_me("alice")
+    b.todo("t1", owner="alice")
+    preview = lifecycle.rename_id(b.ws, "alice", "alice-smith", dry_run=True)
+    config = b.read(".memex/config.yaml")
+    b.file(".memex/config.yaml", config + "# edited outside\n")
+
+    with pytest.raises(Conflict):
+        lifecycle.rename_id(b.ws, "alice", "alice-smith", dry_run=False, expected=preview.hashes)
+
+    assert (b.root / "people/alice.md").exists()
+    assert "owner: alice\n" in b.read("todos/t1.md")
+
+
+def test_archiving_work_is_refused(b: Builder):
+    b.project("p")
+    project = b.ws.cache.get("projects/p.md")
+    assert project is not None
+
+    with pytest.raises(Validation, match="Only Themes and Persons"):
+        lifecycle.archive(b.ws, "p", project.hash)
+
+
+def test_repair_previews_unless_told_to_apply(b: Builder):
+    b.project("p", team=["zed"])
+
+    preview = lifecycle.repair(b.ws, "zed", "remove")
+
+    assert preview.applied is False and preview.impact.summary == "updates 1 reference in 1 file"
+    assert "zed" in b.read("projects/p.md")
+
+
+def test_restoring_an_unknown_trash_entry_names_its_path(b: Builder):
+    with pytest.raises(NotFound, match=r"\.memex/trash/nope"):
+        lifecycle.restore(b.ws, "nope")

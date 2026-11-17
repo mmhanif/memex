@@ -15,23 +15,21 @@ import { html, meId, reloadTree, sameId, viewVersion } from "./state.js";
  * @typedef {import("./fields.js").Summary} Summary
  * @typedef {{label: string, items: Summary[]}} LooseEnd
  * @typedef {{id: string, title: string, type: string, path: string, hash?: string,
- *   fields?: Record<string, any>, loose_ends?: LooseEnd[]}} Target
+ *   fields?: Record<string, any>, archivable?: boolean, loose_ends?: LooseEnd[]}} Target
  * @typedef {{path: string, title: string, hash: string, fields: string[], count: number}} Edit
  * @typedef {{path: string, title: string, field: string}} Blocker
  * @typedef {{summary: string, references: number, edits: Edit[], blocked: Blocker[]}} Impact
  * @typedef {{impact: Impact, hashes: Record<string, string>, applied: boolean,
  *   skipped: {path: string, code: string, message: string}[], id: string | null,
  *   path: string | null, trash: string | null}} Outcome
- * @typedef {{kind: "rename" | "archive" | "delete", target: Target, after?: string}} Open
+ * @typedef {{kind: "rename" | "archive" | "delete", target: Target, after?: string}} LifecycleRequest
  */
 
-const ARCHIVABLE = ["theme", "person"];
-
 /** The open lifecycle dialog, if any. */
-export const lifecycleDialog = signal(/** @type {Open | null} */ (null));
+export const lifecycleDialog = signal(/** @type {LifecycleRequest | null} */ (null));
 
 /**
- * @param {Open["kind"]} kind
+ * @param {LifecycleRequest["kind"]} kind
  * @param {Target} target
  * @param {string} [after] where to go once a delete is done (default: Home)
  */
@@ -43,11 +41,13 @@ function close() {
   lifecycleDialog.value = null;
 }
 
-/** Today on this machine, as `YYYY-MM-DD` (dates are local, §4.2). */
-function today() {
-  const d = new Date();
-  const pad = (/** @type {number} */ n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+/**
+ * Archive or Unarchive on the server, which sets today's date (§8.3).
+ * @param {Target} target
+ * @param {boolean} archived
+ */
+function setArchived(target, archived) {
+  return request("POST", `${entityUrl(target)}/archive`, { json: { archived }, ifMatch: target.hash });
 }
 
 /** @param {Target} target */
@@ -62,7 +62,7 @@ function entityUrl(target) {
 export function Actions({ detail, readOnly }) {
   const [open, setOpen] = useState(false);
   const isMe = sameId(meId() ?? "", detail.id);
-  /** @param {Open["kind"]} kind */
+  /** @param {LifecycleRequest["kind"]} kind */
   const pick = (kind) => {
     setOpen(false);
     openLifecycle(kind, detail);
@@ -76,7 +76,7 @@ export function Actions({ detail, readOnly }) {
       ${open &&
       html`<ul class="menu" role="menu" onKeyDown=${(/** @type {KeyboardEvent} */ e) => e.key === "Escape" && setOpen(false)}>
         <li><button type="button" role="menuitem" onClick=${() => pick("rename")}><${Icon} name="pencil" /> Rename id…</button></li>
-        ${ARCHIVABLE.includes(detail.type) &&
+        ${detail.archivable &&
         !detail.fields?.archived &&
         html`<li><button type="button" role="menuitem" disabled=${isMe} title=${isMe ? "Me can't be archived" : undefined}
           onClick=${() => pick("archive")}>Archive…</button></li>`}
@@ -98,7 +98,7 @@ export function ArchivedBar({ detail, readOnly, onSaved }) {
   if (!archived) return null;
   async function unarchive() {
     try {
-      await request("PATCH", entityUrl(detail), { json: { unset: ["archived"] }, ifMatch: detail.hash });
+      await setArchived(detail, false);
       setError(null);
     } catch (e) {
       setError(describe(e));
@@ -135,14 +135,14 @@ export function LifecycleDialog() {
   `;
 }
 
-/** @param {Open} open */
+/** @param {LifecycleRequest} open */
 function dialogTitle(open) {
   const verb = { rename: "Rename id of", archive: "Archive", delete: "Delete" }[open.kind];
   return `${verb} ${open.target.title}`;
 }
 
 /** The impact preview: which files change, and how. @param {{impact: Impact}} props */
-function ImpactList({ impact }) {
+export function ImpactList({ impact }) {
   if (!impact.edits.length) return html`<p class="muted">Nothing else refers to it.</p>`;
   return html`
     <p class="impact-summary">This ${impact.summary}:</p>
@@ -236,7 +236,7 @@ function ArchiveForm({ target }) {
 
   async function archive() {
     try {
-      await request("PATCH", entityUrl(target), { json: { set: { archived: today() } }, ifMatch: target.hash });
+      await setArchived(target, true);
       viewVersion.value += 1;
       close();
     } catch (e) {

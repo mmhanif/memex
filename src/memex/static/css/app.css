@@ -573,3 +573,6 @@ button.danger:disabled { opacity: 0.5; }
 .repair-actions span { display: inline-flex; gap: 4px; }
 table.trash { width: 100%; border-collapse: collapse; }
 table.trash th, table.trash td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.broken-group.compact { margin: 6px 0; padding: 8px 12px; }
+.repair-preview { margin-top: 8px; }
+.inline-repairs { margin-top: 4px; }
