@@ -305,6 +305,9 @@ ALL_GETS = [
     "/api/views/portfolio?mode=board&kind=deliverable&themes=x",
     "/api/views/portfolio?mode=outline&include_archived=true",
     "/api/views/person/ada-lovelace",
+    "/api/views/glossary",
+    "/api/bookmarks",
+    "/api/bookmarks?label=ref",
     "/api/search?q=ada",
     "/api/search?q=type:note%20@nobody&limit=5&offset=5&include_archived=false",
 ]

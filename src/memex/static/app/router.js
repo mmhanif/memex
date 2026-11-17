@@ -17,7 +17,7 @@ export function parseRoute(hash) {
   if (name === "e" && rest.length) return { name: "entity", id: decodeURIComponent(rest.join("/")) };
   if (name === "people" && rest.length) return { name: "person", id: decodeURIComponent(rest.join("/")) };
   if (name === "todos") return { name: "todos", view: rest[0] || "mine" };
-  if (name === "search") return { name: "search", query: new URLSearchParams(search) };
+  if (name === "search" || name === "bookmarks") return { name, query: new URLSearchParams(search) };
   if (name === "portfolio") {
     return { name: "portfolio", view: rest[0] || "board", query: new URLSearchParams(search) };
   }

@@ -1,5 +1,5 @@
 """Read-only views over the parse cache: To-dos, Dashboard, People, Person View,
-Portfolio (SPEC §6.2, §11.3, §11.4, §11.6).
+Portfolio, Glossary (SPEC §6.2, §10.2, §11.3, §11.4, §11.6).
 
 Views read leniently (§4.5): a To-do with a bad `status` counts as open and a bad
 `due` as undated. Ids compare ignoring case (§4.1).
@@ -13,7 +13,9 @@ from typing import Literal, cast
 from memex.core.cache import CachedFile
 from memex.core.entities import find, refers
 from memex.core.errors import NotFound, Validation
+from memex.core.names import fold
 from memex.core.schema import FINISHED_TODO, WORK_STATUSES, EntityType, parse_date
+from memex.core.textindex import texts
 from memex.core.workspace import BOOKMARKS, Workspace
 
 TodoViewName = Literal["mine", "waiting-on-them", "waiting-on-me"]
@@ -518,3 +520,39 @@ def portfolio_outline(
         () if wanted else tuple(sorted(without_project, key=_by_title)),
         theme_chips(ws, include_archived),
     )
+
+
+# Glossary (§10.2)
+
+
+@dataclass(frozen=True)
+class GlossaryTerm:
+    file: CachedFile
+    aliases: tuple[str, ...]
+    definition: str  # the body
+
+
+@dataclass(frozen=True)
+class GlossaryGroup:
+    letter: str  # "A" to "Z", or "#" for terms that don't start with a letter
+    terms: tuple[GlossaryTerm, ...]
+
+
+@dataclass(frozen=True)
+class Glossary:
+    groups: tuple[GlossaryGroup, ...]
+
+
+def glossary_view(ws: Workspace) -> Glossary:
+    """Every Glossary Term A to Z by title, ignoring case and accents, grouped by letter."""
+    terms = sorted(
+        (f for f in ws.cache.files() if f.type is EntityType.GLOSSARY_TERM),
+        key=lambda f: (fold(f.title), f.title, f.id),
+    )
+    groups: dict[str, list[GlossaryTerm]] = {}
+    for f in terms:
+        first = fold(f.title)[:1].upper()
+        letter = first if "A" <= first <= "Z" else "#"
+        aliases = tuple(texts(f.fields.get("aliases")))
+        groups.setdefault(letter, []).append(GlossaryTerm(f, aliases, f.body))
+    return Glossary(tuple(GlossaryGroup(k, tuple(v)) for k, v in sorted(groups.items())))

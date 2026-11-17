@@ -1,4 +1,4 @@
-"""Quick-add and the view routes (SPEC §6.2, §6.3, §11.3, §11.4, §11.6, §17.2)."""
+"""Quick-add and the view routes (SPEC §6.2, §6.3, §10.2, §11.3, §11.4, §11.6, §17.2)."""
 
 from collections.abc import Iterable
 from typing import Annotated
@@ -181,6 +181,27 @@ def portfolio(
         "without_project": [summary(d) for d in outline.without_project],
         "chips": [summary(t) for t in outline.chips],
         "names": _work_names(ws, shown),
+    }
+
+
+@router.get("/views/glossary")
+def glossary(ws: WS) -> dict:
+    return {
+        "groups": [
+            {
+                "letter": g.letter,
+                "terms": [
+                    {
+                        "id": t.file.id,
+                        "title": t.file.title,
+                        "aliases": list(t.aliases),
+                        "definition": t.definition,
+                    }
+                    for t in g.terms
+                ],
+            }
+            for g in views.glossary_view(ws).groups
+        ]
     }
 
 
