@@ -94,8 +94,9 @@ class Workspace:
     def trash(self, rel: str) -> str:
         """Files-page Delete (§8.4, §11.8): to trash, unless something outside refers in.
 
-        Returns the trash entry's path. The guided delete with an impact preview
-        (Replace with… / Remove references) is not here yet.
+        Returns the trash entry's path. A file with incoming references goes through the
+        guided delete instead (`lifecycle.delete_entity`, with its impact preview); a folder
+        is refused while anything inside is referred to from outside.
         """
         _check_files_page_path(rel)
         doomed = self.cache.under(rel)

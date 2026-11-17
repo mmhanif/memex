@@ -42,3 +42,8 @@ def _first_free(base: str, taken: set[str]) -> str:
         n += 1
         candidate = f"{base}-{n}"
     return candidate
+
+
+def is_valid_id(id: str) -> bool:
+    """Whether `id` already follows the Id rules: what they'd make of it is itself (§5.5)."""
+    return make_id(id, set()) == id

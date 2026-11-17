@@ -168,20 +168,79 @@ class Store:
     def trash(self, rel: str, stamp: str) -> str:
         """Move a file or folder to `.memex/trash/<stamp>/<rel>` (§8.4); return that path.
 
-        A link inside a trashed folder moves as a link; its target is never touched (R13).
+        Each delete gets its own entry folder (`<stamp>-2`, … within one second), so an
+        entry restores as one. A link inside a trashed folder moves as a link; its target
+        is never touched (R13).
         """
         if self.read_only:
             raise ReadOnly()
         source = self._existing(rel)
-        entry, n = f"{TRASH}/{stamp}/{rel}", 1
-        while (self.root / entry).exists() or (self.root / entry).is_symlink():
+        name, n = stamp, 1
+        while (self.root / TRASH / name).exists():
             n += 1
-            entry = f"{TRASH}/{stamp}-{n}/{rel}"
+            name = f"{stamp}-{n}"
+        entry = f"{TRASH}/{name}/{rel}"
         target = self.root / entry
         with self._lock(source):
             target.parent.mkdir(parents=True, exist_ok=True)
             _replace_with_retry(source, target, rel)
         self._changed(rel)
+        return entry
+
+    def trash_entries(self) -> list[TrashEntry]:
+        """Every trash entry, by name."""
+        trash = self.root / TRASH
+        if not trash.is_dir():
+            return []
+        return [
+            self._trash_entry(p.name)
+            for p in sorted(trash.iterdir())
+            if p.is_dir() and not p.is_symlink()
+        ]
+
+    def _trash_entry(self, name: str) -> TrashEntry:
+        folder = self.root / TRASH / name
+        files: list[str] = []
+        for dirpath, dirnames, filenames in os.walk(folder, followlinks=False):
+            dirnames.sort()
+            links = [d for d in dirnames if Path(dirpath, d).is_symlink()]
+            for f in sorted(filenames + links):
+                files.append(Path(dirpath, f).relative_to(folder).as_posix())
+        # What was deleted: go down while a folder holds just one folder.
+        top = folder
+        while True:
+            children = list(top.iterdir())
+            if len(children) != 1:
+                break
+            top = children[0]
+            if not top.is_dir() or top.is_symlink():
+                break
+        return TrashEntry(name, top.relative_to(folder).as_posix(), tuple(sorted(files)))
+
+    def restore(self, name: str) -> TrashEntry:
+        """Put a trash entry's files back at their original paths, only if every path is
+        free (`exists` otherwise, and nothing moves)."""
+        if self.read_only:
+            raise ReadOnly()
+        folder = self.root / TRASH / name
+        if "/" in name or "\\" in name or name in ("", ".", "..") or not folder.is_dir():
+            raise NotFound(f"trash entry {name}")
+        entry = self._trash_entry(name)
+        targets = [(rel, resolve_workspace_path(self.root, rel)) for rel in entry.files]
+        for rel, target in targets:
+            if target.exists() or Path(self.root, rel).is_symlink():
+                raise Exists(rel)
+        if not entry.files:  # an empty folder was deleted
+            target = resolve_workspace_path(self.root, entry.path)
+            if target.exists():
+                raise Exists(entry.path)
+            target.mkdir(parents=True)
+        for rel, target in targets:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            _replace_with_retry(folder / rel, target, rel)
+        for dirpath, _, _ in sorted(os.walk(folder), key=lambda w: -len(w[0])):
+            os.rmdir(dirpath)  # empty now: only folders were left
+        self._changed(entry.path)
         return entry
 
     def _existing(self, rel: str) -> Path:
@@ -208,6 +267,15 @@ class Store:
     def _lock(self, path: Path) -> threading.Lock:
         with self._locks_guard:
             return self._locks[os.path.normcase(path)]
+
+
+@dataclass(frozen=True)
+class TrashEntry:
+    """One delete in the trash: `.memex/trash/<name>/…` (§8.4)."""
+
+    name: str  # `<YYYYMMDD-HHMMSS>`, or with `-2`, … for a second delete in the same second
+    path: str  # what was deleted, at its original path
+    files: tuple[str, ...]  # every file in it, at its original path
 
 
 def _read_bytes(path: Path, rel: str) -> bytes:

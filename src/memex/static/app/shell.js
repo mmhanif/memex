@@ -7,10 +7,12 @@ import { EntityPage } from "./entity.js";
 import { TYPES } from "./fields.js";
 import { FilesPage } from "./files.js";
 import { Icon } from "./icons.js";
+import { LifecycleDialog } from "./lifecycle.js";
 import { NewDialog, openNew } from "./newform.js";
 import { openPalette, Palette } from "./palette.js";
 import { PeoplePage, PersonPage } from "./people.js";
 import { PortfolioPage } from "./portfolio.js";
+import { BrokenPage, TrashPage } from "./repair.js";
 import { route } from "./router.js";
 import { SearchPage } from "./search.js";
 import { SettingsPage } from "./settings.js";
@@ -44,6 +46,7 @@ export function App() {
         </main>
       </div>
       <${NewDialog} />
+      <${LifecycleDialog} />
       <${Palette} />
     </div>
   `;
@@ -154,6 +157,8 @@ function View() {
   if (current.name === "todos") return html`<${TodosPage} view=${current.view ?? "mine"} />`;
   if (current.name === "people") return html`<${PeoplePage} />`;
   if (current.name === "portfolio") return html`<${PortfolioPage} view=${current.view ?? "board"} query=${current.query} />`;
+  if (current.name === "broken") return html`<${BrokenPage} />`;
+  if (current.name === "trash") return html`<${TrashPage} />`;
   if (current.name === "search") return html`<${SearchPage} query=${current.query ?? new URLSearchParams()} />`;
   if (current.name === "person" && current.id) return html`<${PersonPage} key=${current.id} id=${current.id} />`;
   if (current.name === "entity" && current.id) return html`<${EntityPage} key=${current.id} id=${current.id} />`;

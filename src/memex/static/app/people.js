@@ -7,6 +7,7 @@ import { describe } from "./api.js";
 import { BodySection, LinkList, Properties, Title, Warnings } from "./entity.js";
 import { initials, typeLabel, useCandidates, writeField } from "./fields.js";
 import { Icon } from "./icons.js";
+import { Actions, ArchivedBar } from "./lifecycle.js";
 import { openNew } from "./newform.js";
 import { entityHref, fileHref, personHref } from "./router.js";
 import { html, meId, sameId, tree, useView, viewVersion } from "./state.js";
@@ -110,13 +111,14 @@ export function PersonPage({ id }) {
       <header class="entity-head">
         <span class="type-badge">Person</span>
         <${Title} detail=${person} readOnly=${readOnly} onSaved=${reload} />
-        ${person.fields.archived && html`<span class="status status-cancelled">archived ${person.fields.archived}</span>`}
         <button type="button" disabled=${readOnly}
           onClick=${() => openNew("note", { people: me && !sameId(me, person.id) ? [me, person.id] : [person.id] }, "one-on-one")}>
           <${Icon} name="plus" /> New 1:1
         </button>
         <a class="button" href=${fileHref(person.path)} title="Open the raw file"><${Icon} name="file-text" /> Open file</a>
+        <${Actions} detail=${person} readOnly=${readOnly} />
       </header>
+      <${ArchivedBar} detail=${person} readOnly=${readOnly} onSaved=${reload} />
       <${Warnings} detail=${person} />
       <${Properties} detail=${person} readOnly=${readOnly} onSaved=${reload} />
       ${view.directs.length > 0 &&

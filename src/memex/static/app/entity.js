@@ -9,6 +9,7 @@ import { BodyDoc } from "./doc.js";
 import { FIELDS, FieldInput, typeLabel, useCandidates } from "./fields.js";
 import { DocBanners, RawText, SaveStatus } from "./files.js";
 import { Icon } from "./icons.js";
+import { Actions, ArchivedBar } from "./lifecycle.js";
 import { renderMarkdown } from "./markdown.js";
 import { openNew } from "./newform.js";
 import { entityHref, fileHref, personHref } from "./router.js";
@@ -26,6 +27,7 @@ import { html, openDoc, resolveMention, tree, viewVersion } from "./state.js";
  *   todos: Summary[],
  *   notes: Summary[],
  *   mentioned_in: Summary[],
+ *   loose_ends: import("./lifecycle.js").LooseEnd[],
  * }} Detail
  */
 
@@ -63,7 +65,9 @@ export function EntityPage({ id }) {
         <span class="type-badge">${typeLabel(detail.type)}</span>
         <${Title} detail=${detail} readOnly=${readOnly} onSaved=${load} />
         <a class="button" href=${fileHref(detail.path)} title="Open the raw file"><${Icon} name="file-text" /> Open file</a>
+        <${Actions} detail=${detail} readOnly=${readOnly} />
       </header>
+      <${ArchivedBar} detail=${detail} readOnly=${readOnly} onSaved=${load} />
       <${Warnings} detail=${detail} />
       <${Properties} detail=${detail} readOnly=${readOnly} onSaved=${load} />
       <${BodySection} detail=${detail} readOnly=${readOnly} />
@@ -81,6 +85,7 @@ export function Warnings({ detail }) {
     ${detail.broken.length > 0 &&
     html`<div class="banner warn" role="status">
       <span>Broken references: ${detail.broken.map((b) => `${b.field} → ${b.id} (${brokenLabel(b.status)})`).join("; ")}</span>
+      <a class="button" href="#/broken">Repair…</a>
     </div>`}
   `;
 }

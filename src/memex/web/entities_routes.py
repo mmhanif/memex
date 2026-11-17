@@ -7,7 +7,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Header, Query, Response
 from pydantic import BaseModel, Field
 
-from memex.core import entities
+from memex.core import entities, lifecycle
 from memex.core.cache import CachedFile
 from memex.core.entities import BrokenReference, Saved
 from memex.core.schema import type_named
@@ -87,6 +87,13 @@ def detail_json(ws: Workspace, detail: entities.EntityDetail) -> dict:
         "todos": [summary(f) for f in detail.todos],
         "notes": [summary(f) for f in detail.notes],
         "mentioned_in": [summary(f) for f in detail.mentioned_in],
+        # What archiving would leave hanging (§8.3): Themes and Persons only.
+        "loose_ends": [
+            {"label": e.label, "items": [summary(f) for f in e.items]}
+            for e in lifecycle.loose_ends(ws, detail.file.id)
+        ]
+        if detail.file.type in lifecycle.ARCHIVABLE
+        else [],
     }
 
 

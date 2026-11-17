@@ -555,3 +555,21 @@ select {
 .result { padding: 8px 0; border-top: 1px solid var(--border); }
 .result-head { display: flex; align-items: center; gap: 8px; }
 .result-context, .result-snippet { font-size: 13px; margin-left: 26px; }
+
+/* Lifecycle: Actions menu, impact preview, Broken references, Trash (§5.5, §8) */
+.actions-menu { margin-left: 0; }
+button.danger { background: var(--danger, #b42318); border-color: var(--danger, #b42318); color: #fff; }
+button.danger:disabled { opacity: 0.5; }
+.impact-summary { margin: 12px 0 4px; }
+.impact, .loose-ends { margin: 0; padding-left: 18px; max-height: 30vh; overflow: auto; }
+.impact .muted { margin-left: 6px; }
+.delete-choice { margin: 12px 0 0; border: 1px solid var(--border); border-radius: var(--radius); }
+.delete-choice select { margin: 4px 0 4px 22px; }
+.repair-page { max-width: 900px; }
+.broken-group { margin: 16px 0; padding: 12px 16px; border: 1px solid var(--border); border-radius: var(--radius); }
+.broken-group h2 { margin: 0 0 8px; font-size: 15px; display: flex; gap: 8px; align-items: center; }
+.broken-group ul { margin: 0 0 8px; padding-left: 18px; }
+.repair-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.repair-actions span { display: inline-flex; gap: 4px; }
+table.trash { width: 100%; border-collapse: collapse; }
+table.trash th, table.trash td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }

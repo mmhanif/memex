@@ -1310,7 +1310,8 @@ src/memex/
     store.py                   hash-checked atomic writes, per-path locks
     cache.py                   parse cache, reverse lookups, Broken References
     watch.py                   watchfiles → cache → change events
-    entities.py                create, update, rename, archive, delete, trash, repair
+    entities.py                create, update, read (Entity page)
+    lifecycle.py               Rename id, archive, guided delete, trash, repair
     templates.py  templates/   Template resolution and the built-in set
     todos.py  quickadd.py  capture.py
     search.py  views.py  bookmarks.py

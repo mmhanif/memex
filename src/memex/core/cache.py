@@ -266,20 +266,42 @@ def _title(fields: Mapping[str, Any], body: str, stem: str) -> str:
 
 
 def _mentions(body: str) -> tuple[str, ...]:
-    prose = _INLINE_CODE.sub(" ", _without_fenced_code(body))
-    return tuple(m.group(1).strip() for m in _MENTION.finditer(prose))
+    return tuple(m.id for m in mention_spans(body))
+
+
+@dataclass(frozen=True)
+class MentionSpan:
+    """One `[[id]]` in a body: where it is (`start`, `end`) and the Id it names."""
+
+    start: int
+    end: int
+    id: str
+
+
+def mention_spans(body: str) -> list[MentionSpan]:
+    """Every Mention in `body`, outside fenced and inline code (SPEC Appendix A.7)."""
+    masked = _INLINE_CODE.sub(lambda m: _blank(m.group()), _without_fenced_code(body))
+    return [MentionSpan(m.start(), m.end(), m.group(1).strip()) for m in _MENTION.finditer(masked)]
+
+
+def _blank(text: str) -> str:
+    """Same length, line breaks kept, everything else a space: offsets stay valid."""
+    return "".join(c if c == "\n" else " " for c in text)
 
 
 def _without_fenced_code(body: str) -> str:
+    """`body` with fenced code blanked out (same length)."""
     kept: list[str] = []
     fence: str | None = None
     for line in body.splitlines(keepends=True):
         opener = _FENCE.match(line)
         if fence is None and opener:
             fence = opener.group(1)
+            kept.append(_blank(line))
         elif fence is not None:
             if opener and opener.group(1)[0] == fence[0] and len(opener.group(1)) >= len(fence):
                 fence = None
+            kept.append(_blank(line))
         else:
             kept.append(line)
     return "".join(kept)

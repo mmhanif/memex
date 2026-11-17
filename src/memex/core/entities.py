@@ -19,6 +19,7 @@ from memex.core.errors import (
     AmbiguousId,
     BadPath,
     Conflict,
+    Exists,
     FieldProblem,
     MeNotSet,
     NotFound,
@@ -71,12 +72,15 @@ def create_entity(
     body: str | None = None,
     template: str | None = None,
     folder: str | None = None,
+    id: str | None = None,
 ) -> Saved:
     """Create an Entity, or a Note when `entity_type` is None (§8.1).
 
     Template defaults first, the caller's fields over them, then validate, pick the
     Id, and write with `created: today`. A Note goes in `notes/` unless `folder` names
     another, `""` being the Workspace root (Files page "New file here", §7.4).
+    `id` takes a given Id instead of one made from the title: Broken Reference **Create**
+    (§8.5) makes the file the references already name.
     """
     _refuse_automatic(fields)
     folder = _note_folder(entity_type, folder)
@@ -112,7 +116,12 @@ def create_entity(
 
     dated = entity_type is EntityType.TODO or (entity_type is None and "date" in merged)
     date = today if entity_type is EntityType.TODO else parse_date(merged.get("date"))
-    new_id = make_id(title, {f.id for f in ws.cache.files()}, date if dated else None)
+    if id is not None:
+        if ws.cache.resolve(id).status != "missing":
+            raise Exists(f"Id {id}")
+        new_id = id
+    else:
+        new_id = make_id(title, {f.id for f in ws.cache.files()}, date if dated else None)
     rel = f"{folder}/{new_id}.md" if folder else f"{new_id}.md"
     text = frontmatter.with_fields("", _ordered(entity_type, merged))
     new_hash = ws.store.create(rel, text + (t_body if body is None else body))
@@ -138,6 +147,8 @@ def update_fields(
             set["completed"] = ws.clock.today()
         elif set["status"] == "open":
             unset.append("completed")
+    if set.get("archived") and (me := ws.me()) is not None and me.rel == entry.rel:
+        raise Validation("Me can't be archived", [FieldProblem("archived", "Me can't be archived")])
     _validate(ws, entry.type, merged, changed=[*set, *unset], self_id=entry.id)
     new_hash = ws.store.update_fields(
         entry.rel, expected_hash, set=_ordered(entry.type, set, keep_order=True), unset=unset
@@ -253,7 +264,7 @@ def _validate(
 
 
 def _check_reference(ws: Workspace, spec: Field, ref: str, source: str) -> None:
-    expected = _describe_targets(spec.targets)
+    expected = describe_targets(spec.targets)
     found = ws.cache.resolve(ref)
     if found.status == "ambiguous":
         message = f"{ref!r} names more than one file"
@@ -272,7 +283,7 @@ def _suggest(ws: Workspace, ref: str, targets: tuple[Target, ...]) -> list[str]:
     return difflib.get_close_matches(ref, candidates, n=3, cutoff=0.6)
 
 
-def _describe_targets(targets: tuple[Target, ...]) -> str:
+def describe_targets(targets: tuple[Target, ...]) -> str:
     names = [t.display_name if t else "Note" for t in targets]
     if len(names) == 1:
         return f"a {names[0]}"
