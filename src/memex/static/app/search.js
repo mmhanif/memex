@@ -11,6 +11,7 @@ import { typeLabel } from "./fields.js";
 import { Icon } from "./icons.js";
 import { entityHref, fileHref, navigate } from "./router.js";
 import { html, viewVersion } from "./state.js";
+import { fold } from "./text.js";
 
 /**
  * @typedef {{text: string, highlights: [number, number][]}} Snippet
@@ -214,11 +215,6 @@ export function wordMatches(text, q) {
   }
   spans.sort((a, b) => a[0] - b[0]);
   return spans;
-}
-
-/** @param {string} text */
-function fold(text) {
-  return text.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
 /** A title with the query's words marked. @param {{text: string, q: string}} props */

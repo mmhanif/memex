@@ -6,6 +6,7 @@ import { useState } from "preact/hooks";
 import { initials } from "./fields.js";
 import { Icon } from "./icons.js";
 import { html, meId, sameId } from "./state.js";
+import { fold } from "./text.js";
 
 /**
  * @typedef {import("./fields.js").Summary} Summary
@@ -21,11 +22,6 @@ import { html, meId, sameId } from "./state.js";
  *   placeholder?: string,
  * }} PickerProps
  */
-
-/** @param {string} text */
-function fold(text) {
-  return text.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase();
-}
 
 /**
  * The people whose name matches the query, archived ones split off.

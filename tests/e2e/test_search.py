@@ -118,3 +118,11 @@ def test_search_page_counts_by_type_and_demotes_done_work(app: Page, server: App
     app.get_by_role("button", name="All 3").click()
     expect(app.locator(".result")).to_have_count(3)
     expect(app.locator(".filter-chip")).to_have_count(0)
+
+
+def test_palette_command_matching_ignores_marks_outside_the_latin_combining_block(app: Page):
+    # U+1DC4 is a combining mark outside U+0300-U+036F (#60): "dav" is a prefix match.
+    score = app.evaluate(
+        "async () => (await import('/static/app/palette.js')).commandScore('dav', 'Da\\u1dc4vid')"
+    )
+    assert score == 1

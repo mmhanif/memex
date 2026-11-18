@@ -253,3 +253,23 @@ def test_person_pickers_highlight_matches_and_hide_archived_people(
     text = (root / "projects/ledger.md").read_text("utf-8")
     assert "lead: alice-smith" in text
     assert "stakeholders: [priya-shah]" in text
+
+
+def test_person_picker_ignores_marks_outside_the_latin_combining_block(
+    app: Page, server: AppState, root: Path
+):
+    # Hebrew niqqud (U+05B0-U+05C7) are combining marks outside U+0300-U+036F (#60).
+    david = "\u05d3\u05b8\u05bc\u05d5\u05b4\u05d3"
+    put(root, "people/david.md", f"---\ntitle: {david}\nkind: [team-member]\n---\n")
+    app.goto(f"{origin(server)}/#/people")
+    expect(app.get_by_text(david)).to_be_visible()
+    app.get_by_role("button", name="New…").click()
+    app.get_by_role("menuitem", name="Project").click()
+    dialog = app.get_by_role("dialog", name="New Project")
+    expect(dialog.get_by_label("Title")).to_be_focused()
+
+    dialog.get_by_role("combobox", name="Lead").fill("\u05d3\u05d5\u05d3")
+
+    options = dialog.locator(".picker-popover").get_by_role("option")
+    expect(options).to_have_count(1)
+    expect(options).to_contain_text(david)
