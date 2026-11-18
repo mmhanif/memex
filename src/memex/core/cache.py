@@ -175,7 +175,7 @@ class Cache:
 
     def _load_into(self, rel: str) -> None:
         try:
-            entry = _load(self.root, rel)
+            entry = load_file(self.root, rel)
         except FileNotFoundError, IsADirectoryError, NotADirectoryError:
             return  # gone (or never a file) by the time we looked: a later hint catches up
         self._put(entry)
@@ -224,7 +224,8 @@ class Cache:
         return True
 
 
-def _load(root: Path, rel: str) -> CachedFile:
+def load_file(root: Path, rel: str) -> CachedFile:
+    """Parse the file at `root/rel` as the index would (also used for files in trash)."""
     path = root / rel
     raw = path.read_bytes()
     pure = PurePosixPath(rel)

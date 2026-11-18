@@ -604,7 +604,8 @@ All three go through §5.3.
     Remove is **blocked** by required references (a Deliverable's `project`, a To-do's `owner`/`requester`, `me` in config), leaving only Replace.
 - **No cascade.** **Me can't be deleted;** change Me in Settings first.
 - **Trash:**
-  - A deleted file moves to `.memex/trash/<YYYYMMDD-HHMMSS>/<original relative path>`.
+  - A deleted file moves to `.memex/trash/<YYYYMMDD-HHMMSS>/<original relative path>`. Beside each entry, `<YYYYMMDD-HHMMSS>.json` keeps the deleted path and what the delete did to references (none, replaced with which Entity, or removed, and how many).
+  - `#/trash` groups deletes by trash stamp (the date and the mono stamp folder). Each row shows the type icon, title, original path and what the delete did to references. When Restore can't succeed (the Id is now another file's, or the path is taken) the row says why and Restore is disabled, before anyone clicks.
   - **Restore** puts it back at its original path only if the Id and the path are both free. Rewritten references are not restored.
   - Trash is never emptied automatically.
   - Files in trash never count for Id clashes and are never read as Entities.
@@ -612,11 +613,12 @@ All three go through §5.3.
 
 ### 8.5 Broken references page and repair
 
-- `#/broken` lists every Broken Reference and ambiguous reference, grouped by the missing Id.
+- `#/broken` lists every Broken Reference and ambiguous reference, grouped by the missing Id. Each group is an outline block: the Id in mono, a **missing** or **ambiguous** badge, the type its references imply ("implies Person", or "Theme or Person?" when they disagree) and the count; under it, a row per occurrence with the referring file's title, path, the field (or Mention) as a chip, and a Mention's surrounding words.
 - Each group, and each inline flag, offers three repairs:
   - **Replace with…:** pick an Entity of the right type; every occurrence is rewritten.
   - **Remove:** the same rules as delete (required references can't be removed).
-  - **Create:** a new Entity with that Id, of the type its references imply. Disabled if the references disagree about the type.
+  - **Create:** a new Entity with that Id, of the type its references imply. Disabled if the references disagree about the type, with the reason shown under the group.
+  - For an **ambiguous** Id, **Rename id…** replaces Create: pick one of the files that claim the Id and give it a new one. References stay as written and resolve to the file left with the Id.
 - No automatic guessing.
 
 ### 8.6 Through MCP
@@ -1310,8 +1312,9 @@ Error body: `{"error": {"code", "message", "field_errors"?: [{field, message, al
 | `GET /api/views/glossary` | Glossary |
 | `GET /api/search?q=&limit=&offset=&include_archived=&hide_completed=` | Search results plus parsed filters and token errors. A file row carries `context` and, for the search page's context line, `lead`, `about` (names; Me as "Me"), `due`, `completed`, `date` and `labels` |
 | `GET /api/bookmarks?label=` / `POST /api/bookmarks` | Bookmarks list and add. The list gives every line, `labels` (`name`, `count`, most used first) and `total`, both counted over the whole file whatever the filter |
-| `GET /api/broken-references` / `POST /api/broken-references/repair` `{id, action, replacement?, type?, dry_run, hashes?}` | Broken references and repair |
-| `GET /api/trash` / `POST /api/trash/restore` `{entry}` | Trash list and restore |
+| `GET /api/broken-references` / `POST /api/broken-references/repair` `{id, action, replacement?, type?, dry_run, hashes?}` | Broken references and repair. Groups carry `claimants` (the files sharing an ambiguous Id); uses carry `targets` and a Mention's `snippet` |
+| `POST /api/broken-references/rename` `{id, path, new_id}` | Rename id… for one file claiming an ambiguous Id |
+| `GET /api/trash` / `POST /api/trash/restore` `{entry}` | Trash list and restore. Entries carry `type`, `id`, `title`, `deletion` (what the delete did to references, or null) and `blocked` (why Restore can't succeed now, or null) |
 | `GET /api/templates?type=` / `POST /api/templates/customise` `{type, name}` | Templates |
 | `GET /api/settings` / `PUT /api/settings` + `If-Match` | Both config files (the app-config part needs a relaunch) |
 | `GET /api/setup` / `POST /api/setup/scan` `{path}` / `POST /api/setup/apply` `{path, me}` | First-run Setup |
@@ -1383,7 +1386,7 @@ Choices made while writing this spec that no ticket decided. All were reviewed a
 11. **SSE via `fetch` streaming,** not `EventSource`, because `EventSource` can't send the required `X-Memex` header.
 12. **CSP carries the sha256 of the inline import map.** Chrome treats import maps as inline scripts.
 13. **Launcher hand-off protocol** (§13.4): `/launcher/hello` and `/launcher/open` with nonce-based HMAC both ways, and `--no-browser` for tests.
-14. **Trash layout:** `.memex/trash/<YYYYMMDD-HHMMSS>/<original path>`. Folder deletes are refused while anything inside has incoming references from outside.
+14. **Trash layout:** `.memex/trash/<YYYYMMDD-HHMMSS>/<original path>`, plus `<YYYYMMDD-HHMMSS>.json` beside it recording the deleted path and what the delete did to references. Folder deletes are refused while anything inside has incoming references from outside.
 15. **REST surface and error→status mapping** (§17), including new codes `exists`, `has_references`, `locked` and `bad_path`.
 16. **`memex-mcp` with no known Workspace** exits with an error.
 17. **The Setup-created Me** gets `kind: [team-member]`.

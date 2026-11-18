@@ -1,6 +1,7 @@
 """Hash-checked atomic writes (SPEC §5.3, §5.4)."""
 
 import hashlib
+import json
 import os
 import secrets
 import threading
@@ -8,7 +9,7 @@ import time
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from memex.core import frontmatter
@@ -184,12 +185,13 @@ class Store:
         self._changed(src)
         self._changed(dst)
 
-    def trash(self, rel: str, stamp: str) -> str:
+    def trash(self, rel: str, stamp: str, record: Mapping[str, Any] | None = None) -> str:
         """Move a file or folder to `.memex/trash/<stamp>/<rel>` (§8.4); return that path.
 
         Each delete gets its own entry folder (`<stamp>-2`, … within one second), so an
         entry restores as one. A link inside a trashed folder moves as a link; its target
-        is never touched (R13).
+        is never touched (R13). Beside the entry, `<name>.json` keeps the deleted path and
+        `record` (what the delete did to references).
         """
         if self.read_only:
             raise ReadOnly()
@@ -203,6 +205,8 @@ class Store:
         with self._lock(source):
             target.parent.mkdir(parents=True, exist_ok=True)
             _replace_with_retry(source, target, rel)
+        note = self.root / TRASH / f"{name}.json"
+        note.write_text(json.dumps({**(record or {}), "path": rel}, ensure_ascii=False), "utf-8")
         self._changed(rel)
         return entry
 
@@ -225,7 +229,11 @@ class Store:
             links = [d for d in dirnames if Path(dirpath, d).is_symlink()]
             for f in sorted(filenames + links):
                 files.append(Path(dirpath, f).relative_to(folder).as_posix())
-        # What was deleted: go down while a folder holds just one folder.
+        record = _record(folder)
+        kept = record and record.get("path")
+        if isinstance(kept, str) and _plain_rel(kept) and (folder / kept).exists():
+            return TrashEntry(name, kept, tuple(sorted(files)), (folder / kept).is_dir(), record)
+        # Not kept (an older entry): go down while a folder holds just one folder.
         top = folder
         while True:
             children = list(top.iterdir())
@@ -234,7 +242,8 @@ class Store:
             top = children[0]
             if not top.is_dir() or top.is_symlink():
                 break
-        return TrashEntry(name, top.relative_to(folder).as_posix(), tuple(sorted(files)))
+        path = top.relative_to(folder).as_posix()
+        return TrashEntry(name, path, tuple(sorted(files)), top.is_dir(), record)
 
     def restore(self, name: str) -> TrashEntry:
         """Put a trash entry's files back at their original paths, only if every path is
@@ -259,6 +268,7 @@ class Store:
             _replace_with_retry(folder / rel, target, rel)
         for dirpath, _, _ in sorted(os.walk(folder), key=lambda w: -len(w[0])):
             os.rmdir(dirpath)  # empty now: only folders were left
+        folder.with_name(f"{name}.json").unlink(missing_ok=True)
         self._changed(entry.path)
         return entry
 
@@ -295,6 +305,23 @@ class TrashEntry:
     name: str  # `<YYYYMMDD-HHMMSS>`, or with `-2`, … for a second delete in the same second
     path: str  # what was deleted, at its original path
     files: tuple[str, ...]  # every file in it, at its original path
+    folder: bool = False  # a folder was deleted
+    record: Mapping[str, Any] | None = None  # what the delete did to references, if kept
+
+
+def _plain_rel(rel: str) -> bool:
+    """A relative path that stays inside where it is joined."""
+    pure = PurePosixPath(rel)
+    return bool(rel) and not pure.is_absolute() and ".." not in pure.parts and "\\" not in rel
+
+
+def _record(folder: Path) -> Mapping[str, Any] | None:
+    """The `<name>.json` beside a trash entry; None when missing or unreadable."""
+    try:
+        found = json.loads(folder.with_name(f"{folder.name}.json").read_text(encoding="utf-8"))
+    except OSError, ValueError:
+        return None
+    return found if isinstance(found, dict) else None
 
 
 def _read_bytes(path: Path, rel: str) -> bytes:

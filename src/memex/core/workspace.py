@@ -106,7 +106,9 @@ class Workspace:
         referrers = [f.rel for f in self.cache.referrers(f.id for f in doomed) if f.rel not in gone]
         if referrers:
             raise HasReferences(rel, tuple(referrers))
-        return self.store.trash(rel, self.clock.now().strftime("%Y%m%d-%H%M%S"))
+        stamp = self.clock.now().strftime("%Y%m%d-%H%M%S")
+        # Nothing outside referred in, so the delete touched no references.
+        return self.store.trash(rel, stamp, {"mode": "plain", "references": 0, "files": 0})
 
     def config_hash(self) -> str:
         return self.store.read(WORKSPACE_CONFIG).hash

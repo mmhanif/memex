@@ -64,3 +64,13 @@ export function dayMonth(iso) {
   const d = toDate(iso);
   return `${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)}`;
 }
+
+/**
+ * When something happened, to the minute: "Mon 16 Nov, 17:12", with the year when it isn't
+ * this year's. @param {string} isoDateTime `YYYY-MM-DDTHH:MM[:SS]` @param {string} now `YYYY-MM-DD`
+ */
+export function dayTime(isoDateTime, now) {
+  const [day, time = ""] = isoDateTime.split("T");
+  const year = day.slice(0, 4) === now.slice(0, 4) ? "" : ` ${day.slice(0, 4)}`;
+  return `${shortDate(day)}${year}, ${time.slice(0, 5)}`;
+}
