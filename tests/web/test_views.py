@@ -200,6 +200,24 @@ def test_people(api: TestClient, alice: str):
     assert body["manager"] is None
     assert body["others"] == []
     assert body["stakeholders"] == []
+    assert body["waiting"] == {}
+
+
+def test_people_counts_todos_with_me_and_can_show_archived(
+    api: TestClient, state: AppState, alice: str
+):
+    put(
+        state,
+        "todos/t.md",
+        "---\ntitle: T\nowner: alice-smith\nrequester: ada-lovelace\nstatus: open\n---\n",
+    )
+    put(state, "people/old.md", "---\ntitle: Old\nkind: [team-member]\narchived: 2026-01-01\n---\n")
+    assert api.get("/api/views/people").json()["waiting"] == {
+        "alice-smith": {"on_them": 1, "on_me": 0}
+    }
+    assert api.get("/api/views/people").json()["others"] == []
+    shown = api.get("/api/views/people?include_archived=true").json()
+    assert [p["id"] for p in shown["others"]] == ["old"]
 
 
 def test_person_view(api: TestClient, state: AppState, alice: str):

@@ -6,6 +6,7 @@ Views read leniently (§4.5): a To-do with a bad `status` counts as open and a b
 """
 
 import datetime as dt
+from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Literal, cast
@@ -222,14 +223,14 @@ def _one_list(picked: list[CachedFile], include_done: bool) -> tuple[TodoGroup, 
     return _with_completed([open_ones], picked, include_done)
 
 
-def directs_of(ws: Workspace, id: str) -> list[CachedFile]:
-    """Persons whose `manager` is `id`, archived ones left out, by name."""
+def directs_of(ws: Workspace, id: str, include_archived: bool = False) -> list[CachedFile]:
+    """Persons whose `manager` is `id`, archived ones left out unless asked, by name."""
     return sorted(
         (
             f
             for f in ws.cache.files()
             if f.type is EntityType.PERSON
-            and not f.fields.get("archived")
+            and (include_archived or not f.fields.get("archived"))
             and refers(f, ["manager"], id)
         ),
         key=_by_title,
@@ -278,26 +279,31 @@ class PeopleView:
     me: OrgNode | None  # None while Me isn't set
     others: tuple[CachedFile, ...]  # Team Members outside Me's tree
     stakeholders: tuple[Stakeholder, ...]
+    # Open To-dos between Me and each Person, by id: (they owe Me, Me owes them); zeros left out
+    waiting: dict[str, tuple[int, int]]
 
 
-def people_view(ws: Workspace) -> PeopleView:
+def people_view(ws: Workspace, include_archived: bool = False) -> PeopleView:
     """The org tree from Me, other Team Members, and the Stakeholders table.
 
-    Archived Persons are left out. A manager cycle is cut where it comes back round.
+    Archived Persons are left out unless asked (§8.3). A manager cycle is cut where it
+    comes back round.
     """
     me = ws.me()
     shown: set[str] = set()
     root = manager = None
+    waiting: dict[str, tuple[int, int]] = {}
     if me is not None:
-        root = _org_tree(ws, me, shown)
+        root = _org_tree(ws, me, shown, include_archived)
         manager = _manager_of(ws, me)
         if manager is not None:
             shown.add(manager.id.casefold())
+        waiting = _waiting_with(ws, me)
     persons = sorted(
         (
             f
             for f in ws.cache.files()
-            if f.type is EntityType.PERSON and not f.fields.get("archived")
+            if f.type is EntityType.PERSON and (include_archived or not f.fields.get("archived"))
         ),
         key=_by_title,
     )
@@ -315,14 +321,38 @@ def people_view(ws: Workspace) -> PeopleView:
             for p in persons
             if _kind(p, "stakeholder")
         ),
+        waiting=waiting,
     )
 
 
-def _org_tree(ws: Workspace, person: CachedFile, shown: set[str]) -> OrgNode:
+def _waiting_with(ws: Workspace, me: CachedFile) -> dict[str, tuple[int, int]]:
+    """Open To-dos between Me and each other Person: (they owe Me, Me owes them)."""
+    owe_me: Counter[str] = Counter()
+    owe_them: Counter[str] = Counter()
+    for t in todos(ws):
+        if not is_open(t):
+            continue
+        if refers(t, ["requester"], me.id):
+            other, side = t.fields.get("owner"), owe_me
+        elif refers(t, ["owner"], me.id):
+            other, side = t.fields.get("requester"), owe_them
+        else:
+            continue
+        person = ws.cache.resolve(other).file if isinstance(other, str) else None
+        if person is not None and person.type is EntityType.PERSON and person.id != me.id:
+            side[person.id] += 1
+    return {id: (owe_me[id], owe_them[id]) for id in owe_me.keys() | owe_them.keys()}
+
+
+def _org_tree(
+    ws: Workspace, person: CachedFile, shown: set[str], include_archived: bool
+) -> OrgNode:
     shown.add(person.id.casefold())
-    directs = [d for d in directs_of(ws, person.id) if d.id.casefold() not in shown]
+    directs = [
+        d for d in directs_of(ws, person.id, include_archived) if d.id.casefold() not in shown
+    ]
     shown.update(d.id.casefold() for d in directs)
-    return OrgNode(person, tuple(_org_tree(ws, d, shown) for d in directs))
+    return OrgNode(person, tuple(_org_tree(ws, d, shown, include_archived) for d in directs))
 
 
 def _kind(person: CachedFile, kind: str) -> bool:

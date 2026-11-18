@@ -171,13 +171,14 @@ def _row_refs(files: Iterable[CachedFile]) -> list[object]:
 
 
 @router.get("/views/people")
-def people(ws: WS) -> dict:
-    p = views.people_view(ws)
+def people(ws: WS, include_archived: Annotated[bool, Query()] = False) -> dict:
+    p = views.people_view(ws, include_archived)
     return {
         "manager": p.manager and summary(p.manager),
         "me": p.me and _org(p.me),
         "others": [summary(f) for f in p.others],
         "stakeholders": [{"person": summary(s.file), "tags": s.tags} for s in p.stakeholders],
+        "waiting": {id: {"on_them": them, "on_me": me} for id, (them, me) in p.waiting.items()},
     }
 
 

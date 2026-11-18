@@ -21,7 +21,8 @@ import { QuickAdd, today, toggleTodo } from "./todos.js";
  * @typedef {import("./todos.js").TodoGroup} TodoGroup
  * @typedef {{person: Summary, directs: OrgNode[]}} OrgNode
  * @typedef {{manager: Summary | null, me: OrgNode | null, others: Summary[],
- *   stakeholders: {person: Summary, tags: number}[]}} People
+ *   stakeholders: {person: Summary, tags: number}[],
+ *   waiting: Record<string, {on_them: number, on_me: number}>}} People
  * @typedef {{
  *   person: Detail,
  *   manager: Summary | null,
@@ -34,64 +35,184 @@ import { QuickAdd, today, toggleTodo } from "./todos.js";
  * }} PersonData
  */
 
-/** @param {{person: Summary}} props */
-function PersonLink({ person }) {
-  return html`<a class="person-link" href=${personHref(person.id)}>
-    <span class="avatar">${initials(person.title)}</span>${person.title}
-    ${person.fields.role && html`<span class="muted">${person.fields.role}</span>`}
-  </a>`;
-}
-
-/** @param {{node: OrgNode}} props */
-function OrgBranch({ node }) {
+/**
+ * `#/people` (§11.3), per "People" in Paper: the org tree from Me as outline blocks (Me's
+ * Manager above Me, Directs and their reports below, each collapsible), other Team
+ * Members, and the Stakeholders table. Show archived brings archived Persons back (§8.3).
+ */
+export function PeoplePage() {
+  const [showArchived, setShowArchived] = useState(false);
+  const { data, error } = useView(
+    /** @type {string} */ (`/api/views/people?include_archived=${showArchived}`),
+  );
+  const people = /** @type {People | null} */ (data);
   return html`
-    <li>
-      <${PersonLink} person=${node.person} />
-      ${node.directs.length > 0 &&
-      html`<ul>${node.directs.map((d) => html`<${OrgBranch} key=${d.person.id} node=${d} />`)}</ul>`}
-    </li>
+    <section class="page people-page">
+      <header class="people-head">
+        <p class="eyebrow">${people ? peopleEyebrow(people) : " "}</p>
+        <div class="people-title">
+          <h1 class="title">People</h1>
+          <label class="toggle"><input type="checkbox" role="switch" checked=${showArchived}
+            onChange=${(/** @type {Event} */ e) => setShowArchived(/** @type {HTMLInputElement} */ (e.currentTarget).checked)} />
+            Show archived</label>
+        </div>
+      </header>
+      ${error
+        ? html`<p class="error-text" role="alert">${describe(error)}</p>`
+        : people
+          ? html`<${PeopleBody} people=${people} />`
+          : html`<p class="hint">Loading…</p>`}
+    </section>
   `;
 }
 
-export function PeoplePage() {
-  const { data, error } = useView("/api/views/people");
-  const people = /** @type {People | null} */ (data);
-  if (error) return html`<section class="page"><p class="error-text" role="alert">${describe(error)}</p></section>`;
-  if (!people) return html`<p class="hint">Loading…</p>`;
+/** @param {{people: People}} props */
+function PeopleBody({ people }) {
+  const [collapsed, setCollapsed] = useState(/** @type {Set<string>} */ (new Set()));
+  /** @param {string} id */
+  const toggle = (id) => {
+    const next = new Set(collapsed);
+    if (!next.delete(id)) next.add(id);
+    setCollapsed(next);
+  };
   return html`
-    <section class="page people-page">
-      <header class="page-head">
-        <h1>People</h1>
-        <button type="button" onClick=${() => openNew("person")}><${Icon} name="plus" /> Person</button>
-      </header>
-      <h2>Org</h2>
-      ${people.me
-        ? html`<div class="org">
-            ${people.manager && html`<div class="org-manager"><${PersonLink} person=${people.manager} /></div>`}
-            <ul class="org-tree"><${OrgBranch} node=${people.me} /></ul>
-          </div>`
-        : html`<p class="muted">Me isn't set, so there is no org tree: pick your Person in Settings.</p>`}
-      ${people.others.length > 0 &&
-      html`<h2>Other Team Members</h2>
-        <ul class="people-list">${people.others.map((p) => html`<li key=${p.id}><${PersonLink} person=${p} /></li>`)}</ul>`}
-      <h2>Stakeholders</h2>
+    ${people.me
+      ? html`<section class="org" aria-label="Org">
+          ${people.manager &&
+          html`<div class="block org-person manager">
+              <div class="block-row">
+                <span class="bullet"></span>
+                <${OrgPerson} person=${people.manager} waiting=${people.waiting} />
+                <span class="org-tag">Manager</span>
+              </div>
+            </div>
+            <div class="org-stub" aria-hidden="true"></div>`}
+          <${OrgBlock} node=${people.me} depth=${0} waiting=${people.waiting} collapsed=${collapsed} toggle=${toggle} />
+        </section>`
+      : html`<p class="people-note muted">Me isn't set, so there is no org tree: pick your Person in Settings.</p>`}
+    ${(people.others.length > 0 || !people.me) &&
+    html`<section class="block block-heading people-section" aria-label=${people.me ? "Other Team Members" : "Team Members"}>
+      <div class="block-row">
+        <span class="bullet"></span>
+        <h2 class="block-text">${people.me ? "Other Team Members" : "Team Members"}</h2>
+        ${people.me && html`<span class="group-note">not under Me</span>`}
+        <button type="button" class="link-button add-person" onClick=${() => openNew("person", { kind: ["team-member"] })}>
+          <${Icon} name="plus" /> Team Member</button>
+      </div>
+      <div class="block-children">
+        ${people.others.length === 0 && html`<p class="block-empty">No Team Members yet</p>`}
+        ${people.others.map(
+          (p) => html`<div class="block org-person" key=${p.id}>
+            <div class="block-row">
+              <span class="bullet"></span>
+              <${OrgPerson} person=${p} waiting=${people.waiting} reportsTo />
+            </div>
+          </div>`,
+        )}
+      </div>
+    </section>`}
+    <section class="block block-heading people-section" aria-label="Stakeholders">
+      <div class="block-row">
+        <span class="bullet"></span>
+        <h2 class="block-text">Stakeholders</h2>
+        <button type="button" class="link-button add-person" onClick=${() => openNew("person", { kind: ["stakeholder"] })}>
+          <${Icon} name="plus" /> Stakeholder</button>
+      </div>
       ${people.stakeholders.length
-        ? html`<table class="table">
-            <thead><tr><th>Name</th><th>Organisation</th><th>Role</th><th>Tags</th></tr></thead>
+        ? html`<table class="data-table stakeholders-table">
+            <thead><tr><th>Name</th><th class="col-org">Organisation</th><th class="col-role">Role</th><th class="tags">Tags</th></tr></thead>
             <tbody>
               ${people.stakeholders.map(
                 (s) => html`<tr key=${s.person.id}>
-                  <td><a href=${personHref(s.person.id)}>${s.person.title}</a></td>
-                  <td>${s.person.fields.organisation ?? ""}</td>
-                  <td>${s.person.fields.role ?? ""}</td>
-                  <td>${s.tags}</td>
+                  <td>
+                    <span class="stakeholder-name">
+                      <span class="avatar stakeholder" aria-hidden="true">${initials(s.person.title)}</span>
+                      <a href=${personHref(s.person.id)}>${s.person.title}</a>
+                      ${s.person.fields.archived && html`<span class="status status-cancelled">archived</span>`}
+                    </span>
+                  </td>
+                  <td class="col-org">${s.person.fields.organisation ?? ""}</td>
+                  <td class="col-role">${s.person.fields.role ?? ""}</td>
+                  <td class="tags ${s.tags ? "" : "none"}">${s.tags}</td>
                 </tr>`,
               )}
             </tbody>
           </table>`
-        : html`<p class="muted">No Stakeholders yet</p>`}
+        : html`<p class="block-empty">No Stakeholders yet</p>`}
     </section>
   `;
+}
+
+/**
+ * A Person in the org tree and their reports. Me is the root; anyone with reports can be
+ * collapsed to a count of them.
+ * @param {{node: OrgNode, depth: number, waiting: People["waiting"], collapsed: Set<string>,
+ *   toggle: (id: string) => void}} props
+ */
+function OrgBlock({ node, depth, waiting, collapsed, toggle }) {
+  const { person, directs } = node;
+  const me = depth === 0;
+  const open = me || !collapsed.has(person.id);
+  const reports = directs.length;
+  return html`
+    <div class="block org-person depth-${Math.min(depth, 2)} ${me ? "me" : ""} ${open ? "" : "collapsed"}">
+      <div class="block-row">
+        ${reports > 0 && !me
+          ? html`<button type="button" class="bullet" aria-expanded=${open}
+              aria-label="${open ? "Collapse" : "Expand"} ${person.title}" onClick=${() => toggle(person.id)}></button>`
+          : html`<span class="bullet"></span>`}
+        <${OrgPerson} person=${person} waiting=${waiting} me=${me}
+          reports=${open ? 0 : reports} />
+      </div>
+      ${reports > 0 &&
+      open &&
+      html`<div class="block-children">
+        ${directs.map(
+          (d) => html`<${OrgBlock} key=${d.person.id} node=${d} depth=${depth + 1} waiting=${waiting}
+            collapsed=${collapsed} toggle=${toggle} />`,
+        )}
+      </div>`}
+    </div>
+  `;
+}
+
+/**
+ * One Person's line: avatar, name, role (and "Me", or who they report to), then the open
+ * To-dos between them and Me.
+ * @param {{person: Summary, waiting: People["waiting"], me?: boolean, reports?: number,
+ *   reportsTo?: boolean}} props
+ */
+function OrgPerson({ person, waiting, me = false, reports = 0, reportsTo = false }) {
+  const { role, manager, archived } = person.fields;
+  const managerName = reportsTo && typeof manager === "string" ? resolveMention(manager)?.title : undefined;
+  const meta = [typeof role === "string" && role, me && "Me", managerName && `reports to ${managerName}`]
+    .filter(Boolean)
+    .join(" · ");
+  const counts = waiting[person.id];
+  return html`
+    <span class="avatar ${me ? "me" : ""}" aria-hidden="true">${initials(person.title)}</span>
+    <a class="org-name" href=${personHref(person.id)}>${person.title}</a>
+    ${meta && html`<span class="org-meta">${meta}</span>`}
+    ${archived && html`<span class="status status-cancelled">archived</span>`}
+    ${reports > 0 && html`<span class="org-reports">· ${reports} ${reports === 1 ? "report" : "reports"}</span>`}
+    ${counts &&
+    html`<span class="org-counts">
+      ${counts.on_them > 0 && `${counts.on_them} waiting on them`}${counts.on_them > 0 && counts.on_me > 0 && " · "}
+      ${counts.on_me > 0 && html`<strong>${counts.on_me} on me</strong>`}
+    </span>`}
+  `;
+}
+
+/**
+ * "10 Team Members · 3 Stakeholders": everyone above the Stakeholders table, and the table.
+ * @param {People} people
+ */
+function peopleEyebrow(people) {
+  /** @type {(n: OrgNode) => number} */
+  const size = (n) => 1 + n.directs.reduce((sum, d) => sum + size(d), 0);
+  const team = (people.manager ? 1 : 0) + (people.me ? size(people.me) : 0) + people.others.length;
+  const stakeholders = people.stakeholders.length;
+  return `${team} Team ${team === 1 ? "Member" : "Members"} · ${stakeholders} ${stakeholders === 1 ? "Stakeholder" : "Stakeholders"}`;
 }
 
 /** `#/people/<id>` (§11.6), per "Person — Alice Smith" in Paper. @param {{id: string}} props */

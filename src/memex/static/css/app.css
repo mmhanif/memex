@@ -744,9 +744,6 @@ select {
 .page h2 { font-size: 15px; margin: 20px 0 8px; }
 .page-head { display: flex; align-items: center; gap: var(--gap); flex-wrap: wrap; }
 .page-head h1 { font-size: 20px; margin: 0; flex: 1; }
-.table { width: 100%; border-collapse: collapse; }
-.table th { text-align: left; font-weight: 600; color: var(--muted); font-size: 13px; padding: 4px 8px; }
-.table td { padding: 4px 8px; border-top: 1px solid var(--border); }
 
 /* To-dos (§6.2, §6.3) */
 .party, .due { font-size: 13px; color: var(--muted); }
@@ -883,15 +880,57 @@ select {
 .get-started { margin-top: var(--gap); }
 .get-started .actions { display: flex; gap: 8px; }
 
-/* People and the Person View (§11.3, §11.6) */
-.person-link { display: inline-flex; align-items: center; gap: 6px; margin-right: 10px; }
-.person-link .muted { font-size: 13px; display: inline-block; text-decoration: none; }
-.org-manager { margin-bottom: 4px; }
-.org-tree, .org-tree ul { list-style: none; margin: 0; padding-left: 20px; }
-.org-tree { padding-left: 0; }
-.org-tree li { padding: 3px 0; }
-.org-tree ul { border-left: 1px solid var(--border); margin-left: 11px; }
-.people-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+/*
+ * People page (§11.3), per "People" in Paper: eyebrow and title, the org tree as outline
+ * blocks (Me's Manager above Me, then Directs and their reports), other Team Members, and
+ * the Stakeholders table. Content lines up 30px in, past the bullet slot.
+ */
+.page.people-page { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; box-sizing: content-box; }
+.people-head { display: flex; flex-direction: column; gap: 10px; padding: 0 0 18px 30px; }
+.people-head .eyebrow { margin: 0; }
+.people-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.people-note { margin: 0 0 14px 30px; }
+.org { padding-bottom: 14px; }
+.org-person > .block-row { align-items: center; min-height: 36px; }
+.org-person > .block-row > .bullet { height: 36px; }
+.org-person.manager > .block-row > .bullet::before { background: var(--faint-mark); }
+.org-stub { height: 10px; margin-left: 14px; border-left: 1px solid var(--guide); }
+.org-person .avatar { width: 24px; height: 24px; font-size: 10px; }
+.org-person.me > .block-row { min-height: 40px; }
+.org-person.me > .block-row > .bullet { height: 40px; }
+.org-person.me > .block-row > .avatar { width: 26px; height: 26px; font-size: 10.5px; }
+.org-person.depth-2 > .block-row { min-height: 34px; }
+.org-person.depth-2 > .block-row > .bullet { height: 34px; }
+.org-person.depth-2 > .block-row > .avatar { width: 22px; height: 22px; font-size: 9.5px; }
+.org-name { padding-left: 10px; font-size: 15px; line-height: 22px; color: var(--link); text-decoration: none; }
+.org-name:hover { text-decoration: underline; }
+.org-person.depth-2 .org-name { font-size: 14.5px; }
+.org-person.me > .block-row > .org-name { font-size: 18px; line-height: 24px; font-weight: 700; color: var(--text); }
+.org-meta { min-width: 0; padding-left: 8px; font-size: 13px; line-height: 18px; color: var(--muted); }
+.org-person .status { margin-left: 8px; font-size: 12px; }
+.org-reports { padding-left: 8px; font-size: 12.5px; line-height: 16px; color: var(--faint); }
+.org-counts { margin-left: auto; padding-left: 16px; font-size: 12.5px; line-height: 16px; color: var(--muted); white-space: nowrap; }
+.org-counts strong { font-weight: 600; color: var(--text-2); }
+.org-tag { margin-left: auto; padding-left: 16px; font-size: 11px; line-height: 14px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint-mark); }
+.people-section { padding-top: 12px; }
+.people-section + .people-section { padding-top: 22px; }
+.people-section > .block-row { align-items: center; }
+.people-section h2.block-text { flex: 0 1 auto; margin: 0; }
+.people-section .add-person { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; font-size: 12.5px; line-height: 16px; color: var(--link); }
+.people-section .add-person .icon { width: 11px; height: 11px; }
+.people-section .block-empty { margin: 0; font-size: 14px; line-height: 26px; color: var(--faint); }
+.people-section > .block-empty { padding-left: 30px; }
+.data-table.stakeholders-table { width: calc(100% - 30px); margin: 6px 0 0 30px; }
+.data-table.stakeholders-table th { height: 30px; padding: 0; }
+.data-table.stakeholders-table td { height: 42px; padding: 0; font-size: 13.5px; line-height: 20px; color: var(--text-2); }
+.stakeholders-table .col-org, .stakeholders-table .col-role { width: 170px; }
+.stakeholders-table .tags { width: 56px; text-align: right; }
+.data-table.stakeholders-table td.tags { font-size: 14px; font-weight: 600; color: var(--text); }
+.data-table.stakeholders-table td.tags.none { color: var(--faint-mark); }
+.stakeholder-name { display: flex; align-items: center; gap: 10px; }
+.stakeholder-name .avatar { width: 24px; height: 24px; font-size: 10px; }
+.stakeholder-name a { font-size: 15px; line-height: 22px; color: var(--link); text-decoration: none; }
+.stakeholder-name a:hover { text-decoration: underline; }
 
 /* Portfolio (§11.3), per "Portfolio — Board" and "Portfolio — Outline" in Paper. */
 .page.portfolio-page { max-width: 1096px; margin: 0 auto; padding: 24px 16px 48px; box-sizing: content-box; }

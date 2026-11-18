@@ -95,7 +95,7 @@ def test_dashboard_and_people_page_show_directs(app: Page, server: AppState, roo
     expect(app.get_by_role("region", name="Directs")).to_contain_text("Alice Smith")
 
     app.goto(f"{origin(server)}/#/people")
-    expect(app.locator(".org-tree")).to_contain_text("Alice Smith")
+    expect(app.get_by_role("region", name="Org")).to_contain_text("Alice Smith")
 
 
 def test_person_view_header_has_an_avatar_and_an_eyebrow(app: Page, server: AppState, root: Path):
