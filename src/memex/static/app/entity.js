@@ -448,7 +448,7 @@ function Related({ detail }) {
  * A titled section whose chevron folds it away.
  * @param {{title: string, count?: string | number, action?: any, children?: any}} props
  */
-function Section({ title, count, action, children }) {
+export function Section({ title, count, action, children }) {
   const [open, setOpen] = useState(true);
   return html`
     <section class="related-section" aria-label=${title}>

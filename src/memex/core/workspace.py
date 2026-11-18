@@ -50,6 +50,7 @@ class Workspace:
         self.clock = clock or SystemClock()
         self.config = config
         self.config_error = config_error
+        self.launch_polling = config.polling  # the watcher's mode until a relaunch (§3.2)
         self.read_only = config.format > FORMAT
         self.store = Store(root, on_change=self.changed, read_only=self.read_only)
         self.cache = Cache.build(root, config.ignore)

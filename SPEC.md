@@ -148,6 +148,8 @@ One page covering both files:
 
 Saves to the Workspace config use the same hash check as Notes (§5.3), so conflicts get the usual banner. MCP has no config access.
 
+A setting that needs a relaunch is tagged "relaunch"; once a saved value differs from what this run uses, the tag reads "relaunch needed" (the port also shows the value it was), and a bar under This computer says "Saved. N changes take effect after a relaunch". Memex can't restart itself, so the bar tells the user to quit and run `memex` again, with a **Quit Memex** button. About shows the version, the address Memex is running at and the logs folder.
+
 **Acceptance**
 - [core] Setup on an empty folder creates exactly `.memex/config.yaml` (`format: 1`, `me`), the six type folders, `notes/`, empty `bookmarks.md` and Me's Person file.
 - [core] Adopting a folder with 3 Notes and a `people/` folder with 1 file reports "3 Notes, 1 Person" and writes nothing until confirmed; after confirmation no pre-existing file's bytes have changed.
@@ -1316,7 +1318,7 @@ Error body: `{"error": {"code", "message", "field_errors"?: [{field, message, al
 | `POST /api/broken-references/rename` `{id, path, new_id}` | Rename id… for one file claiming an ambiguous Id |
 | `GET /api/trash` / `POST /api/trash/restore` `{entry}` | Trash list and restore. Entries carry `type`, `id`, `title`, `deletion` (what the delete did to references, or null) and `blocked` (why Restore can't succeed now, or null) |
 | `GET /api/templates?type=` / `POST /api/templates/customise` `{type, name}` | Templates |
-| `GET /api/settings` / `PUT /api/settings` + `If-Match` | Both config files (the app-config part needs a relaunch) |
+| `GET /api/settings` / `PUT /api/settings` `{workspace?, app?}` + `If-Match` | Both config files. `If-Match` is needed only for `workspace` keys; the `app` part (`workspace`, `port`) needs a relaunch. The read gives `running` (what this run uses), `relaunch` (saved keys not yet in effect) and `about` (version, format, address, logs folder) |
 | `GET /api/setup` / `POST /api/setup/scan` `{path}` / `POST /api/setup/apply` `{path, me}` | First-run Setup |
 | `POST /api/quit` | Clean shutdown |
 

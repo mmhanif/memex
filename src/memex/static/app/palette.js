@@ -5,7 +5,7 @@
 
 import { signal } from "@preact/signals";
 import { useEffect, useRef, useState } from "preact/hooks";
-import { describe, request } from "./api.js";
+import { describe, quitMemex, request } from "./api.js";
 import { TYPES } from "./fields.js";
 import { Icon } from "./icons.js";
 import { fetchTemplates, openNew } from "./newform.js";
@@ -95,11 +95,7 @@ function go(href, newTab) {
 const QUIT = {
   label: "Quit Memex",
   icon: "x",
-  run: () => {
-    void request("POST", "/api/quit").then(() => {
-      document.body.textContent = "Memex has quit. You can close this tab.";
-    });
-  },
+  run: () => void quitMemex(),
 };
 
 /** "New <Type>" for each type; "New <Type>: <Template>" for each other Template (§7.4). */
