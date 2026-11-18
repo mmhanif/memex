@@ -5,7 +5,7 @@
 import { useState } from "preact/hooks";
 import { initials } from "./fields.js";
 import { Icon } from "./icons.js";
-import { html } from "./state.js";
+import { html, meId, sameId } from "./state.js";
 
 /**
  * @typedef {import("./fields.js").Summary} Summary
@@ -50,11 +50,12 @@ function Highlighted({ text, query }) {
   return html`${text.slice(0, at)}<mark>${text.slice(at, at + q.length)}</mark>${text.slice(at + q.length)}`;
 }
 
-/** @param {{person: Summary}} props */
-function Avatar({ person }) {
+/** A person's initials: dark for Me, outlined for a Stakeholder. @param {{person: Summary}} props */
+export function Avatar({ person }) {
   const kind = person.fields.kind;
   const stakeholder = Array.isArray(kind) && kind.includes("stakeholder") && !kind.includes("team-member");
-  return html`<span class="avatar ${stakeholder ? "stakeholder" : ""}">${initials(person.title)}</span>`;
+  const look = sameId(person.id, meId()) ? "me" : stakeholder ? "stakeholder" : "";
+  return html`<span class="avatar ${look}">${initials(person.title)}</span>`;
 }
 
 /**

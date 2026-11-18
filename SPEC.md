@@ -435,13 +435,13 @@ Title words @owner from @requester due:YYYY-MM-DD
 
 **Explicit action only.** Nothing converts while the user types or saves.
 
-- **Trigger:** a Note in read mode with unconverted task items shows **"Create N To-dos"**, which opens a preview.
+- **Trigger:** a Note in read mode with unconverted task items shows a bar, "N task items aren't To-dos yet", with **"Create N To-dos"**, which opens a preview.
 - **Which lines count:**
   - unchecked task items (`- [ ]`, `* [ ]`, `+ [ ]`) at any indent
   - not inside fenced code or frontmatter
   - not lines whose only content is a To-do Mention (already converted)
   - `- [x]` lines are ignored
-- **Preview rows:** one per item, with the text parsed by the quick-add parser unchanged. Indented sub-lines under an item become the To-do's body. Each row's parties, due and `about` can be edited, and each row can be unticked. Rows with errors are shown in red and block confirmation until they are fixed or unticked.
+- **Preview rows:** a table, one row per item, with the text parsed by the quick-add parser unchanged: a tick, the To-do's title with its body line, Owner and Requester with their avatars, Due and About. Indented sub-lines under an item become the To-do's body. Clicking a row's Owner, Requester, Due or About edits it, and each row can be unticked. A row with errors is tinted rust, with the message under its title and the field at fault open for editing; the footer reads "Fix or untick N rows to continue" and **Create** stays disabled until every ticked row is fixed.
 - **Defaults on created To-dos:**
   - `source:` is the Note's Id
   - `about:` is pre-filled only when the Note's frontmatter `about` names exactly one Project or Deliverable
@@ -849,8 +849,9 @@ The Dashboard also shows the "N Notes have To-dos to create" line (§6.4) and th
 ### 11.5 Entity page
 
 - **Read mode by default.**
-- **Header:** an eyebrow with the type and, for a Note, its `date` ("Note · Thu 12 Nov 2026"), for a Project its Theme and for a Deliverable its Project; then the title, editable in place; then **✎ Edit**, **Create N To-dos** (Notes, §6.4) and the **…** Actions menu.
+- **Header:** an eyebrow with the type and, for a Note, its `date` ("Note · Thu 12 Nov 2026"), for a Project its Theme and for a Deliverable its Project; then the title, editable in place; then **✎ Edit** and the **…** Actions menu.
 - A **properties well** shows the typed fields by their frontmatter key, editable in place without entering edit mode: status, dates, Lead, Tags as avatar checklists, and the person pickers. References read as links. Each edit is a hash-checked one-field write.
+- On a Note with task items that aren't To-dos yet, a bar between the well and the body reads "N task items aren't To-dos yet" with **Create N To-dos** (§6.4).
 - The body is rendered Markdown as **outline blocks**: each heading and every bulleted item has a bullet, and what sits under a heading or item hangs off a guide line. Clicking the bullet of a block with children collapses it (the bullet gets a halo) or expands it; this is a view only and writes nothing. A task item whose only content is a To-do Mention is a live To-do row (§6.4): its box, its title, its Owner when not Me, and its due date, in rust when late. **✎ Edit** switches just the body to a raw `<textarea>` with auto-save (§5.7). The textarea has small helpers: Tab indents, Enter continues lists.
 - **Below the body**, each under a section header with a count and a chevron that folds it:
   - related children (a Theme's Projects, a Project's Deliverables), with status, Lead and due date or lateness, and a row to add one

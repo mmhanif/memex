@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { ApiError, describe, request } from "./api.js";
-import { openCapture } from "./capture.js";
+import { CaptureBar, openCapture } from "./capture.js";
 import { lineSuffix } from "./banners.js";
 import { dayDate, dueLabel, noteDay, shortDate } from "./dates.js";
 import { BodyDoc } from "./doc.js";
@@ -82,9 +82,6 @@ export function EntityPage({ id }) {
         <p class="eyebrow">${eyebrow(detail)}</p>
         <${Title} detail=${detail} readOnly=${readOnly} onSaved=${load} />
         <div class="entity-tools">
-          ${!readOnly && !editing && unconverted > 0 &&
-          html`<button type="button" class="tool" onClick=${() => void openCapture({ id, title: detail.title })}>
-            <${Icon} name="plus" /> Create ${unconverted} To-do${unconverted === 1 ? "" : "s"}</button>`}
           ${!readOnly &&
           html`<button type="button" class="tool" aria-pressed=${editing} onClick=${toggleEditing}>
             <${Icon} name="pencil" /> ${editing ? "Done" : "Edit"}</button>`}
@@ -94,6 +91,8 @@ export function EntityPage({ id }) {
       <${ArchivedBar} detail=${detail} readOnly=${readOnly} onSaved=${load} />
       <${Warnings} detail=${detail} />
       <${Properties} detail=${detail} readOnly=${readOnly} onSaved=${load} />
+      ${!readOnly && !editing && unconverted > 0 &&
+      html`<${CaptureBar} count=${unconverted} onOpen=${() => void openCapture({ id, title: detail.title })} />`}
       <${BodySection} detail=${detail} readOnly=${readOnly} editing=${editing} />
       <${Related} detail=${detail} />
     </article>
