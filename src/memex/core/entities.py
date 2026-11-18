@@ -6,6 +6,7 @@ frontmatter or a Broken Reference.
 
 import datetime as dt
 import difflib
+import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import PurePosixPath
@@ -114,17 +115,41 @@ def create_entity(
         template_key=chosen.key,
     )
 
-    dated = entity_type is EntityType.TODO or (entity_type is None and "date" in merged)
-    date = today if entity_type is EntityType.TODO else parse_date(merged.get("date"))
     if id is not None:
         require_free_id(ws, id)
-        new_id = id
+        new_id, rel = id, f"{folder}/{id}.md" if folder else f"{id}.md"
     else:
-        new_id = make_id(title, {f.id for f in ws.cache.files()}, date if dated else None)
-    rel = f"{folder}/{new_id}.md" if folder else f"{new_id}.md"
+        new_id, rel = _placement(ws, entity_type, title, merged.get("date"), folder)
     text = frontmatter.with_fields("", _ordered(entity_type, merged))
     new_hash = ws.store.create(rel, text + (t_body if body is None else body))
     return Saved(new_id, rel, new_hash)
+
+
+def placement(
+    ws: Workspace,
+    entity_type: EntityType | None,
+    fields: Mapping[str, Any],
+    folder: str | None = None,
+) -> tuple[str, str]:
+    """The Id and path `create_entity` would give a new file, without writing (§11.7).
+
+    Only the title and, for Notes, the date matter; nothing is validated.
+    """
+    title = fields.get("title")
+    title = title.strip() if isinstance(title, str) else ""
+    return _placement(ws, entity_type, title, fields.get("date"), _note_folder(entity_type, folder))
+
+
+def _placement(
+    ws: Workspace, entity_type: EntityType | None, title: str, date: Any, folder: str
+) -> tuple[str, str]:
+    """A free Id from the title, date-prefixed for To-dos and dated Notes (§4.1)."""
+    if entity_type is EntityType.TODO:
+        prefix: dt.date | None = ws.clock.today()
+    else:
+        prefix = parse_date(date) if entity_type is None else None
+    new_id = make_id(title, {f.id for f in ws.cache.files()}, prefix)
+    return new_id, f"{folder}/{new_id}.md" if folder else f"{new_id}.md"
 
 
 def update_fields(
@@ -415,6 +440,19 @@ def entity_detail(ws: Workspace, id: str) -> EntityDetail:
         notes=tuple(f for f in files if f.type is None and names_it(f, "about")),
         mentioned_in=tuple(f for f in files if key in {m.casefold() for m in f.mentions}),
     )
+
+
+_LINE_MARKER = re.compile(r"^\s*(?:#{1,6}\s+|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+|>\s*)*")
+
+
+def mention_context(body: str, id: str) -> str | None:
+    """The first line of `body` that Mentions `id` (ignoring case), without its list or
+    heading marker: what a Linked Reference shows (§11.5)."""
+    mention = re.compile(r"\[\[\s*" + re.escape(id) + r"\s*\]\]", re.IGNORECASE)
+    for line in body.splitlines():
+        if mention.search(line):
+            return _LINE_MARKER.sub("", line, count=1).strip()
+    return None
 
 
 def refers(f: CachedFile, fields: Iterable[str], id: str) -> bool:

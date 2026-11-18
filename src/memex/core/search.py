@@ -447,16 +447,22 @@ def _trim(line: str, spans: list[tuple[int, int]]) -> Snippet:
 # The muted context line on a result row (§9.6)
 
 
+def ref_name(ws: Workspace, ref: object) -> str | None:
+    """A reference as a row shows it: "Me" for Me, else the title, else as written."""
+    if not isinstance(ref, str) or not ref:
+        return None
+    found = ws.cache.resolve(ref).file
+    if found is None:
+        return ref
+    return "Me" if ws.is_me(found) else found.title
+
+
 def context_of(ws: Workspace, f: CachedFile) -> str:
     """A Project's Theme, a Deliverable's Project, a To-do's Owner → Requester, or a
     Note's folder; empty for the rest. References that don't resolve show as written."""
 
     def name(field: str) -> str:
-        ref = f.fields.get(field)
-        if not isinstance(ref, str) or not ref:
-            return ""
-        found = ws.cache.resolve(ref).file
-        return found.title if found else ref
+        return ref_name(ws, f.fields.get(field)) or ""
 
     match f.type:
         case EntityType.PROJECT:

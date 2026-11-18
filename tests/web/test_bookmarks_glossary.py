@@ -26,7 +26,8 @@ def test_bookmarks_lists_every_line_with_its_bookmark(api: TestClient, state: Ap
                 },
             },
         ],
-        "labels": ["ref"],
+        "labels": [{"name": "ref", "count": 1}],
+        "total": 1,
     }
 
 

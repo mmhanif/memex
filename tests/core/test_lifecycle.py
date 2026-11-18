@@ -296,6 +296,68 @@ def test_restore_fails_cleanly_when_the_path_is_taken(b: Builder):
     assert not (b.root / "notes/x/a.md").exists()
 
 
+def test_trash_remembers_what_each_delete_did_to_references(b: Builder):
+    b.person("alice", title="Alice")
+    b.person("bob", title="Bob Jones")
+    b.person("carol")
+    b.project("p", lead="alice", team=["alice", "carol"], body="Ask [[carol]].\n")
+    lifecycle.delete_entity(b.ws, "alice", "replace", "bob", dry_run=False)
+    b.clock = b.ws.clock = FixedClock(TODAY, dt.datetime(2026, 11, 12, 9, 0))
+    lifecycle.delete_entity(b.ws, "carol", "remove", dry_run=False)
+    b.clock = b.ws.clock = FixedClock(TODAY, dt.datetime(2026, 11, 12, 10, 0))
+    b.note("notes/old.md", "# Old\n")
+    b.ws.trash("notes/old.md")
+
+    entries = {e.entry: e.deletion for e in lifecycle.list_trash(b.ws)}
+
+    assert entries == {
+        "20261112-000000": lifecycle.Deletion("replace", 2, 1, "bob", "Bob Jones"),
+        "20261112-090000": lifecycle.Deletion("remove", 2, 1),
+        "20261112-100000": lifecycle.Deletion("plain", 0, 0),
+    }
+
+
+def test_trash_says_what_each_delete_was(b: Builder):
+    b.project("ledger-pilot", title="Ledger pilot")
+    b.note("notes/trip/a.md", "# A\n")
+    b.file("notes/pic.png", "png")
+    lifecycle.delete_entity(b.ws, "ledger-pilot", dry_run=False)
+    b.clock = b.ws.clock = FixedClock(TODAY, dt.datetime(2026, 11, 12, 9, 0))
+    b.ws.trash("notes/trip")
+    b.clock = b.ws.clock = FixedClock(TODAY, dt.datetime(2026, 11, 12, 10, 0))
+    b.ws.trash("notes/pic.png")
+
+    found = [(e.path, e.type, e.id, e.title) for e in lifecycle.list_trash(b.ws)]
+
+    assert found == [
+        ("notes/pic.png", "file", None, "pic.png"),
+        ("notes/trip", "folder", None, "trip"),
+        ("projects/ledger-pilot.md", "project", "ledger-pilot", "Ledger pilot"),
+    ]
+
+
+def test_trash_says_why_a_delete_cant_be_restored_before_trying(b: Builder):
+    b.entity("glossary", "slo", title="Service level objective")
+    b.note("notes/x.md", "# X\n")
+    b.note("notes/free.md", "# Free\n")
+    lifecycle.delete_entity(b.ws, "slo", dry_run=False)
+    b.clock = b.ws.clock = FixedClock(TODAY, dt.datetime(2026, 11, 12, 9, 0))
+    b.ws.trash("notes/x.md")
+    b.clock = b.ws.clock = FixedClock(TODAY, dt.datetime(2026, 11, 12, 10, 0))
+    b.ws.trash("notes/free.md")
+    b.entity("glossary", "SLO")
+    b.note("notes/x.md", "# Another X\n")
+
+    blocks = {e.entry: e.blocked for e in lifecycle.list_trash(b.ws)}
+
+    taken = b.ws.cache.get("glossary/SLO.md")
+    assert blocks == {
+        "20261112-000000": lifecycle.RestoreBlock("id", "glossary/slo.md", "slo", taken),
+        "20261112-090000": lifecycle.RestoreBlock("path", "notes/x.md"),
+        "20261112-100000": None,
+    }
+
+
 def test_restore_refuses_names_outside_the_trash(b: Builder):
     with pytest.raises(NotFound):
         lifecycle.restore(b.ws, "../config.yaml")
@@ -321,6 +383,73 @@ def test_broken_references_are_grouped_by_missing_id_with_ambiguous_ones_marked(
             [("projects/p.md", "team"), ("projects/p.md", "mention"), ("todos/t1.md", "owner")],
         ),
     ]
+
+
+def test_a_broken_mention_comes_with_the_words_around_it(b: Builder):
+    b.note(
+        "notes/call.md",
+        "# Call\n\nIntro line.\n\nLedgerCo's migration lead [[marco-ruiz]] will send the schema"
+        " diff by Friday, after the vendor has checked it with their own team first.\n",
+    )
+
+    [group] = lifecycle.broken_references(b.ws)
+
+    [use] = group.uses
+    assert use.snippet == (
+        "LedgerCo's migration lead ",
+        "[[marco-ruiz]]",
+        " will send the schema diff by Friday, after the vendor has…",
+    )
+
+
+def test_a_long_line_before_a_mention_is_cut_at_a_word(b: Builder):
+    b.note("notes/n.md", "One two three four five six seven eight nine ten: ask [[zed]].\n")
+
+    [group] = lifecycle.broken_references(b.ws)
+
+    assert group.uses[0].snippet == ("…five six seven eight nine ten: ask ", "[[zed]]", ".")
+
+
+def test_an_ambiguous_reference_names_the_files_that_claim_it(b: Builder):
+    b.project("runbook-library")
+    b.note("notes/Runbook-Library.md", "# R\n")
+    b.todo("t1", owner="ada", about=["runbook-library"])
+
+    [group] = lifecycle.broken_references(b.ws)
+
+    assert [f.rel for f in group.claimants] == [
+        "notes/Runbook-Library.md",
+        "projects/runbook-library.md",
+    ]
+    assert group.uses[0].snippet is None
+
+
+def test_renaming_one_claimant_of_an_ambiguous_id_resolves_its_references(b: Builder):
+    b.project("runbook-library", title="Runbook library")
+    b.note("notes/Runbook-Library.md", "# Reading list\n")
+    b.todo("t1", owner="ada", about=["runbook-library"])
+
+    moved = lifecycle.rename_claimant(
+        b.ws, "runbook-library", "notes/Runbook-Library.md", "runbook-reading"
+    )
+
+    assert moved == "notes/runbook-reading.md"
+    assert lifecycle.broken_references(b.ws) == []
+    assert "about:\n- runbook-library" in b.read("todos/t1.md")
+
+
+def test_only_a_claimant_of_an_ambiguous_id_is_renamed_here(b: Builder):
+    b.project("runbook-library")
+    b.note("notes/Runbook-Library.md", "# R\n")
+    b.note("notes/other.md", "# O\n")
+    b.todo("t1", owner="ada", about=["runbook-library"])
+
+    with pytest.raises(Validation, match="doesn't claim"):
+        lifecycle.rename_claimant(b.ws, "runbook-library", "notes/other.md", "x")
+    with pytest.raises(IdTaken):
+        lifecycle.rename_claimant(b.ws, "runbook-library", "notes/Runbook-Library.md", "other")
+    with pytest.raises(Validation, match="An Id is"):
+        lifecycle.rename_claimant(b.ws, "runbook-library", "notes/Runbook-Library.md", "Bad Id")
 
 
 def test_create_makes_the_entity_the_references_imply(b: Builder):

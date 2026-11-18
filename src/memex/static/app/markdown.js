@@ -37,14 +37,14 @@ md.core.ruler.after("inline", "task-lists", (state) => {
     if (todo) {
       const id = escape(sole?.[1].trim() ?? "");
       const checked = todo.finished ? " checked" : "";
-      box.content = `<input type="checkbox" data-todo="${id}" aria-label="Done: ${escape(todo.title)}"${checked}> `;
+      box.content = `<input type="checkbox" class="checkbox" data-todo="${id}" aria-label="Done: ${escape(todo.title)}"${checked}> `;
       const meta = new state.Token("html_inline", "", 0);
       meta.content = todo.meta.map((m) => ` <span class="${escape(m.class)}">${escape(m.text)}</span>`).join("");
       inline.children.push(meta);
       tokens[i - 2].attrJoin("class", `task-list-item todo-ref${todo.finished ? " finished" : ""}`);
     } else {
       const checked = match[1] === " " ? "" : " checked";
-      box.content = `<input type="checkbox" disabled${checked}> `;
+      box.content = `<input type="checkbox" class="checkbox" disabled${checked}> `;
       tokens[i - 2].attrJoin("class", "task-list-item");
     }
     inline.children.unshift(box);

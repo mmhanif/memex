@@ -118,3 +118,39 @@ def test_outline_theme_filter_keeps_only_those_themes(b: Builder):
     o = portfolio_outline(b.ws, themes=["platform"])
     assert outline(o) == [("platform", [("migrate", [])])]
     assert o.without_project == ()
+
+
+def test_board_project_cards_carry_their_blocked_and_late_deliverables(b: Builder):
+    # The builder's clock is TODAY; "late" is due before it and not finished.
+    b.project("migrate")
+    b.project("quiet")
+    b.deliverable("runbook", project="migrate", due=dt.date(2026, 11, 10))
+    b.deliverable("export", project="migrate", status="blocked")
+    b.deliverable("done-late", project="migrate", status="done", due=dt.date(2026, 11, 1))
+    b.deliverable("fine", project="migrate", due=dt.date(2027, 1, 1))
+    b.deliverable("calm", project="quiet")
+    board = portfolio_board(b.ws)
+    assert {p: [d.id for d in ds] for p, ds in board.attention.items()} == {
+        "migrate": ["runbook", "export"]
+    }
+    assert portfolio_board(b.ws, kind="deliverable").attention == {}
+
+
+def test_no_theme_filter_keeps_work_without_a_theme(b: Builder):
+    b.theme("platform")
+    b.project("migrate", theme="platform")
+    b.project("loose")
+    b.project("lost", theme="nowhere")
+    b.deliverable("stray", project="loose")
+    assert columns(portfolio_board(b.ws, unthemed=True))[1] == ("active", ["loose", "lost"])
+    both = portfolio_board(b.ws, themes=["platform"], unthemed=True)
+    assert columns(both)[1] == ("active", ["loose", "lost", "migrate"])
+    board = portfolio_board(b.ws, kind="deliverable", unthemed=True)
+    assert columns(board)[1] == ("active", ["stray"])
+    assert outline(portfolio_outline(b.ws, unthemed=True)) == [
+        (None, [("loose", ["stray"]), ("lost", [])])
+    ]
+    assert outline(portfolio_outline(b.ws, themes=["platform"], unthemed=True)) == [
+        ("platform", [("migrate", [])]),
+        (None, [("loose", ["stray"]), ("lost", [])]),
+    ]

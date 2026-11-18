@@ -1,23 +1,43 @@
 // @ts-check
-// `#/bookmarks` (SPEC §10.1): `bookmarks.md` rendered, with a Label filter and Add.
-// Bookmark URLs are only ever opened by the browser in a new tab; Memex never fetches them.
+// `#/bookmarks` (SPEC §10.1), per "Bookmarks" in Paper: `bookmarks.md` rendered as outline
+// blocks (its headings as heading blocks, prose kept as text), Label chips with counts, and
+// the Add form in a well. Bookmark URLs are only ever opened by the browser in a new tab;
+// Memex never fetches them.
 
 import { useEffect, useState } from "preact/hooks";
 import { ApiError, describe, request } from "./api.js";
+import { Icon } from "./icons.js";
 import { fileHref, navigate } from "./router.js";
 import { html, tree, useView } from "./state.js";
 
 /**
  * @typedef {{line: number, title: string, url: string, note: string, labels: string[]}} Bookmark
  * @typedef {{line: number, text: string, bookmark: Bookmark | null}} Line
- * @typedef {{lines: Line[], labels: string[]}} BookmarksView
+ * @typedef {{lines: Line[], labels: {name: string, count: number}[], total: number}} BookmarksView
+ * @typedef {{heading: Line | null, lines: Line[]}} Section
  */
 
 const FILE = "bookmarks.md";
+const HEADING = /^#{1,6}\s+(.*)$/;
 
 /** Labels compare ignoring case and accents, as the server's filter does. @param {string} s */
 function fold(s) {
   return s.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
+}
+
+/**
+ * The shown lines split at each heading; lines before the first heading have none.
+ * @param {Line[]} lines
+ * @returns {Section[]}
+ */
+function sections(lines) {
+  /** @type {Section[]} */
+  const out = [{ heading: null, lines: [] }];
+  for (const n of lines) {
+    if (!n.bookmark && HEADING.test(n.text)) out.push({ heading: n, lines: [] });
+    else out[out.length - 1].lines.push(n);
+  }
+  return out.filter((s) => s.heading || s.lines.length);
 }
 
 /** @param {{query: URLSearchParams}} props */
@@ -44,49 +64,84 @@ export function BookmarksPage({ query }) {
 
   const shown = view?.lines.filter((n) => n.bookmark || n.text.trim()) ?? [];
   return html`
-    <section class="bookmarks-page">
-      <header class="page-head">
-        <h1>Bookmarks</h1>
-        <a href=${fileHref(FILE)} class="muted">Edit ${FILE}</a>
+    <section class="page bookmarks-page">
+      <header class="bookmarks-head">
+        <p class="eyebrow">${view ? `${view.total} Bookmark${view.total === 1 ? "" : "s"} · ` : ""}<a
+          href=${fileHref(FILE)} class="file-link" title=${`Edit ${FILE}`}>${FILE}</a></p>
+        <h1 class="title">Bookmarks</h1>
       </header>
       ${!readOnly && html`<${AddForm} onAdded=${reload} />`}
       ${view &&
       view.labels.length > 0 &&
       html`<div class="label-filter" role="group" aria-label="Label filter">
-        <button type="button" class="chip" aria-pressed=${!label} onClick=${() => filterBy("")}>All</button>
+        <button type="button" class="label-chip all" aria-pressed=${!label} onClick=${() => filterBy("")}><span>All</span><span class="count">${view.total}</span></button>
         ${view.labels.map(
-          (l) => html`<button type="button" class="chip" key=${l}
-            aria-pressed=${fold(l) === fold(label)} onClick=${() => filterBy(l)}>#${l}</button>`,
+          (l) => html`<button type="button" class="label-chip" key=${l.name}
+            aria-pressed=${fold(l.name) === fold(label)} onClick=${() => filterBy(l.name)}><span class="label-name">#${l.name}</span><span class="count">${l.count}</span></button>`,
         )}
       </div>`}
       ${error && html`<p class="error-text" role="alert">${describe(error)}</p>`}
-      ${view && !shown.length && html`<p class="muted">${label ? `No Bookmarks are labelled #${label}.` : "No Bookmarks yet."}</p>`}
-      <ul class="bookmarks">
-        ${shown.map((n) => html`<${LineRow} key=${n.line} line=${n} onLabel=${filterBy} />`)}
-      </ul>
+      ${view && !shown.length && html`<p class="block-empty">${label ? `No Bookmarks are labelled #${label}.` : "No Bookmarks yet."}</p>`}
+      <div class="bookmarks">
+        ${sections(shown).map((s) =>
+          s.heading
+            ? html`<section key=${s.heading.line} class="block block-heading bookmark-section" id=${`bookmark-line-${s.heading.line}`}>
+                <div class="block-row"><span class="bullet"></span><h2 class="block-text">${HEADING.exec(s.heading.text)?.[1]}</h2></div>
+                ${s.lines.length > 0 &&
+                html`<div class="block-children">
+                  ${s.lines.map((n) => html`<${LineBlock} key=${n.line} line=${n} onLabel=${filterBy} />`)}
+                </div>`}
+              </section>`
+            : s.lines.map((n) => html`<${LineBlock} key=${n.line} line=${n} onLabel=${filterBy} />`),
+        )}
+      </div>
     </section>
   `;
 }
 
-/** @param {{line: Line, onLabel: (label: string) => void}} props */
-function LineRow({ line, onLabel }) {
+/**
+ * A Bookmark as a block: its title (a bare URL in mono), ↗, the domain, then the note and
+ * Labels. Any other line is plain text in the block's place, without a bullet.
+ * @param {{line: Line, onLabel: (label: string) => void}} props
+ */
+function LineBlock({ line, onLabel }) {
   const b = line.bookmark;
   const id = `bookmark-line-${line.line}`;
   if (!b) {
-    const heading = /^(#{1,6})\s+(.*)$/.exec(line.text);
-    if (heading) return html`<li id=${id} class="bookmark-heading">${heading[2]}</li>`;
-    return html`<li id=${id} class="bookmark-text">${line.text}</li>`;
+    return html`<div id=${id} class="block bookmark-text">
+      <div class="block-row"><span class="bullet-slot"></span><p class="block-text">${line.text}</p></div>
+    </div>`;
   }
   return html`
-    <li id=${id} class="bookmark">
-      <${BookmarkLink} bookmark=${b} />
-      ${b.title && html`<span class="bookmark-url muted">${b.url}</span>`}
-      ${b.note && html`<span class="bookmark-note">${b.note}</span>`}
-      ${b.labels.map(
-        (l) => html`<button type="button" class="chip label" key=${l} onClick=${() => onLabel(l)}>#${l}</button>`,
-      )}
-    </li>
+    <div id=${id} class="block bookmark">
+      <div class="block-row">
+        <span class="bullet"></span>
+        <div class="block-text">
+          <div class="bookmark-line">
+            <${BookmarkLink} bookmark=${b} class=${b.title ? "bookmark-title" : "bookmark-title mono"} />
+            ${/^https?:\/\//i.test(b.url) && html`<${Icon} name="arrow-up-right" />`}
+            ${b.title && html`<span class="bookmark-domain">${domain(b.url)}</span>`}
+          </div>
+          ${(b.note || b.labels.length > 0) &&
+          html`<p class="bookmark-note">
+            ${b.note}
+            ${b.labels.map(
+              (l) => html` <button type="button" class="label-link" key=${l} onClick=${() => onLabel(l)}>#${l}</button>`,
+            )}
+          </p>`}
+        </div>
+      </div>
+    </div>
   `;
+}
+
+/** The host a URL points at, or the URL itself when it doesn't parse. @param {string} url */
+function domain(url) {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
 }
 
 /**
@@ -145,12 +200,20 @@ function AddForm({ onAdded }) {
   }
 
   return html`
-    <form class="bookmark-add" onSubmit=${submit} aria-label="Add a Bookmark">
-      <label>URL <input type="url" required placeholder="https://…" ...${field("url")} /></label>
-      <label>Title <input type="text" ...${field("title")} /></label>
-      <label>Note <input type="text" ...${field("note")} /></label>
-      <label>Labels <input type="text" placeholder="ref eng" ...${field("labels")} /></label>
-      <button type="submit" class="primary" disabled=${busy}>Add</button>
+    <form class="well bookmark-add" onSubmit=${submit} aria-label="Add a Bookmark">
+      <div class="bookmark-add-head">
+        <span class="eyebrow">Add Bookmark</span>
+        <span class="add-hint">appends one line to ${FILE}</span>
+      </div>
+      <div class="bookmark-add-row">
+        <input type="url" class="url" required aria-label="URL" placeholder="https://…" ...${field("url")} />
+        <input type="text" class="title-field" aria-label="Title" placeholder="Title" ...${field("title")} />
+      </div>
+      <div class="bookmark-add-row">
+        <input type="text" class="note" aria-label="Note" placeholder="Note (optional)" ...${field("note")} />
+        <input type="text" class="labels" aria-label="Labels" placeholder="#labels" ...${field("labels")} />
+        <button type="submit" class="solid" disabled=${busy}>Add</button>
+      </div>
       ${Object.entries(fieldErrors).map(
         ([name, message]) => html`<p class="error-text" role="alert" key=${name}>${name}: ${message}</p>`,
       )}

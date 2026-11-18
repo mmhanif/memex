@@ -6,6 +6,7 @@ from fastapi import APIRouter, Header, Response
 from pydantic import BaseModel, Field
 
 from memex.core import lifecycle
+from memex.core.cache import CachedFile
 from memex.core.lifecycle import BrokenGroup, Impact, Outcome, Trashed
 from memex.core.schema import Target, type_named
 from memex.web.api import WS, expected_hash
@@ -42,6 +43,12 @@ class Repair(BaseModel):
     type: str | None = None  # for Create when the references allow several types
     dry_run: bool = True
     hashes: dict[str, str] = Field(default_factory=dict)
+
+
+class RenameClaimant(BaseModel):
+    id: str
+    path: str
+    new_id: str
 
 
 @router.post("/entities/{id}/rename")
@@ -94,6 +101,12 @@ def repair(ws: WS, body: Repair) -> dict:
     return outcome_json(outcome)
 
 
+@router.post("/broken-references/rename")
+def rename_claimant(ws: WS, body: RenameClaimant) -> dict:
+    """Rename id… for one of the files sharing an ambiguous Id (§8.5)."""
+    return {"path": lifecycle.rename_claimant(ws, body.id, body.path, body.new_id)}
+
+
 def outcome_json(o: Outcome) -> dict:
     return {
         "impact": _impact(o.impact),
@@ -125,12 +138,28 @@ def _impact(i: Impact) -> dict:
 
 
 def _trashed(t: Trashed) -> dict:
+    d, block = t.deletion, t.blocked
     return {
         "entry": t.entry,
         "path": t.path,
         "files": list(t.files),
         "deleted": t.deleted and t.deleted.isoformat(),
+        "type": t.type,
+        "id": t.id,
+        "title": t.title,
+        "deletion": d and d.record(),
+        "blocked": block
+        and {
+            "reason": block.reason,
+            "path": block.path,
+            "id": block.id,
+            "by": block.by and _file(block.by),
+        },
     }
+
+
+def _file(f: CachedFile) -> dict:
+    return {"id": f.id, "title": f.title, "type": _type_name(f.type), "path": f.rel}
 
 
 def _group(g: BrokenGroup) -> dict:
@@ -144,11 +173,14 @@ def _group(g: BrokenGroup) -> dict:
                 "title": u.title,
                 "type": None if u.id is None else _type_name(u.type),
                 "field": u.field,
+                "snippet": u.snippet and list(u.snippet),
+                "targets": [_type_name(t) for t in u.targets],
             }
             for u in g.uses
         ],
         "types": [_type_name(t) for t in g.types],
         "create_types": [_type_name(t) for t in g.create_types],
+        "claimants": [_file(f) for f in g.claimants],
     }
 
 

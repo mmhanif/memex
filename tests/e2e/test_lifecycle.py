@@ -50,7 +50,7 @@ def test_delete_with_replace_then_restore_from_trash(app: Page, server: AppState
     assert not (root / "themes/old.md").exists()
 
     app.goto(f"{origin(server)}/#/trash")
-    app.get_by_role("row", name="themes/old.md").get_by_role("button", name="Restore").click()
+    app.get_by_role("group", name="themes/old.md").get_by_role("button", name="Restore").click()
     expect(app.get_by_text("The trash is empty.")).to_be_visible()
     assert (root / "themes/old.md").exists()
 
@@ -62,7 +62,7 @@ def test_an_entity_pages_broken_reference_is_repaired_inline_after_a_preview(
     app.goto(f"{origin(server)}/#/e/p")
 
     group = app.get_by_role("article", name="Broken reference zed")
-    group.get_by_role("button", name="Remove…").click()
+    group.get_by_role("button", name="Remove").click()
     expect(group).to_contain_text("This updates 2 references in 1 file")
     group.get_by_role("button", name="Remove", exact=True).click()
 

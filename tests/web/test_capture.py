@@ -100,3 +100,9 @@ def test_confirm_with_an_unmatched_person_is_422_unknown_reference(
     response = api.post(f"/api/notes/{note}/capture", json={"hash": hash, "rows": [{"index": 0}]})
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "unknown_reference"
+
+
+def test_dashboard_counts_each_notes_todos_to_create(api: TestClient, state: AppState, note: str):
+    put(state, NOTE, "---\ntitle: Standup\n---\n- [ ] One\n- [ ] Two @alice\n- [x] Done\n")
+    body = api.get("/api/views/dashboard").json()
+    assert body["to_create"] == {"standup": 2}

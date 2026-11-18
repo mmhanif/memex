@@ -151,6 +151,17 @@ def test_trash_lists_and_restores(api: TestClient, root: Path):
         "path": "people/alice.md",
         "files": ["people/alice.md"],
         "deleted": "2026-11-12T00:00:00",
+        "type": "person",
+        "id": "alice",
+        "title": "Alice",
+        "deletion": {
+            "mode": "plain",
+            "references": 0,
+            "files": 0,
+            "replacement": None,
+            "replacement_title": None,
+        },
+        "blocked": None,
     }
 
     response = api.post("/api/trash/restore", json={"entry": entry["entry"]})
@@ -169,6 +180,33 @@ def test_restoring_over_a_reused_id_is_409(api: TestClient, root: Path):
 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "exists"
+
+
+def test_trash_says_why_restore_cant_succeed(api: TestClient, root: Path):
+    alice = person(api, "Alice")
+    bob = person(api, "Bob")
+    todo_for(api, alice)
+    api.post(
+        f"/api/entities/{alice}/delete",
+        json={"mode": "replace", "replacement": bob, "dry_run": False},
+    )
+    api.post("/api/files", json={"path": "notes/alice.md", "content": "# Someone else\n"})
+
+    [entry] = api.get("/api/trash").json()["entries"]
+
+    assert entry["deletion"] == {
+        "mode": "replace",
+        "references": 1,
+        "files": 1,
+        "replacement": bob,
+        "replacement_title": "Bob",
+    }
+    assert entry["blocked"] == {
+        "reason": "id",
+        "path": "people/alice.md",
+        "id": "alice",
+        "by": {"id": "alice", "title": "Someone else", "type": "note", "path": "notes/alice.md"},
+    }
 
 
 def test_restoring_an_unknown_entry_is_404(api: TestClient):
@@ -191,10 +229,19 @@ def test_broken_references_list_and_create_repair(api: TestClient, state: AppSta
         "id": "zed",
         "status": "missing",
         "uses": [
-            {"path": "todos/t1.md", "id": "t1", "title": "T", "type": "todo", "field": "owner"}
+            {
+                "path": "todos/t1.md",
+                "id": "t1",
+                "title": "T",
+                "type": "todo",
+                "field": "owner",
+                "snippet": None,
+                "targets": ["person"],
+            }
         ],
         "types": ["person"],
         "create_types": ["person"],
+        "claimants": [],
     }
 
     response = api.post(
@@ -314,3 +361,22 @@ def test_repair_remove_blocked_by_a_required_reference_is_422(api: TestClient, s
 
     assert response.status_code == 422
     assert "Remove is blocked" in response.json()["error"]["message"]
+
+
+def test_rename_id_gives_one_claimant_of_an_ambiguous_id_a_new_id(api: TestClient, root: Path):
+    api.post("/api/files", json={"path": "notes/Runbook.md", "content": "# R\n"})
+    api.post("/api/files", json={"path": "reading/runbook.md", "content": "# R2\n"})
+    api.post("/api/files", json={"path": "notes/n.md", "content": "See [[runbook]].\n"})
+
+    [group] = api.get("/api/broken-references").json()["groups"]
+    assert [c["path"] for c in group["claimants"]] == ["notes/Runbook.md", "reading/runbook.md"]
+    assert group["uses"][0]["snippet"] == ["See ", "[[runbook]]", "."]
+
+    response = api.post(
+        "/api/broken-references/rename",
+        json={"id": "runbook", "path": "notes/Runbook.md", "new_id": "runbook-notes"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"path": "notes/runbook-notes.md"}
+    assert api.get("/api/broken-references").json()["groups"] == []

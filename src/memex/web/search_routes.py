@@ -1,10 +1,11 @@
 """Search (SPEC §9, §17.2): ranked rows plus the parsed filters and token errors."""
 
+import datetime as dt
 from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from memex.core.search import Hit, Snippet, context_of, search, status_group
+from memex.core.search import Hit, Snippet, context_of, ref_name, search, status_group
 from memex.core.workspace import Workspace
 from memex.web.api import WS
 from memex.web.bookmarks_routes import bookmark_json
@@ -55,19 +56,35 @@ def _hit(ws: Workspace, h: Hit) -> dict:
             "bookmark": bookmark_json(b),
             "snippets": snippets,
         }
-    status = h.file.fields.get("status")
+    fields = h.file.fields
+    status = fields.get("status")
+    about = fields.get("about")
+    labels = fields.get("labels")
     return {
         "kind": "file",
         "id": h.file.id,
         "type": h.type,
         "title": h.file.title,
         "path": h.file.rel,
-        "status": "archived" if h.file.fields.get("archived") else status,
+        "status": "archived" if fields.get("archived") else status,
         "finished": status_group(h.file) == 2,
         "tier": h.tier,
         "context": context_of(ws, h.file),
+        # The rest of the search page's context line (§9.7), as written in the file.
+        "lead": ref_name(ws, fields.get("lead")),
+        "due": _text(fields.get("due")),
+        "completed": _text(fields.get("completed")),
+        "date": _text(fields.get("date")),
+        "about": ref_name(ws, about) if h.type == "todo" else None,
+        "labels": [x for x in labels if isinstance(x, str)] if isinstance(labels, list) else [],
         "snippets": snippets,
     }
+
+
+def _text(value: object) -> str | None:
+    if isinstance(value, dt.date):
+        return value.isoformat()
+    return value if isinstance(value, str) and value else None
 
 
 def _snippet(s: Snippet) -> dict:

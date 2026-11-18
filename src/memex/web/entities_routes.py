@@ -86,7 +86,10 @@ def detail_json(ws: Workspace, detail: entities.EntityDetail) -> dict:
         "children": [summary(f) for f in detail.children],
         "todos": [summary(f) for f in detail.todos],
         "notes": [summary(f) for f in detail.notes],
-        "mentioned_in": [summary(f) for f in detail.mentioned_in],
+        "mentioned_in": [
+            {**summary(f), "context": entities.mention_context(f.body, detail.file.id)}
+            for f in detail.mentioned_in
+        ],
         # Mentioned To-dos, so a converted task item renders as a live To-do row (§6.4).
         "mentioned_todos": [summary(f) for f in _mentioned_todos(ws, detail.file)],
         # Archive (§8.3): Themes and Persons, and what it would leave hanging.
@@ -111,6 +114,13 @@ def create_entity(ws: WS, body: NewEntity, response: Response) -> dict:
         response,
         entities.create_entity(ws, entity_type, body.fields, body.body, body.template, body.folder),
     )
+
+
+@router.post("/entities/placement")
+def entity_placement(ws: WS, body: NewEntity) -> dict:
+    """Where + New… would put the file: the form's live Id/path preview (§11.7)."""
+    id, rel = entities.placement(ws, type_named(body.type), body.fields, body.folder)
+    return {"id": id, "path": rel, "created": ws.clock.today().isoformat()}
 
 
 @router.patch("/entities/{id}")

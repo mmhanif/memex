@@ -6,6 +6,7 @@ Views read leniently (§4.5): a To-do with a bad `status` counts as open and a b
 """
 
 import datetime as dt
+from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Literal, cast
@@ -40,25 +41,38 @@ def todo_view(ws: Workspace, view: str, include_done: bool = False) -> TodoView:
     """One of Me's three To-do lists (§6.2). Raises MeNotSet without Me."""
     if view not in TODO_VIEWS:
         raise Validation(f"Unknown To-do view {view!r}: one of {', '.join(TODO_VIEWS)}")
+    name = cast(TodoViewName, view)
+    picked = _in_view(ws, name, ws.require_me().id)
+    if name == "mine":
+        return TodoView(name, _by_due(ws, picked, include_done))
+    field = "owner" if name == "waiting-on-them" else "requester"
+    return TodoView(name, _by_party(ws, picked, field, include_done))
+
+
+def todo_counts(ws: Workspace) -> dict[TodoViewName, int]:
+    """Each view's open To-dos: the To-dos page's switch (§6.2). Raises MeNotSet without Me."""
     me = ws.require_me().id
-    if view == "mine":
-        picked = [t for t in todos(ws) if refers(t, ["owner"], me)]
-        return TodoView("mine", _by_due(ws, picked, include_done))
-    if view == "waiting-on-them":
-        picked = [
-            t for t in todos(ws) if refers(t, ["requester"], me) and not refers(t, ["owner"], me)
-        ]
-        return TodoView("waiting-on-them", _by_party(ws, picked, "owner", include_done))
-    picked = [t for t in todos(ws) if refers(t, ["owner"], me) and not refers(t, ["requester"], me)]
-    return TodoView("waiting-on-me", _by_party(ws, picked, "requester", include_done))
+    return {view: sum(map(is_open, _in_view(ws, view, me))) for view in TODO_VIEWS}
 
 
 def open_todo_count(ws: Workspace) -> int | None:
-    """How many open To-dos Me owns: the sidebar's To-dos badge (§11.2). None without Me."""
+    """How many open To-dos Me owns: the sidebar's To-dos badge (§11.2), the same as
+    Mine's count. None without Me."""
     me = ws.me()
     if me is None:
         return None
-    return sum(1 for t in todos(ws) if is_open(t) and refers(t, ["owner"], me.id))
+    return sum(map(is_open, _in_view(ws, "mine", me.id)))
+
+
+def _in_view(ws: Workspace, view: TodoViewName, me: str) -> list[CachedFile]:
+    """The To-dos a view picks, open or not (§6.2)."""
+    if view == "mine":
+        return [t for t in todos(ws) if refers(t, ["owner"], me)]
+    if view == "waiting-on-them":
+        return [
+            t for t in todos(ws) if refers(t, ["requester"], me) and not refers(t, ["owner"], me)
+        ]
+    return [t for t in todos(ws) if refers(t, ["owner"], me) and not refers(t, ["requester"], me)]
 
 
 def todos(ws: Workspace) -> list[CachedFile]:
@@ -209,14 +223,14 @@ def _one_list(picked: list[CachedFile], include_done: bool) -> tuple[TodoGroup, 
     return _with_completed([open_ones], picked, include_done)
 
 
-def directs_of(ws: Workspace, id: str) -> list[CachedFile]:
-    """Persons whose `manager` is `id`, archived ones left out, by name."""
+def directs_of(ws: Workspace, id: str, include_archived: bool = False) -> list[CachedFile]:
+    """Persons whose `manager` is `id`, archived ones left out unless asked, by name."""
     return sorted(
         (
             f
             for f in ws.cache.files()
             if f.type is EntityType.PERSON
-            and not f.fields.get("archived")
+            and (include_archived or not f.fields.get("archived"))
             and refers(f, ["manager"], id)
         ),
         key=_by_title,
@@ -265,26 +279,31 @@ class PeopleView:
     me: OrgNode | None  # None while Me isn't set
     others: tuple[CachedFile, ...]  # Team Members outside Me's tree
     stakeholders: tuple[Stakeholder, ...]
+    # Open To-dos between Me and each Person, by id: (they owe Me, Me owes them); zeros left out
+    waiting: dict[str, tuple[int, int]]
 
 
-def people_view(ws: Workspace) -> PeopleView:
+def people_view(ws: Workspace, include_archived: bool = False) -> PeopleView:
     """The org tree from Me, other Team Members, and the Stakeholders table.
 
-    Archived Persons are left out. A manager cycle is cut where it comes back round.
+    Archived Persons are left out unless asked (§8.3). A manager cycle is cut where it
+    comes back round.
     """
     me = ws.me()
     shown: set[str] = set()
     root = manager = None
+    waiting: dict[str, tuple[int, int]] = {}
     if me is not None:
-        root = _org_tree(ws, me, shown)
+        root = _org_tree(ws, me, shown, include_archived)
         manager = _manager_of(ws, me)
         if manager is not None:
             shown.add(manager.id.casefold())
+        waiting = _waiting_with(ws, me)
     persons = sorted(
         (
             f
             for f in ws.cache.files()
-            if f.type is EntityType.PERSON and not f.fields.get("archived")
+            if f.type is EntityType.PERSON and (include_archived or not f.fields.get("archived"))
         ),
         key=_by_title,
     )
@@ -302,14 +321,38 @@ def people_view(ws: Workspace) -> PeopleView:
             for p in persons
             if _kind(p, "stakeholder")
         ),
+        waiting=waiting,
     )
 
 
-def _org_tree(ws: Workspace, person: CachedFile, shown: set[str]) -> OrgNode:
+def _waiting_with(ws: Workspace, me: CachedFile) -> dict[str, tuple[int, int]]:
+    """Open To-dos between Me and each other Person: (they owe Me, Me owes them)."""
+    owe_me: Counter[str] = Counter()
+    owe_them: Counter[str] = Counter()
+    for t in todos(ws):
+        if not is_open(t):
+            continue
+        if refers(t, ["requester"], me.id):
+            other, side = t.fields.get("owner"), owe_me
+        elif refers(t, ["owner"], me.id):
+            other, side = t.fields.get("requester"), owe_them
+        else:
+            continue
+        person = ws.cache.resolve(other).file if isinstance(other, str) else None
+        if person is not None and person.type is EntityType.PERSON and person.id != me.id:
+            side[person.id] += 1
+    return {id: (owe_me[id], owe_them[id]) for id in owe_me.keys() | owe_them.keys()}
+
+
+def _org_tree(
+    ws: Workspace, person: CachedFile, shown: set[str], include_archived: bool
+) -> OrgNode:
     shown.add(person.id.casefold())
-    directs = [d for d in directs_of(ws, person.id) if d.id.casefold() not in shown]
+    directs = [
+        d for d in directs_of(ws, person.id, include_archived) if d.id.casefold() not in shown
+    ]
     shown.update(d.id.casefold() for d in directs)
-    return OrgNode(person, tuple(_org_tree(ws, d, shown) for d in directs))
+    return OrgNode(person, tuple(_org_tree(ws, d, shown, include_archived) for d in directs))
 
 
 def _kind(person: CachedFile, kind: str) -> bool:
@@ -342,6 +385,7 @@ class Dashboard:
     directs: tuple[DirectCounts, ...] | None
     recent_notes: tuple[CachedFile, ...]
     capture_notes: tuple[CachedFile, ...]  # Notes with To-dos to create (§6.4)
+    to_create: dict[str, int]  # how many each of those has, by id
     get_started: bool  # no Entity besides Me yet
 
 
@@ -376,6 +420,7 @@ def dashboard(ws: Workspace) -> Dashboard:
     notes = sorted(
         (f for f in files if f.type is None and f.rel != BOOKMARKS), key=lambda f: -f.mtime
     )
+    to_create = {n.id: count for n in notes if (count := len(task_items(ws, n.body)))}
     return Dashboard(
         due_soon=tuple(sorted(due_soon, key=by_due)),
         waiting_on_them=waiting_on_them,
@@ -385,7 +430,8 @@ def dashboard(ws: Workspace) -> Dashboard:
         ),
         directs=directs,
         recent_notes=tuple(notes[:RECENT_NOTES]),
-        capture_notes=tuple(sorted((n for n in notes if task_items(ws, n.body)), key=_by_title)),
+        capture_notes=tuple(sorted((n for n in notes if n.id in to_create), key=_by_title)),
+        to_create=to_create,
         get_started=not any(f.type is not None and (me is None or f.rel != me.rel) for f in files),
     )
 
@@ -417,6 +463,8 @@ class Board:
     kind: BoardKind
     columns: tuple[BoardColumn, ...]
     chips: tuple[CachedFile, ...]  # the Theme filter chips
+    # A Project card's Deliverables that need a look: blocked, or late. By Project Id.
+    attention: dict[str, tuple[CachedFile, ...]]
 
 
 def portfolio_board(
@@ -424,12 +472,14 @@ def portfolio_board(
     kind: str = "project",
     themes: Iterable[str] = (),
     include_archived: bool = False,
+    unthemed: bool = False,
 ) -> Board:
     """Projects or Deliverables in status columns, soonest due first. Cancelled isn't a
-    column. Items with a bad status get a flagged column of their own, first (§4.5)."""
+    column. Items with a bad status get a flagged column of their own, first (§4.5).
+    With `themes` or `unthemed`, only work under those Themes, or with none, is shown."""
     if kind not in BOARD_KINDS:
         raise Validation(f"Unknown board kind {kind!r}: one of {', '.join(BOARD_KINDS)}")
-    items = _under_themes(ws, BOARD_KINDS[kind], themes)
+    items = _under_themes(ws, BOARD_KINDS[kind], themes, unthemed)
     by_status: dict[str | None, list[CachedFile]] = {s: [] for s in BOARD_STATUSES}
     invalid: list[CachedFile] = []
     for f in items:
@@ -441,7 +491,27 @@ def portfolio_board(
     columns = [BoardColumn(s, tuple(sorted(fs, key=by_due))) for s, fs in by_status.items()]
     if invalid:
         columns.insert(0, BoardColumn(None, tuple(sorted(invalid, key=by_due))))
-    return Board(cast(BoardKind, kind), tuple(columns), theme_chips(ws, include_archived))
+    attention = _attention(ws, items) if kind == "project" else {}
+    return Board(
+        cast(BoardKind, kind), tuple(columns), theme_chips(ws, include_archived), attention
+    )
+
+
+def _attention(ws: Workspace, projects: list[CachedFile]) -> dict[str, tuple[CachedFile, ...]]:
+    """Each Project's Deliverables that are blocked, or past due and not finished."""
+    today = ws.clock.today()
+    shown = {p.rel for p in projects}
+    found: dict[str, list[CachedFile]] = {}
+    for d in (f for f in ws.cache.files() if f.type is EntityType.DELIVERABLE):
+        status = d.fields.get("status")
+        due = due_of(d)
+        late = due is not None and due < today and status not in ("done", "cancelled")
+        if status != "blocked" and not late:
+            continue
+        project = _resolved(ws, d.fields.get("project"), EntityType.PROJECT)
+        if project is not None and project.rel in shown:
+            found.setdefault(project.id, []).append(d)
+    return {p: tuple(sorted(ds, key=by_due)) for p, ds in found.items()}
 
 
 def theme_chips(ws: Workspace, include_archived: bool = False) -> tuple[CachedFile, ...]:
@@ -453,13 +523,21 @@ def _themes(ws: Workspace) -> list[CachedFile]:
     return sorted((f for f in ws.cache.files() if f.type is EntityType.THEME), key=_by_title)
 
 
-def _under_themes(ws: Workspace, kind: EntityType, themes: Iterable[str]) -> list[CachedFile]:
-    """Every item of `kind`, or with `themes`, those whose Theme is one of them."""
+def _under_themes(
+    ws: Workspace, kind: EntityType, themes: Iterable[str], unthemed: bool = False
+) -> list[CachedFile]:
+    """Every item of `kind`, or with `themes`, those whose Theme is one of them, and with
+    `unthemed`, those whose Theme doesn't resolve."""
     items = [f for f in ws.cache.files() if f.type is kind]
     wanted = {t.casefold() for t in themes}
-    if not wanted:
+    if not wanted and not unthemed:
         return items
-    return [f for f in items if (t := theme_of(ws, f)) is not None and t.id.casefold() in wanted]
+    return [
+        f
+        for f in items
+        if ((t := theme_of(ws, f)) is None and unthemed)
+        or (t is not None and t.id.casefold() in wanted)
+    ]
 
 
 def theme_of(ws: Workspace, f: CachedFile) -> CachedFile | None:
@@ -495,15 +573,19 @@ class Outline:
 
 
 def portfolio_outline(
-    ws: Workspace, themes: Iterable[str] = (), include_archived: bool = False
+    ws: Workspace,
+    themes: Iterable[str] = (),
+    include_archived: bool = False,
+    unthemed: bool = False,
 ) -> Outline:
     """Theme → Project → Deliverable, each level by title so rows stay put while edited.
 
     Archived Themes come after the others; they're only left out of the chips (§8.3).
-    Projects whose Theme doesn't resolve go under "No theme", last. With `themes`, only
-    those Themes' groups are shown.
+    Projects whose Theme doesn't resolve go under "No theme", last. With `themes` or
+    `unthemed`, only those Themes' groups, or "No theme", are shown.
     """
     wanted = {t.casefold() for t in themes}
+    filtered = bool(wanted) or unthemed
     files = ws.cache.files()
     deliverables: dict[str, list[CachedFile]] = {}
     without_project: list[CachedFile] = []
@@ -522,13 +604,13 @@ def portfolio_outline(
     groups = [
         OutlineTheme(t, tuple(projects.get(t.rel, ())))
         for t in all_themes
-        if not wanted or t.id.casefold() in wanted
+        if not filtered or t.id.casefold() in wanted
     ]
-    if not wanted and projects.get(None):
+    if (not filtered or unthemed) and projects.get(None):
         groups.append(OutlineTheme(None, tuple(projects[None])))
     return Outline(
         tuple(groups),
-        () if wanted else tuple(sorted(without_project, key=_by_title)),
+        () if filtered else tuple(sorted(without_project, key=_by_title)),
         theme_chips(ws, include_archived),
     )
 

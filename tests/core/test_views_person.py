@@ -109,3 +109,31 @@ def test_without_me_everyone_is_in_others(b: Builder):
     view = people_view(b.ws)
     assert view.me is None
     assert [p.id for p in view.others] == ["ada", "alice", "bob"]
+
+
+def test_show_archived_brings_archived_people_back(b: Builder):
+    b.person("carol", manager="alice", archived=dt.date(2026, 1, 1))
+    b.person("erin", archived=dt.date(2026, 1, 1))
+    b.person("sam", title="Sam", kind=["stakeholder"], archived=dt.date(2026, 1, 1))
+    view = people_view(b.ws)
+    assert view.me is not None
+    assert tree(view.me) == ("ada", [("alice", []), ("bob", [])])
+    assert view.others == () and view.stakeholders == ()
+
+    shown = people_view(b.ws, include_archived=True)
+    assert shown.me is not None
+    assert tree(shown.me) == ("ada", [("alice", [("carol", [])]), ("bob", [])])
+    assert [p.id for p in shown.others] == ["erin"]
+    assert [s.file.id for s in shown.stakeholders] == ["sam"]
+
+
+def test_people_page_counts_open_todos_between_me_and_each_person(b: Builder):
+    b.person("carol", manager="alice")
+    b.todo("owed", owner="alice", requester="ada")
+    b.todo("owed-too", owner="alice", requester="ada")
+    b.todo("promised", owner="ada", requester="alice")
+    b.todo("for-carol", owner="ada", requester="carol")
+    b.todo("done", owner="bob", requester="ada", status="done", completed=dt.date(2026, 11, 1))
+    b.todo("between-others", owner="bob", requester="alice")
+    view = people_view(b.ws)
+    assert view.waiting == {"alice": (2, 1), "carol": (0, 1)}

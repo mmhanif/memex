@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import Request
 
 from memex.core.clock import Clock, SystemClock
-from memex.core.config import Location
+from memex.core.config import AppConfig, Location, load_app_config
 from memex.core.watch import ChangeFeed
 from memex.core.workspace import Workspace
 from memex.web.session import Session
@@ -28,6 +28,8 @@ class AppState:
     setup_path: Path | None = None  # Setup's pre-filled path (§3.3)
     clock: Clock = field(default_factory=SystemClock)
     install_dir: Path | None = None
+    # The app config as this run read it: Settings shows edits since as "relaunch needed".
+    launch_app_config: AppConfig = field(default_factory=AppConfig)
     feed: ChangeFeed = field(default_factory=ChangeFeed, repr=False)
     session: Session = field(default_factory=Session, repr=False)
     launcher_key: bytes = field(default_factory=lambda: secrets.token_bytes(32), repr=False)
@@ -65,6 +67,7 @@ class AppState:
             setup_path=None if workspace else location.path,
             clock=clock,
             install_dir=install_dir,
+            launch_app_config=load_app_config(home),
         )
 
     @classmethod

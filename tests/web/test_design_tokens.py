@@ -30,6 +30,7 @@ PAIRS = (
         ("--accent-text", "--accent", 4.5),
         ("--avatar-text", "--avatar-bg", 4.5),
         ("--me-text", "--me-bg", 4.5),
+        ("--link", "--link-tint", 4.5),
         ("--solid-text", "--solid-bg", 4.5),
         ("--solid-hint", "--solid-bg", 3.0),
         # The shell's banner strip (§11.2)

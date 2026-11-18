@@ -18,7 +18,7 @@ export const html = htm.bind(h);
  *   config_error: string | null, config_error_line: number | null,
  *   me_set: boolean, me: string | null, me_ref: string | null, open_todos: number | null,
  * }} WorkspaceStatus
- * @typedef {{folders: string[], files: TreeFile[], workspace: WorkspaceStatus}} Tree
+ * @typedef {{folders: string[], files: TreeFile[], other_files: string[], workspace: WorkspaceStatus}} Tree
  */
 
 /** 1. The tree: reloaded on every `changed` event. */

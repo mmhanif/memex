@@ -148,6 +148,8 @@ One page covering both files:
 
 Saves to the Workspace config use the same hash check as Notes (§5.3), so conflicts get the usual banner. MCP has no config access.
 
+A setting that needs a relaunch is tagged "relaunch"; once a saved value differs from what this run uses, the tag reads "relaunch needed" (the port also shows the value it was), and a bar under This computer says "Saved. N changes take effect after a relaunch". Memex can't restart itself, so the bar tells the user to quit and run `memex` again, with a **Quit Memex** button. About shows the version, the address Memex is running at and the logs folder.
+
 **Acceptance**
 - [core] Setup on an empty folder creates exactly `.memex/config.yaml` (`format: 1`, `me`), the six type folders, `notes/`, empty `bookmarks.md` and Me's Person file.
 - [core] Adopting a folder with 3 Notes and a `people/` folder with 1 file reports "3 Notes, 1 Person" and writes nothing until confirmed; after confirmation no pre-existing file's bytes have changed.
@@ -435,13 +437,13 @@ Title words @owner from @requester due:YYYY-MM-DD
 
 **Explicit action only.** Nothing converts while the user types or saves.
 
-- **Trigger:** a Note in read mode with unconverted task items shows **"Create N To-dos"**, which opens a preview.
+- **Trigger:** a Note in read mode with unconverted task items shows a bar, "N task items aren't To-dos yet", with **"Create N To-dos"**, which opens a preview.
 - **Which lines count:**
   - unchecked task items (`- [ ]`, `* [ ]`, `+ [ ]`) at any indent
   - not inside fenced code or frontmatter
   - not lines whose only content is a To-do Mention (already converted)
   - `- [x]` lines are ignored
-- **Preview rows:** one per item, with the text parsed by the quick-add parser unchanged. Indented sub-lines under an item become the To-do's body. Each row's parties, due and `about` can be edited, and each row can be unticked. Rows with errors are shown in red and block confirmation until they are fixed or unticked.
+- **Preview rows:** a table, one row per item, with the text parsed by the quick-add parser unchanged: a tick, the To-do's title with its body line, Owner and Requester with their avatars, Due and About. Indented sub-lines under an item become the To-do's body. Clicking a row's Owner, Requester, Due or About edits it, and each row can be unticked. A row with errors is tinted rust, with the message under its title and the field at fault open for editing; the footer reads "Fix or untick N rows to continue" and **Create** stays disabled until every ticked row is fixed.
 - **Defaults on created To-dos:**
   - `source:` is the Note's Id
   - `about:` is pre-filled only when the Note's frontmatter `about` names exactly one Project or Deliverable
@@ -604,7 +606,8 @@ All three go through §5.3.
     Remove is **blocked** by required references (a Deliverable's `project`, a To-do's `owner`/`requester`, `me` in config), leaving only Replace.
 - **No cascade.** **Me can't be deleted;** change Me in Settings first.
 - **Trash:**
-  - A deleted file moves to `.memex/trash/<YYYYMMDD-HHMMSS>/<original relative path>`.
+  - A deleted file moves to `.memex/trash/<YYYYMMDD-HHMMSS>/<original relative path>`. Beside each entry, `<YYYYMMDD-HHMMSS>.json` keeps the deleted path and what the delete did to references (none, replaced with which Entity, or removed, and how many).
+  - `#/trash` groups deletes by trash stamp (the date and the mono stamp folder). Each row shows the type icon, title, original path and what the delete did to references. When Restore can't succeed (the Id is now another file's, or the path is taken) the row says why and Restore is disabled, before anyone clicks.
   - **Restore** puts it back at its original path only if the Id and the path are both free. Rewritten references are not restored.
   - Trash is never emptied automatically.
   - Files in trash never count for Id clashes and are never read as Entities.
@@ -612,11 +615,12 @@ All three go through §5.3.
 
 ### 8.5 Broken references page and repair
 
-- `#/broken` lists every Broken Reference and ambiguous reference, grouped by the missing Id.
+- `#/broken` lists every Broken Reference and ambiguous reference, grouped by the missing Id. Each group is an outline block: the Id in mono, a **missing** or **ambiguous** badge, the type its references imply ("implies Person", or "Theme or Person?" when they disagree) and the count; under it, a row per occurrence with the referring file's title, path, the field (or Mention) as a chip, and a Mention's surrounding words.
 - Each group, and each inline flag, offers three repairs:
   - **Replace with…:** pick an Entity of the right type; every occurrence is rewritten.
   - **Remove:** the same rules as delete (required references can't be removed).
-  - **Create:** a new Entity with that Id, of the type its references imply. Disabled if the references disagree about the type.
+  - **Create:** a new Entity with that Id, of the type its references imply. Disabled if the references disagree about the type, with the reason shown under the group.
+  - For an **ambiguous** Id, **Rename id…** replaces Create: pick one of the files that claim the Id and give it a new one. References stay as written and resolve to the file left with the Id.
 - No automatic guessing.
 
 ### 8.6 Through MCP
@@ -692,7 +696,8 @@ Ranked in tiers:
   - a final row, **See all results for '…'**, which opens `#/search?q=…`
 
   Views and commands are a static list in the frontend, matched in the browser and merged in.
-- **Row:** type icon, title, and a muted context line (a Project's Theme, a Deliverable's Project, a To-do's Owner→Requester, or a Note's folder).
+- **Look:** a centred modal over a scrim: the query box (with an Esc hint), the grouped rows, and a footer of key hints (↑↓ move, ↵ open, Ctrl ↵ new tab, `>` commands, `+` add To-do).
+- **Row:** type icon, title with the query's words in bold, and a muted context line: the type and its context (a Project's Theme, a Deliverable's Project, a To-do's Owner → Requester, or a Note's folder; Me shows as "Me"). An In text row puts the Note's folder (else the type) after the title and the snippet under it. The selected row shows ↵.
 - **Prefixes:**
   - `>` limits the palette to commands.
   - `+` turns it into To-do quick-add with a live preview row (server-parsed). Enter creates and closes; Shift-Enter creates and stays open.
@@ -707,9 +712,9 @@ Ranked in tiers:
 
 ### 9.7 Search page (`#/search?q=…`)
 
-- A query box and chips (Type, Status, Person, Label, Due, Hide completed) at the top.
-- One ranked list, with per-type counts that act as quick filters.
-- Each row shows title, type badge, status badge, context line and up to 2 highlighted snippets.
+- The heading counts the results ("7 results for ‘cutover’"). A query box (with a hint at the filter tokens) and chips (Type, Status, Person, Label, Due, Hide completed) sit under it; filters already in the query show as removable chips.
+- One ranked list, with per-type counts as tabs over it ("All 7", "To-do 3", …) that act as quick filters. The counts ignore the `type:` filter, so the tabs stay while one is picked; All clears it.
+- Each row shows title, type badge, status badge (a dot for work, a box for an open To-do, a pill once done, cancelled or archived), a context line and up to 2 highlighted snippets. The context line adds to the palette's: the Lead and due date for work ("Data Migration · lead Alice Smith · due 11 Dec"); the due or completed date and the `about` for To-dos; the date and Labels for Notes ("notes/ · Tue 17 Nov · #one-on-one"). Done, cancelled and archived rows are greyed.
 - 50 results at a time, with **Show more** for the next 50.
 
 ### 9.8 Opening a hit
@@ -744,13 +749,13 @@ Decided in [Entity frontmatter schema & reference syntax](https://github.com/mmh
 
   - Lines that don't match (headings, prose, bare URLs) are kept and shown as text. A bare `- https://…` line is treated as a Bookmark with no title.
   - `bookmarks.md` is a Note, so it can be edited raw at `#/f/bookmarks.md`.
-- **`#/bookmarks`** shows the rendered list with a Label filter and an **Add** form (URL, title, note, Labels). Add appends a line through the hash-checked write.
+- **`#/bookmarks`** shows the rendered list as outline blocks: each heading starts a heading block with the lines under it nested, prose lines are plain text, and each Bookmark shows its title (a bare URL in mono), ↗ and the domain, then its note and `#labels`. Above it, an **Add** form (URL, title, note, Labels) in a well and a Label filter of chips with counts (All, then each Label, most used first); with a Label picked, only its Bookmarks show, without headings. Add appends a line through the hash-checked write.
 - Bookmark URLs are only ever opened by the user's browser in a new tab. Memex never fetches them.
 
 ### 10.2 Glossary
 
 - One file per term in `glossary/`. The title is the term, `aliases` are alternative spellings, and the body is the definition.
-- **`#/glossary`** is an A–Z list with definitions shown inline and aliases listed under each term.
+- **`#/glossary`** is an A–Z list: a strip of letters (those with no terms faded, the rest jump to their group), then each letter as a heading block with its terms under it, aliases beside each term ("aka go-live · switchover") and the definition inline with its Mentions as links.
 
 **Acceptance**
 - [core] Parsing `- [Wiki](https://w.example) team wiki #ref #eng` gives title "Wiki", URL, note "team wiki" and Labels `ref` and `eng`; a heading line is preserved as text.
@@ -812,11 +817,11 @@ Decided in [Frontend architecture & build step](https://github.com/mmhanif/memex
 | Route | View |
 |---|---|
 | `#/home` | **Dashboard** (§11.4) |
-| `#/portfolio/board` | Board: status columns (Cancelled hidden), showing Projects *or* Deliverables, Themes as filter chips, status changed with a control on the card |
-| `#/portfolio/outline` | Outline table: Theme → Project → Deliverable, collapsible, Projects without a Theme under "No theme". Status, Lead, Team, Stakeholders and Due are editable in place. "+ Project" / "+ Deliverable" rows create inline. A toggle switches to and from the board. |
-| `#/people` | Org tree from Me (Me's Manager shown above Me; Directs and their reports below), other Team Members not under Me in a separate list, and a Stakeholders table (name, organisation, role, Tag count) |
+| `#/portfolio/board` | Board: five status columns (Cancelled hidden), each with its status dot and count, showing Projects *or* Deliverables. Themes are filter chips (All, each Theme, No theme), shared with the outline. A card shows its title, its Theme (or Project), its status as a pill that opens a status menu (Cancelled last: picking it takes the card off the board), its due day (bold within 7 days, lateness in rust) and its Lead's avatar; a Project's card also lists its blocked and late Deliverables. Blocked cards get a rust edge, Done cards are faded. The eyebrow sums the board ("7 Projects · 1 blocked · 1 due this week"). |
+| `#/portfolio/outline` | Outline table: Theme → Project → Deliverable, collapsible (a collapsed Project counts its Deliverables), Projects without a Theme under "No theme". Lead, Team and Stakeholders (on Theme, Project and Deliverable rows alike) and a Project's or Deliverable's Status (the same status menu) and Due show as text and avatars, and become editable in place when clicked. "+ Project in <Theme>" / "+ Deliverable" rows create inline. The eyebrow counts Themes, Projects and Deliverables. A Board / Outline toggle switches between the two. |
+| `#/people` | An eyebrow counting Team Members and Stakeholders, then outline blocks: the org tree from Me (Me's Manager above Me, marked Manager; Directs and their reports below, each with reports collapsible to "N reports"), each Person with their role and the open To-dos between them and Me ("1 waiting on them · 1 on me"); other Team Members not under Me ("reports to …"); and a Stakeholders table (name, organisation, role, Tag count). "+ Team Member" and "+ Stakeholder" open the New Person form with that kind. A Show archived toggle brings archived Persons back, badged. |
 | `#/people/<id>` | **Person View** (§11.6). `#/e/<person-id>` redirects here. |
-| `#/todos/mine`, `#/todos/waiting-on-them`, `#/todos/waiting-on-me` | One page with a three-way switch, Show completed toggle and quick-add box (§6.2) |
+| `#/todos/mine`, `#/todos/waiting-on-them`, `#/todos/waiting-on-me` | One page (§6.2): an eyebrow counting the shown view's open and overdue To-dos, a three-way switch with each view's open count (Mine's equals the sidebar badge), a Show completed toggle, and the quick-add box whose live preview names the title, Owner, Requester and due date and says which list the To-do goes to. The lists are outline blocks: Mine always shows its four groups once anything is open ("This week" says the Sunday it runs through, an empty group says so), the Waiting views a group per Person linking to their Person View. Rows tick in place and show the other party and the due date, with lateness in rust. |
 | `#/glossary` | A–Z Glossary |
 | `#/bookmarks` | Bookmarks |
 | `#/files`, `#/f/<path>` | Raw tree, and the raw whole-file editor (frontmatter included) with a live preview pane. This is the escape hatch for any file. |
@@ -830,63 +835,73 @@ Decided in [Frontend architecture & build step](https://github.com/mmhanif/memex
 
 ### 11.4 Dashboard
 
-| Card | Contents |
+Home is titled with today's date ("Tuesday, 17 November", by this machine's clock), under a one-line summary of the Due block ("Today · 2 overdue · 2 due this week"). Below it, one outline block per list:
+
+| Block | Contents |
 |---|---|
-| **Due within 7 days** | Overdue and due-within-7-days Projects and Deliverables that aren't done/cancelled, plus Me's open To-dos (Owner Me); overdue first |
+| **Due within 7 days** | Overdue and due-within-7-days Projects and Deliverables that aren't done/cancelled, plus Me's open To-dos (Owner Me); overdue first. Each row leads with how late it is ("2 days late", in rust) or its day ("Fri 20 Nov") |
 | **Waiting on them** | Open To-dos with Requester Me and Owner not Me, grouped by Owner |
 | **Waiting on me** | Open To-dos with Owner Me and Requester not Me |
 | **Blocked work** | Projects and Deliverables with status `blocked` |
-| **Directs** | Each Direct with two counts: open To-dos waiting on them, and open To-dos they're waiting on from Me |
-| **Recent Notes** | The 10 most recently modified Notes |
+| **Directs** | A table: each Direct (with their role) and two counts, Waiting on them (open To-dos they owe Me) and Waiting on me (open To-dos they're waiting on from Me) |
+| **Recent notes** | The 10 most recently modified Notes, each with its date, and "N To-dos to create" when it has unconverted task items (§6.4), else its labels and `about` |
+
+While Me isn't set (§3.5), Waiting on them, Waiting on me and Directs show a dashed "Paused until Me is set" note instead of their contents, and Due within 7 days keeps its Projects and Deliverables with a note that Me's To-dos are paused.
 
 The Dashboard also shows the "N Notes have To-dos to create" line (§6.4) and the "get started" panel on an empty Workspace (§3.4).
 
 ### 11.5 Entity page
 
 - **Read mode by default.**
-- A **properties card** shows the typed fields, editable in place without entering edit mode: status, dates, Lead, Tags as avatar checklists, and the person pickers. Each edit is a hash-checked one-field write.
-- The body is rendered Markdown. **✎ Edit** switches just the body to a raw `<textarea>` with auto-save (§5.7). The textarea has small helpers: Tab indents, Enter continues lists.
-- **Below the body:**
-  - related children (a Theme's Projects, a Project's Deliverables)
-  - To-dos about this Entity
-  - Notes with `about` pointing here
-  - **Mentioned in**
+- **Header:** an eyebrow with the type and, for a Note, its `date` ("Note · Thu 12 Nov 2026"), for a Project its Theme and for a Deliverable its Project; then the title, editable in place; then **✎ Edit** and the **…** Actions menu.
+- A **properties well** shows the typed fields by their frontmatter key, editable in place without entering edit mode: status, dates, Lead, Tags as avatar checklists, and the person pickers. References read as links. Each edit is a hash-checked one-field write.
+- On a Note with task items that aren't To-dos yet, a bar between the well and the body reads "N task items aren't To-dos yet" with **Create N To-dos** (§6.4).
+- The body is rendered Markdown as **outline blocks**: each heading and every bulleted item has a bullet, and what sits under a heading or item hangs off a guide line. Clicking the bullet of a block with children collapses it (the bullet gets a halo) or expands it; this is a view only and writes nothing. A task item whose only content is a To-do Mention is a live To-do row (§6.4): its box, its title, its Owner when not Me, and its due date, in rust when late. **✎ Edit** switches just the body to a raw `<textarea>` with auto-save (§5.7). The textarea has small helpers: Tab indents, Enter continues lists.
+- **Below the body**, each under a section header with a count and a chevron that folds it:
+  - related children (a Theme's Projects, a Project's Deliverables), with status, Lead and due date or lateness, and a row to add one
+  - To-dos about this Entity, ticked in place; finished ones behind **Show completed (N)**
+  - Notes with `about` pointing here, newest first, with **New Note about this**
+  - **Mentioned in:** each file that Mentions this Entity, with the first line that Mentions it
 - **Actions menu:**
-  - Rename id
-  - Archive or Unarchive (Themes, Persons)
-  - Delete
-  - Open file (`#/f/…`)
   - Create N To-dos (Notes, §6.4)
-- Validation warnings appear in a bar. Broken References are flagged inline with repair actions (§8.5).
-- **Notes** use the same page: the properties card shows `date`, Participants, `about` and Labels.
+  - Rename id
+  - Archive (Themes, Persons); Unarchive is on the "Archived on" bar (§8.3)
+  - Open file (`#/f/…`)
+  - Delete
+- Validation warnings appear in an amber bar. Broken References appear in a rust bar ("1 Broken Reference. `stakeholders` points to `marco-ruiz`, which isn't in the Workspace."), with their repair actions under it (§8.5), and are flagged inline where shown.
+- **Notes** use the same page: the properties well shows `date`, Participants, `about` and Labels.
 
 ### 11.6 Person View
 
-- **Header:** name, role, organisation, kind, Manager, Directs, an archived badge, and Open file.
-- **Three columns:**
-  - **Tagged on:** each item with the role (Lead, Team, Stakeholder), plus a "Tag <name> to…" picker that writes the Tag on the chosen item
+- **Header:** an avatar with their initials, an eyebrow ("Person · Team Member · Direct": their kinds, and Direct when Me is their Manager), the name, Open file, and the "…" Actions menu (§11.5). Archived Persons get the "Archived on" bar.
+- **Properties well** (§11.5): kind, Manager, role, organisation, email, and their Directs.
+- **Three columns,** each under a heading with a count:
+  - **Tagged on:** each item with its type, its status (blocked or lateness in rust), and the role (Lead, Team, Stakeholder), plus a "Tag <name> to…" picker that writes the Tag on the chosen item
   - **Waiting on <name>**
   - **<name> is waiting on me**
 
-  Each To-do column has its own pre-filled quick-add box (§6.3).
-- **Below:** the **New 1:1** button, Notes with them (Notes whose `people` include them, newest `date` first), and the Person's body.
+  To-do rows tick in place and show due (or lateness), the other party when it isn't Me, and the Note they came from. Each To-do column ends in its own dashed quick-add box, pre-filled by context (§6.3), with the syntax hinted under it. "Show completed" adds finished To-dos.
+- **Notes with them** (Notes whose `people` include them, newest `date` first): day, title, the other Participants and Labels; the five newest show, the rest behind "Show N older". The **New 1:1** button sits on this section's header.
+- **Below:** the Person's body as outline blocks (§11.5), with Edit body.
 
 ### 11.7 Creating and tagging
 
-- **+ New… form per type:** a Template dropdown and person pickers for Lead, Team, Stakeholders, Owner, Requester, Manager and Participants. A Deliverable requires a Project. Pickers hide archived Entities unless toggled.
+- **New… menu:** a popover above the sidebar's New… button with a row per type and each type's other Templates as sub-rows ("Note: Meeting", "Note: 1:1", "Person: Stakeholder"; custom ones too, Blank left out). Rows carry hints: the Note folder, the date prefix of dated variants, "needs a Project" on Deliverable. Each row opens + New… with that Template.
+- **+ New… form per type:** a modal with the title, a live preview of the new file's path (the Id date-prefixed for a dated Note), then the fields in a properties well. The Template dropdown comes first: each usable Template with its headings, custom ones marked with their path, the default starred, and a Manage Templates link to Settings. Person pickers for Lead, Team, Stakeholders, Owner, Requester, Manager and Participants filter as you type, with the match in bold. A Deliverable requires a Project. Pickers hide archived Entities: the popover says how many matches it hid, and its Include archived switch shows them. Below the well, the Template's body as it will be copied. Create (Ctrl+Enter) opens the new file.
 - Inline create rows in the outline, Ctrl-K "New <Type>", and quick-add for To-dos.
 - **Tags** are edited from the avatar checklist on any work item, or from "Tag to…" on the Person View.
 
 ### 11.8 Files page
 
-- A tree of the Workspace, without dot-folders or ignored paths.
+- A tree of the Workspace, without dot-folders or ignored paths. Each folder shows how many files it holds; non-Markdown files are listed greyed and read-only. The open file is highlighted, with a dot when it has warnings.
+- The open file's header shows its path, type and Id, with Rename / move, Delete and **Open page ↗**.
 - **Actions:**
   - New file here (with Template picker)
   - New folder
   - Rename/move
   - Delete (to trash, §8.4)
 - Typed Entities can be opened and edited raw, but not moved out of their folder.
-- A file with invalid frontmatter opens here with its warning bar.
+- A file with invalid frontmatter opens here with its warning bar; **Go to line N** puts the cursor on the line, which the editor's gutter marks.
 
 **Acceptance**
 - [REST] `index.html` is served with a CSP whose `script-src` is `'self'` plus exactly the hash of its inline import map.
@@ -905,7 +920,7 @@ Decided in [Localhost hardening](https://github.com/mmhanif/memex/issues/6). **R
 - **Per-launch secret** (R5–R7):
   - The launcher generates a 256-bit secret and a one-time code, and opens `http://127.0.0.1:PORT/auth?code=…`.
   - `/auth` compares the code in constant time, burns it on first use, sets `memex_session=<secret>; HttpOnly; SameSite=Strict; Path=/`, and redirects `303` to `/`.
-  - Every route except `/auth`, `/relaunch` (a static "run memex again" page) and `/launcher/*` (§13.4) needs the cookie, or returns `401`. The SPA treats any `401` as "go to `/relaunch`".
+  - Every route except `/auth`, `/relaunch` (a static "run memex again" page, which loads no script and only its own stylesheet, `/relaunch.css`) and `/launcher/*` (§13.4) needs the cookie, or returns `401`. The SPA treats any `401` as "go to `/relaunch`".
   - The secret never appears in logs or responses.
 - **No CORS** headers at all, and no successful preflight (R8).
 - **Writes** (R9–R11):
@@ -1268,10 +1283,11 @@ Error body: `{"error": {"code", "message", "field_errors"?: [{field, message, al
 |---|---|
 | `GET /auth?code=` | Exchange the one-time code for the session cookie, then `303` to `/` |
 | `GET /relaunch` | Static "run memex again" page (no cookie) |
+| `GET /relaunch.css` | That page's stylesheet (no cookie) |
 | `POST /launcher/hello`, `POST /launcher/open` | Already-running hand-off (§13.4; HMAC, no cookie) |
 | `GET /` and `/static/…` | SPA and assets |
 | `GET /api/events` | SSE stream (§5.6) |
-| `GET /api/tree` | Workspace tree (files and folders, typed or Note, warnings), plus `workspace: {read_only, config_error, me_set}` for the shell's banners |
+| `GET /api/tree` | Workspace tree (files and folders, typed or Note, warnings; `other_files`: non-Markdown files, listed read-only), plus `workspace: {read_only, config_error, me_set}` for the shell's banners |
 | `GET /api/files?path=` | Raw file content plus `ETag` |
 | `POST /api/files` `{path, content}` | Create a raw file (`exists` if taken) |
 | `PUT /api/files` `{path, content}` + `If-Match` | Overwrite a raw file |
@@ -1282,6 +1298,7 @@ Error body: `{"error": {"code", "message", "field_errors"?: [{field, message, al
 | `GET /api/entities?type=&status=&theme=&project=&person=&label=&due_before=&include_archived=` | Entity summaries, each with a hash |
 | `GET /api/entities/{id}` | Fields, body, hash, warnings, Broken References, mentioned-in, children, related To-dos and Notes, `unconverted_todos` |
 | `POST /api/entities` `{type, fields, body?, template?}` | Create (§8.1) |
+| `POST /api/entities/placement` `{type, fields, folder?}` | The `{id, path, created}` a create would use, from `title` (and a Note's `date`); writes nothing. The + New… form's preview (§11.7) |
 | `PATCH /api/entities/{id}` `{set?, unset?}` + `If-Match` | Field update |
 | `PUT /api/entities/{id}/body` `{body}` + `If-Match` | Body replace |
 | `POST /api/entities/{id}/rename` `{new_id, dry_run, hashes?}` | Rename id (`hashes`: the preview's, by path) |
@@ -1291,17 +1308,18 @@ Error body: `{"error": {"code", "message", "field_errors"?: [{field, message, al
 | `POST /api/todos/quick-add` `{text, defaults?}` | Create a To-do from quick-add text |
 | `GET /api/notes/{id}/capture` / `POST /api/notes/{id}/capture` `{hash, rows}` | Inline capture preview and confirm |
 | `GET /api/views/dashboard` | Dashboard cards |
-| `GET /api/views/todos?view=&person=&include_done=` | To-do views |
+| `GET /api/views/todos?view=&person=&include_done=` | To-do views; without `person`, also each view's open count (`counts`) and the Sunday "This week" runs through (`week_ends`) |
 | `GET /api/views/portfolio?mode=board\|outline&kind=&themes=&include_archived=` | Portfolio |
-| `GET /api/views/people` | Org tree and Stakeholders table |
+| `GET /api/views/people?include_archived=` | Org tree, other Team Members and Stakeholders table, plus `waiting`: open To-dos between Me and each Person (`on_them`, `on_me`) |
 | `GET /api/views/person/{id}` | Person View |
 | `GET /api/views/glossary` | Glossary |
-| `GET /api/search?q=&limit=&offset=&include_archived=` | Search results plus parsed filters and token errors |
-| `GET /api/bookmarks?label=` / `POST /api/bookmarks` | Bookmarks list and add |
-| `GET /api/broken-references` / `POST /api/broken-references/repair` `{id, action, replacement?, type?, dry_run, hashes?}` | Broken references and repair |
-| `GET /api/trash` / `POST /api/trash/restore` `{entry}` | Trash list and restore |
+| `GET /api/search?q=&limit=&offset=&include_archived=&hide_completed=` | Search results plus parsed filters and token errors. A file row carries `context` and, for the search page's context line, `lead`, `about` (names; Me as "Me"), `due`, `completed`, `date` and `labels` |
+| `GET /api/bookmarks?label=` / `POST /api/bookmarks` | Bookmarks list and add. The list gives every line, `labels` (`name`, `count`, most used first) and `total`, both counted over the whole file whatever the filter |
+| `GET /api/broken-references` / `POST /api/broken-references/repair` `{id, action, replacement?, type?, dry_run, hashes?}` | Broken references and repair. Groups carry `claimants` (the files sharing an ambiguous Id); uses carry `targets` and a Mention's `snippet` |
+| `POST /api/broken-references/rename` `{id, path, new_id}` | Rename id… for one file claiming an ambiguous Id |
+| `GET /api/trash` / `POST /api/trash/restore` `{entry}` | Trash list and restore. Entries carry `type`, `id`, `title`, `deletion` (what the delete did to references, or null) and `blocked` (why Restore can't succeed now, or null) |
 | `GET /api/templates?type=` / `POST /api/templates/customise` `{type, name}` | Templates |
-| `GET /api/settings` / `PUT /api/settings` + `If-Match` | Both config files (the app-config part needs a relaunch) |
+| `GET /api/settings` / `PUT /api/settings` `{workspace?, app?}` + `If-Match` | Both config files. `If-Match` is needed only for `workspace` keys; the `app` part (`workspace`, `port`) needs a relaunch. The read gives `running` (what this run uses), `relaunch` (saved keys not yet in effect) and `about` (version, format, address, logs folder) |
 | `GET /api/setup` / `POST /api/setup/scan` `{path}` / `POST /api/setup/apply` `{path, me}` | First-run Setup |
 | `POST /api/quit` | Clean shutdown |
 
@@ -1371,7 +1389,7 @@ Choices made while writing this spec that no ticket decided. All were reviewed a
 11. **SSE via `fetch` streaming,** not `EventSource`, because `EventSource` can't send the required `X-Memex` header.
 12. **CSP carries the sha256 of the inline import map.** Chrome treats import maps as inline scripts.
 13. **Launcher hand-off protocol** (§13.4): `/launcher/hello` and `/launcher/open` with nonce-based HMAC both ways, and `--no-browser` for tests.
-14. **Trash layout:** `.memex/trash/<YYYYMMDD-HHMMSS>/<original path>`. Folder deletes are refused while anything inside has incoming references from outside.
+14. **Trash layout:** `.memex/trash/<YYYYMMDD-HHMMSS>/<original path>`, plus `<YYYYMMDD-HHMMSS>.json` beside it recording the deleted path and what the delete did to references. Folder deletes are refused while anything inside has incoming references from outside.
 15. **REST surface and error→status mapping** (§17), including new codes `exists`, `has_references`, `locked` and `bad_path`.
 16. **`memex-mcp` with no known Workspace** exits with an error.
 17. **The Setup-created Me** gets `kind: [team-member]`.

@@ -128,7 +128,7 @@ def test_new_file_from_the_files_page(app: Page, server: AppState, root: Path):
     app.goto(f"{origin(server)}/#/files")
     app.get_by_role("treeitem").filter(has_text="notes").first.get_by_role("button").click()
 
-    app.get_by_role("button", name="File").click()
+    app.get_by_role("button", name="New file").click()
     app.get_by_label("Note title").fill("Ideas")
     app.get_by_role("button", name="Create").click()
 
@@ -143,7 +143,7 @@ def test_new_file_here_uses_a_template_in_any_folder(app: Page, server: AppState
     app.goto(f"{origin(server)}/#/files")
     app.get_by_role("treeitem").filter(has_text="meetings").first.get_by_role("button").click()
 
-    app.get_by_role("button", name="File").click()
+    app.get_by_role("button", name="New file").click()
     app.get_by_label("Note title").fill("Platform sync")
     app.get_by_label("Template").select_option("meeting")
     app.get_by_role("button", name="Create").click()

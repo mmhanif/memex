@@ -99,13 +99,28 @@ class Cache:
             kept = []
             for name in dirnames:
                 rel = Path(dirpath, name).relative_to(self.root).as_posix()
-                if self._is_tree_folder(rel):
+                if self._in_tree(rel):
                     kept.append(name)
                     found.append(rel)
             dirnames[:] = kept
         return sorted(found)
 
-    def _is_tree_folder(self, rel: str) -> bool:
+    def other_files(self) -> list[str]:
+        """Non-Markdown files for the tree, shown read-only (§2): the same skips as folders."""
+        found: list[str] = []
+        for dirpath, dirnames, filenames in os.walk(self.root, followlinks=False):
+            dirnames[:] = [
+                d
+                for d in dirnames
+                if self._in_tree(Path(dirpath, d).relative_to(self.root).as_posix())
+            ]
+            for name in filenames:
+                rel = Path(dirpath, name).relative_to(self.root).as_posix()
+                if not name.endswith(".md") and self._in_tree(rel):
+                    found.append(rel)
+        return sorted(found)
+
+    def _in_tree(self, rel: str) -> bool:
         path = PurePosixPath(rel)
         return (
             not path.name.startswith(".")
@@ -160,7 +175,7 @@ class Cache:
 
     def _load_into(self, rel: str) -> None:
         try:
-            entry = _load(self.root, rel)
+            entry = load_file(self.root, rel)
         except FileNotFoundError, IsADirectoryError, NotADirectoryError:
             return  # gone (or never a file) by the time we looked: a later hint catches up
         self._put(entry)
@@ -209,7 +224,8 @@ class Cache:
         return True
 
 
-def _load(root: Path, rel: str) -> CachedFile:
+def load_file(root: Path, rel: str) -> CachedFile:
+    """Parse the file at `root/rel` as the index would (also used for files in trash)."""
     path = root / rel
     raw = path.read_bytes()
     pure = PurePosixPath(rel)

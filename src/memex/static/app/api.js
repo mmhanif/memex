@@ -59,6 +59,12 @@ export async function request(method, url, options = {}) {
   return data;
 }
 
+/** Quit Memex (§13.3) and say so in place of the app. */
+export async function quitMemex() {
+  await request("POST", "/api/quit");
+  document.body.textContent = "Memex has quit. You can close this tab.";
+}
+
 export function relaunch() {
   window.location.assign("/relaunch");
 }

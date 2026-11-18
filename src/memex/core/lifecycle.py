@@ -9,12 +9,12 @@ hash-checked write, skipping and reporting the files that fail.
 
 import datetime as dt
 from collections.abc import Mapping
-from dataclasses import dataclass
-from pathlib import PurePosixPath
+from dataclasses import dataclass, replace
+from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
 from memex.core import frontmatter
-from memex.core.cache import CachedFile, mention_spans
+from memex.core.cache import CachedFile, load_file, mention_spans
 from memex.core.entities import (
     Saved,
     create_entity,
@@ -35,7 +35,7 @@ from memex.core.errors import (
 )
 from memex.core.ids import is_valid_id
 from memex.core.schema import FIELD_BY_NAME, FINISHED_TODO, REFERENCE_FIELDS, EntityType, Target
-from memex.core.store import TRASH, WORKSPACE_CONFIG
+from memex.core.store import TRASH, WORKSPACE_CONFIG, TrashEntry
 from memex.core.workspace import Workspace
 
 CONFIG_TITLE = "Workspace config"
@@ -255,15 +255,11 @@ def rename_id(
     Pass the preview's `hashes` as `expected` so files changed since are skipped.
     """
     entry = find(ws, id)
-    new_id = new_id.strip()
-    if not is_valid_id(new_id):
-        message = "An Id is lowercase letters, digits and -, at most 60 characters"
-        raise Validation(message)
+    new_id = _new_id(new_id)
     if new_id == entry.id:
         raise Validation(f"{entry.title} already has the Id {new_id}")
     require_free_id(ws, new_id)
-    parent = PurePosixPath(entry.rel).parent.as_posix()
-    new_rel = f"{new_id}.md" if parent == "." else f"{parent}/{new_id}.md"
+    new_rel = _renamed(entry.rel, new_id)
     rw = _Rewrite(entry.id, new_id)
     impact = _impact(ws, rw)
     if dry_run:
@@ -271,6 +267,18 @@ def rename_id(
     skipped = _apply(ws, rw, expected or {})
     ws.store.move(entry.rel, new_rel)
     return Outcome(impact, applied=True, skipped=skipped, id=new_id, rel=new_rel)
+
+
+def _new_id(new_id: str) -> str:
+    new_id = new_id.strip()
+    if not is_valid_id(new_id):
+        raise Validation("An Id is lowercase letters, digits and -, at most 60 characters")
+    return new_id
+
+
+def _renamed(rel: str, new_id: str) -> str:
+    parent = PurePosixPath(rel).parent.as_posix()
+    return f"{new_id}.md" if parent == "." else f"{parent}/{new_id}.md"
 
 
 # Archive (§8.3)
@@ -372,7 +380,9 @@ def delete_entity(
     skipped = _apply(ws, rw, expected or {}, skip=entry.rel)
     if skipped:  # trashing now would leave Broken References behind
         return Outcome(impact, applied=True, skipped=skipped, id=rw.new, rel=entry.rel)
-    trash = ws.store.trash(entry.rel, _stamp(ws))
+    replacement_title = rw.new and find(ws, rw.new).title
+    done = Deletion(mode, impact.references, len(impact.edits), rw.new, replacement_title)
+    trash = ws.store.trash(entry.rel, _stamp(ws), done.record())
     return Outcome(impact, applied=True, id=rw.new, rel=entry.rel, trash=trash)
 
 
@@ -397,19 +407,100 @@ def _stamp(ws: Workspace) -> str:
 
 
 @dataclass(frozen=True)
+class Deletion:
+    """What a delete did to references, kept beside its trash entry (§8.4)."""
+
+    mode: DeleteMode
+    references: int  # references rewritten or removed
+    files: int  # in this many files
+    replacement: str | None = None  # Replace with…: the Id they now name
+    replacement_title: str | None = None
+
+    def record(self) -> dict[str, Any]:
+        return {
+            "mode": self.mode,
+            "references": self.references,
+            "files": self.files,
+            "replacement": self.replacement,
+            "replacement_title": self.replacement_title,
+        }
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any] | None) -> Deletion | None:
+        if not record or record.get("mode") not in ("plain", "replace", "remove"):
+            return None
+        try:
+            return cls(
+                record["mode"],
+                int(record.get("references", 0)),
+                int(record.get("files", 0)),
+                record.get("replacement") or None,
+                record.get("replacement_title") or None,
+            )
+        except TypeError, ValueError:
+            return None
+
+
+@dataclass(frozen=True)
+class RestoreBlock:
+    """Why Restore can't succeed now: an Id another file has, or a path that is taken."""
+
+    reason: Literal["id", "path"]
+    path: str  # the trashed file whose Id or path is taken
+    id: str | None = None
+    by: CachedFile | None = None  # the file that has the Id now
+
+
+@dataclass(frozen=True)
 class Trashed:
     entry: str  # the entry's name, to restore it by
     path: str  # what was deleted, at its original path
     files: tuple[str, ...]
     deleted: dt.datetime | None  # read from the entry's name
+    type: str = "file"  # an Entity type, "note", "file" (not Markdown) or "folder"
+    id: str | None = None  # a deleted Entity's or Note's Id
+    title: str = ""
+    deletion: Deletion | None = None  # None when the delete wasn't recorded
+    blocked: RestoreBlock | None = None
 
 
 def list_trash(ws: Workspace) -> list[Trashed]:
-    """Every delete in the trash, newest first. Trash is never emptied automatically."""
-    found = [
-        Trashed(e.name, e.path, e.files, _deleted_at(e.name)) for e in ws.store.trash_entries()
-    ]
+    """Every delete in the trash, newest first, with what it was, what it did to
+    references and whether Restore can succeed now. Trash is never emptied automatically."""
+    found = [_trashed(ws, e) for e in ws.store.trash_entries()]
     return sorted(found, key=lambda t: (t.deleted or dt.datetime.min, t.entry), reverse=True)
+
+
+def _trashed(ws: Workspace, e: TrashEntry) -> Trashed:
+    name = PurePosixPath(e.path).name
+    kind, id, title = ("folder" if e.folder else "file"), None, name
+    if not e.folder and ws.cache.is_indexed(e.path):
+        try:
+            f = load_file(ws.store.root / TRASH / e.name, e.path)
+        except OSError:
+            f = None
+        if f is not None:
+            kind, id, title = f.type or "note", f.id, f.title
+    deletion = Deletion.from_record(e.record)
+    return Trashed(
+        e.name, e.path, e.files, _deleted_at(e.name), kind, id, title, deletion, _blocked(ws, e)
+    )
+
+
+def _blocked(ws: Workspace, e: TrashEntry) -> RestoreBlock | None:
+    """The first reason Restore would fail: an Id another file has (the clearer one),
+    else a path that is taken."""
+    for rel in e.files:
+        if ws.cache.is_indexed(rel):
+            id = PurePosixPath(rel).stem
+            found = ws.cache.resolve(id)
+            if found.status != "missing" and (found.file is None or found.file.rel != rel):
+                return RestoreBlock("id", rel, id, found.file)
+    root = ws.store.root
+    for rel in e.files or (e.path,):
+        if Path(root, rel).exists() or Path(root, rel).is_symlink():
+            return RestoreBlock("path", rel)
+    return None
 
 
 def restore(ws: Workspace, entry: str) -> Trashed:
@@ -448,6 +539,7 @@ class Use:
     title: str
     type: EntityType | None  # the referring file's type
     field: str  # a frontmatter field, MENTION, or ME
+    snippet: tuple[str, str, str] | None = None  # a Mention's words around it: before, it, after
 
     @property
     def targets(self) -> tuple[Target, ...]:
@@ -464,6 +556,7 @@ class BrokenGroup:
     id: str
     status: Literal["missing", "ambiguous"]
     uses: tuple[Use, ...]
+    claimants: tuple[CachedFile, ...] = ()  # the files that share an ambiguous Id
 
     @property
     def types(self) -> tuple[Target, ...]:
@@ -492,14 +585,45 @@ def broken_references(ws: Workspace) -> list[BrokenGroup]:
         group = groups.get(key) or BrokenGroup(id, found.status, ())
         groups[key] = BrokenGroup(group.id, group.status, (*group.uses, use))
 
-    for f in ws.cache.files():
+    files = ws.cache.files()
+    for f in files:
         for ref in f.references:
             note(ref.id, Use(f.rel, f.id, f.title, f.type, ref.field))
         for mention in dict.fromkeys(f.mentions):
-            note(mention, Use(f.rel, f.id, f.title, f.type, MENTION))
+            snippet = _mention_snippet(f.body, mention)
+            note(mention, Use(f.rel, f.id, f.title, f.type, MENTION, snippet))
     if ws.config.me:
         note(ws.config.me, Use(WORKSPACE_CONFIG, None, CONFIG_TITLE, None, ME))
-    return [groups[key] for key in sorted(groups)]
+    claimed: dict[str, list[CachedFile]] = {}
+    for f in files:
+        if f.ambiguous and f.id.casefold() in groups:
+            claimed.setdefault(f.id.casefold(), []).append(f)
+    return [
+        replace(groups[key], claimants=tuple(sorted(claimed.get(key, ()), key=lambda f: f.rel)))
+        for key in sorted(groups)
+    ]
+
+
+SNIPPET_BEFORE = 40
+SNIPPET_AFTER = 60
+
+
+def _mention_snippet(body: str, id: str) -> tuple[str, str, str] | None:
+    """The first Mention of `id` in `body`, with the words around it on its line."""
+    span = next((m for m in mention_spans(body) if m.id.casefold() == id.casefold()), None)
+    if span is None:
+        return None
+    start = body.rfind("\n", 0, span.start) + 1
+    end = body.find("\n", span.end)
+    before = body[start : span.start].lstrip()
+    after = body[span.end : len(body) if end == -1 else end].rstrip()
+    if len(before) > SNIPPET_BEFORE:
+        cut = before[-SNIPPET_BEFORE:]
+        before = "…" + (cut.split(" ", 1)[1] if " " in cut else cut)
+    if len(after) > SNIPPET_AFTER:
+        cut = after[:SNIPPET_AFTER]
+        after = (cut.rsplit(" ", 1)[0] if " " in cut.strip() else cut) + "…"
+    return before, body[span.start : span.end], after
 
 
 RepairAction = Literal["replace", "remove", "create"]
@@ -543,6 +667,22 @@ def repair(
         raise Validation(_blocked_message(impact.blocked))
     skipped = _apply(ws, rw, expected or {})
     return Outcome(impact, applied=True, skipped=skipped, id=rw.new)
+
+
+def rename_claimant(ws: Workspace, id: str, rel: str, new_id: str) -> str:
+    """Give one of the files sharing an ambiguous Id a new Id (§8.5): Rename id… on the
+    Broken references page. References stay as written, so they resolve to the file left
+    with the Id. Returns the file's new path."""
+    group = next((g for g in broken_references(ws) if g.id.casefold() == id.casefold()), None)
+    if group is None:
+        raise NotBroken(id)
+    if rel not in {f.rel for f in group.claimants}:
+        raise Validation(f"{rel} doesn't claim the Id {group.id}")
+    new_id = _new_id(new_id)
+    require_free_id(ws, new_id)
+    new_rel = _renamed(rel, new_id)
+    ws.store.move(rel, new_rel)
+    return new_rel
 
 
 def _create_for(

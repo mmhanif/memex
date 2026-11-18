@@ -112,6 +112,21 @@ def test_todo_views_return_groups_and_names(api: TestClient, state: AppState, al
     assert api.get("/api/views/todos?view=mine").json()["groups"] == []
 
 
+def test_todo_views_count_each_views_open_todos_and_say_when_the_week_ends(
+    api: TestClient, state: AppState, alice: str
+):
+    put(
+        state,
+        "todos/t.md",
+        "---\ntitle: T\nowner: alice-smith\nrequester: ada-lovelace\nstatus: open\n---\n",
+    )
+    put(state, "todos/u.md", "---\ntitle: U\nowner: ada-lovelace\nrequester: alice-smith\n---\n")
+    body = api.get("/api/views/todos?view=waiting-on-me").json()
+    assert body["counts"] == {"mine": 1, "waiting-on-them": 1, "waiting-on-me": 1}
+    assert body["week_ends"] == "2026-11-15"  # today is Thursday 2026-11-12
+    assert api.get("/api/tree").json()["workspace"]["open_todos"] == body["counts"]["mine"]
+
+
 def test_todo_views_for_a_person_are_their_person_view_columns(
     api: TestClient, state: AppState, alice: str
 ):
@@ -149,6 +164,23 @@ def test_dashboard(api: TestClient, state: AppState, alice: str):
     assert body["get_started"] is False
 
 
+def test_dashboard_names_the_parents_leads_and_abouts_its_rows_show(
+    api: TestClient, state: AppState, alice: str
+):
+    put(state, "projects/p.md", "---\ntitle: Data Migration\nstatus: active\n---\n")
+    put(
+        state,
+        "deliverables/d.md",
+        "---\ntitle: Ledger Export\nproject: p\nstatus: blocked\nlead: alice-smith\n---\n",
+    )
+    put(state, "themes/t.md", "---\ntitle: Reliability\n---\n")
+    put(state, "notes/call.md", "---\ntitle: Vendor call\nabout: [t]\n---\n")
+    names = api.get("/api/views/dashboard").json()["names"]
+    assert names["p"] == "Data Migration"
+    assert names["t"] == "Reliability"
+    assert names["alice-smith"] == "Alice Smith"
+
+
 def test_dashboard_without_me_marks_the_me_cards(api: TestClient, state: AppState):
     unset_me(state)
     body = api.get("/api/views/dashboard").json()
@@ -168,6 +200,24 @@ def test_people(api: TestClient, alice: str):
     assert body["manager"] is None
     assert body["others"] == []
     assert body["stakeholders"] == []
+    assert body["waiting"] == {}
+
+
+def test_people_counts_todos_with_me_and_can_show_archived(
+    api: TestClient, state: AppState, alice: str
+):
+    put(
+        state,
+        "todos/t.md",
+        "---\ntitle: T\nowner: alice-smith\nrequester: ada-lovelace\nstatus: open\n---\n",
+    )
+    put(state, "people/old.md", "---\ntitle: Old\nkind: [team-member]\narchived: 2026-01-01\n---\n")
+    assert api.get("/api/views/people").json()["waiting"] == {
+        "alice-smith": {"on_them": 1, "on_me": 0}
+    }
+    assert api.get("/api/views/people").json()["others"] == []
+    shown = api.get("/api/views/people?include_archived=true").json()
+    assert [p["id"] for p in shown["others"]] == ["old"]
 
 
 def test_person_view(api: TestClient, state: AppState, alice: str):
@@ -231,6 +281,24 @@ def test_portfolio_board(api: TestClient, portfolio: None):
     assert [i["id"] for i in body["columns"][3]["items"]] == ["migrate"]
     assert [t["id"] for t in body["chips"]] == ["platform"]
     assert body["names"] == {"alice-smith": "Alice Smith", "platform": "Platform"}
+    assert body["attention"] == {}
+
+
+def test_portfolio_board_carries_attention_and_the_no_theme_filter(
+    api: TestClient, state: AppState, portfolio: None
+):
+    put(state, "projects/loose.md", "---\ntitle: Loose\nstatus: active\n---\n")
+    put(
+        state,
+        "deliverables/stuck.md",
+        "---\ntitle: Stuck\nproject: migrate\nstatus: blocked\n---\n",
+    )
+    body = api.get("/api/views/portfolio?mode=board").json()
+    assert [d["id"] for d in body["attention"]["migrate"]] == ["stuck"]
+    body = api.get("/api/views/portfolio?mode=board&unthemed=true").json()
+    assert [i["id"] for c in body["columns"] for i in c["items"]] == ["loose"]
+    body = api.get("/api/views/portfolio?mode=outline&unthemed=true").json()
+    assert [g["theme"] for g in body["themes"]] == [None]
 
 
 def test_portfolio_outline(api: TestClient, portfolio: None):

@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from memex.web.state import AppState
 
 # Reachable without the cookie (R5). `/launcher/*` is HMAC-authenticated instead (§13.4).
-COOKIE_EXEMPT = ("/auth", "/relaunch")
+COOKIE_EXEMPT = ("/auth", "/relaunch", "/relaunch.css")
 LAUNCHER_PREFIX = "/launcher/"
 WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 SAFE_FETCH_SITES = frozenset({"same-origin", "none"})

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from memex.core.errors import MeNotSet, Validation
-from memex.core.views import open_todo_count, todo_view
+from memex.core.views import open_todo_count, todo_counts, todo_view
 from tests.core.builder import Builder
 
 # The Builder's today is Thursday 2026-11-12, so "this week" runs through Sunday 11-15.
@@ -101,3 +101,16 @@ def test_open_todo_count_is_mes_open_todos_for_the_sidebar_badge(b: Builder):
     assert open_todo_count(b.ws) == 3
     b.file(".memex/config.yaml", "format: 1\n")
     assert open_todo_count(b.ws) is None
+
+
+def test_todo_counts_are_each_views_open_todos_and_mine_is_the_badge(b: Builder):
+    b.todo("me-both", owner="ada", requester="ada")
+    b.todo("for-alice", owner="Ada", requester="alice")
+    b.todo("done-for-alice", owner="ada", requester="alice", status="done")
+    b.todo("on-alice", owner="alice")
+    b.todo("on-bob", owner="bob", requester="ada")
+    b.todo("on-bob-cancelled", owner="bob", status="cancelled")
+    b.todo("alice-for-bob", owner="alice", requester="bob")
+    counts = todo_counts(b.ws)
+    assert counts == {"mine": 2, "waiting-on-them": 2, "waiting-on-me": 1}
+    assert counts["mine"] == open_todo_count(b.ws)

@@ -2,7 +2,7 @@
 // The shell (SPEC §11.2): sidebar, top bar, banners, and the routed view.
 
 import { signal } from "@preact/signals";
-import { useEffect, useRef } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { BannerStrip } from "./banners.js";
 import { BookmarkLink, BookmarksPage } from "./bookmarks.js";
 import { Dashboard } from "./dashboard.js";
@@ -13,7 +13,7 @@ import { GlossaryPage } from "./glossary.js";
 import { Icon } from "./icons.js";
 import { CaptureDialog } from "./capture.js";
 import { LifecycleDialog } from "./lifecycle.js";
-import { NewDialog, openNew } from "./newform.js";
+import { fetchTemplates, NewDialog, openNew } from "./newform.js";
 import { openPalette, Palette } from "./palette.js";
 import { PeoplePage, PersonPage } from "./people.js";
 import { PortfolioPage } from "./portfolio.js";
@@ -21,7 +21,7 @@ import { recents } from "./recent.js";
 import { BrokenPage } from "./repair.js";
 import { TrashPage } from "./trash.js";
 import { route } from "./router.js";
-import { SearchPage } from "./search.js";
+import { SearchPage, typeIcon } from "./search.js";
 import { SettingsPage } from "./settings.js";
 import { html, openDoc, tree, useView } from "./state.js";
 import { TodosPage } from "./todos.js";
@@ -44,6 +44,8 @@ const NAV_FOR = { file: "files", person: "people" };
 
 /** Whether the sidebar's New… menu is open; `N` opens it from anywhere but a text field. */
 const newMenuOpen = signal(false);
+
+/** @typedef {import("./newform.js").TemplateInfo} TemplateInfo */
 
 export function App() {
   const current = route.value;
@@ -221,30 +223,93 @@ function onShortcut(e) {
   newMenuOpen.value = true;
 }
 
+/** What each type's row says on the right of the New… menu. */
+/** @type {Record<string, {text: string, mono?: boolean}>} */
+const NEW_HINTS = {
+  note: { text: "notes/", mono: true },
+  deliverable: { text: "needs a Project" },
+  person: { text: "Team Member" },
+  todo: { text: "owner, requester" },
+};
+/** Rows after which the menu draws a rule. */
+const NEW_GROUP_ENDS = new Set(["note", "deliverable"]);
+
+/**
+ * The New… menu (§11.7): a row per type, its other Templates as sub-rows. Each row
+ * opens + New… with that Template.
+ */
 function NewMenu() {
   const open = newMenuOpen.value;
-  const menu = useRef(/** @type {HTMLUListElement | null} */ (null));
+  const box = useRef(/** @type {HTMLDivElement | null} */ (null));
+  const [variants, setVariants] = useState(/** @type {Record<string, TemplateInfo[]>} */ ({}));
   useEffect(() => {
-    if (open) menu.current?.querySelector("button")?.focus();
+    if (!open) return;
+    box.current?.querySelector(/** @type {"button"} */ ("[role=menuitem]"))?.focus();
+    let cancelled = false;
+    Promise.all(TYPES.map((t) => fetchTemplates(t.key).catch(() => null))).then((lists) => {
+      if (cancelled) return;
+      /** @type {Record<string, TemplateInfo[]>} */
+      const found = {};
+      TYPES.forEach((t, i) => {
+        const list = lists[i];
+        found[t.key] = (list?.usable ?? []).filter((v) => v.key !== list?.fallback.key && v.source !== "blank");
+      });
+      setVariants(found);
+    });
+    /** @param {MouseEvent} e */
+    const away = (e) => box.current?.contains(/** @type {Node} */ (e.target)) || (newMenuOpen.value = false);
+    document.addEventListener("mousedown", away);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("mousedown", away);
+    };
   }, [open]);
+
+  /** @param {string} type @param {string} [template] */
+  const create = (type, template) => {
+    newMenuOpen.value = false;
+    openNew(type, undefined, template);
+  };
+
+  /** @param {KeyboardEvent} e */
+  function onKeyDown(e) {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    const items = /** @type {HTMLElement[]} */ ([...(box.current?.querySelectorAll("[role=menuitem]") ?? [])]);
+    const at = items.indexOf(/** @type {HTMLElement} */ (document.activeElement));
+    items[(at + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length]?.focus();
+  }
+
   return html`
-    <div class="new-menu side-new">
+    <div class="new-menu side-new" ref=${box}>
       <button type="button" class="new-button" aria-expanded=${open} aria-keyshortcuts="N"
         onClick=${() => (newMenuOpen.value = !open)}>
         <${Icon} name="plus" /><span class="side-label">New…</span><kbd aria-hidden="true">N</kbd>
       </button>
       ${open &&
       html`
-        <ul class="menu" role="menu" ref=${menu}>
-          ${TYPES.map(
-            (t) => html`<li>
-              <button type="button" role="menuitem" onClick=${() => {
-                newMenuOpen.value = false;
-                openNew(t.key);
-              }}>${t.label}</button>
-            </li>`,
-          )}
-        </ul>
+        <div class="menu new-types" role="menu" aria-label="Create" onKeyDown=${onKeyDown}>
+          <div class="new-types-head" aria-hidden="true"><span>Create</span><span>uses the ★ Template</span></div>
+          ${TYPES.map((t) => {
+            const hint = NEW_HINTS[t.key];
+            return html`
+              <button type="button" role="menuitem" aria-label=${t.label} class="new-type" onClick=${() => create(t.key)}>
+                <${Icon} name=${typeIcon(t.key)} /><span class="new-type-label">${t.label}</span>
+                ${hint && html` <span class="new-hint ${hint.mono ? "mono" : ""}">${hint.text}</span>`}
+              </button>
+              ${(variants[t.key] ?? []).map(
+                (v) => html`
+                  <button type="button" role="menuitem" aria-label="${t.label}: ${v.display_name}" class="new-variant"
+                    onClick=${() => create(t.key, v.name)}>
+                    <span class="new-type-label"><span class="faint">${t.label}: </span>${v.display_name}</span>
+                    ${typeof v.fields.date === "string" && html` <span class="new-hint mono">${v.fields.date}-…</span>`}
+                  </button>
+                `,
+              )}
+              ${NEW_GROUP_ENDS.has(t.key) && html`<hr />`}
+            `;
+          })}
+        </div>
       `}
     </div>
   `;

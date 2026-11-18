@@ -7,6 +7,7 @@ Adding appends one line through the hash-checked write; nothing else is touched.
 """
 
 import re
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -61,7 +62,10 @@ class BookmarkLine:
 @dataclass(frozen=True)
 class BookmarksView:
     lines: tuple[BookmarkLine, ...]
-    labels: tuple[str, ...]  # every Label in the file, A to Z, for the filter
+    # Every Label in the file with how many Bookmarks carry it, most used first, then
+    # A to Z, for the filter. Counted over the whole file, whatever the filter.
+    labels: tuple[tuple[str, int], ...]
+    total: int  # Bookmarks in the file, whatever the filter
 
 
 def bookmarks_view(ws: Workspace, label: str | None = None) -> BookmarksView:
@@ -72,14 +76,19 @@ def bookmarks_view(ws: Workspace, label: str | None = None) -> BookmarksView:
         BookmarkLine(n, text, parse_bookmark(text, n))
         for n, text in enumerate(f.body.splitlines() if f else (), 1)
     ]
-    labels: dict[str, str] = {}
+    names: dict[str, str] = {}
+    counts: Counter[str] = Counter()
     for row in rows:
-        for name in row.bookmark.labels if row.bookmark else ():
-            labels.setdefault(fold(name), name)
+        folded = {fold(name): name for name in row.bookmark.labels} if row.bookmark else {}
+        for key, name in folded.items():
+            names.setdefault(key, name)
+        counts.update(folded.keys())
+    labels = sorted(((names[k], n) for k, n in counts.items()), key=lambda x: (-x[1], fold(x[0])))
+    total = sum(1 for r in rows if r.bookmark)
     if label is not None:
         wanted = fold(label)
         rows = [r for r in rows if r.bookmark and any(fold(x) == wanted for x in r.bookmark.labels)]
-    return BookmarksView(tuple(rows), tuple(sorted(labels.values(), key=fold)))
+    return BookmarksView(tuple(rows), tuple(labels), total)
 
 
 _URL = re.compile(r"https?://[^\s()]+", re.IGNORECASE)

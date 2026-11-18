@@ -1,0 +1,51 @@
+/*
+ * The "run Memex again" page (SPEC §12). It is served without the cookie, so it can't
+ * use app.css; these tokens repeat the few it needs (keep them in step with app.css).
+ */
+:root {
+  color-scheme: light dark;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
+  --page: #ffffff;
+  --well: #f6f7f8;
+  --text: #1f2328;
+  --body: #4a5057;
+  --muted: #656a71;
+  --guide: #e6e8eb;
+  --border-soft: #eceef0;
+  --solid-bg: #1f2328;
+  --solid-text: #ffffff;
+  --solid-hint: #a9afb6;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #1b1d21;
+    --well: #212428;
+    --text: #e6e8eb;
+    --body: #c9cdd2;
+    --muted: #a3a9b0;
+    --guide: #2e3238;
+    --border-soft: #2a2d32;
+    --solid-bg: #e6e8eb;
+    --solid-text: #1f2328;
+    --solid-hint: #4a5057;
+  }
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; padding: 72px 16px 32px; background: var(--well); color: var(--text); font-family: var(--font); }
+.panel { max-width: 580px; margin: 0 auto; padding: 36px 40px 32px; border: 1px solid var(--guide); border-radius: 12px; background: var(--page); }
+.brand { display: flex; align-items: center; gap: 10px; padding-bottom: 22px; font-size: 15px; line-height: 20px; font-weight: 700; }
+.mark { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px; background: var(--solid-bg); color: var(--solid-text); font-size: 15px; line-height: 18px; font-weight: 700; }
+.mark.small { width: 18px; height: 18px; border-radius: 5px; font-size: 10px; line-height: 12px; }
+h1 { margin: 0; font-size: 34px; line-height: 40px; font-weight: 700; letter-spacing: -0.022em; }
+.lede { margin: 10px 0 0; color: var(--body); font-size: 15px; line-height: 24px; }
+.ways { display: flex; flex-direction: column; gap: 14px; margin: 24px 0 0; }
+.ways > div { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.ways dt { flex: none; width: 170px; color: var(--body); font-size: 14px; line-height: 20px; }
+.ways dd { margin: 0; }
+.shortcut { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 7px; background: var(--well); font-size: 14px; line-height: 20px; font-weight: 500; }
+.command { display: inline-flex; align-items: center; gap: 10px; padding: 7px 12px; border-radius: 7px; background: var(--solid-bg); color: var(--solid-text); font: 13.5px/18px var(--mono); }
+.command .prompt { color: var(--solid-hint); }
+.note { margin: 20px 0 0; padding-top: 16px; border-top: 1px solid var(--border-soft); color: var(--muted); font-size: 13px; line-height: 20px; }

@@ -97,6 +97,22 @@ def test_R05_relaunch_page_needs_no_cookie(anon: TestClient):
     assert "memex" in response.text.lower()
 
 
+def test_R05_relaunch_page_is_static_and_styled_without_the_cookie(anon: TestClient):
+    # It is shown after the session ends, so it must not load the SPA (which would 401
+    # straight back here), and its one stylesheet must load without the cookie too.
+    page = anon.get("/relaunch").text
+
+    assert "<script" not in page
+    assert "/static/" not in page
+    assert "Run Memex again" in page
+    stylesheets = re.findall(r'<link rel="stylesheet" href="([^"]+)">', page)
+    assert stylesheets == ["/relaunch.css"]
+    css = anon.get("/relaunch.css")
+    assert css.status_code == 200
+    assert css.headers["content-type"].startswith("text/css")
+    assert "prefers-color-scheme: dark" in css.text
+
+
 def test_R06_auth_sets_a_strict_httponly_cookie_and_redirects(anon: TestClient, state: AppState):
     code = state.session.issue_code()
 
@@ -284,6 +300,7 @@ ALL_GETS = [
     "/",
     "/static/index.html",
     "/relaunch",
+    "/relaunch.css",
     "/auth?code=wrong",
     "/api/trash",
     "/api/broken-references",

@@ -4,7 +4,7 @@
 // previews first (the impact preview), then applies against the preview's hashes.
 
 import { signal } from "@preact/signals";
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { ApiError, describe, request } from "./api.js";
 import { openCapture } from "./capture.js";
 import { typeLabel, useCandidates } from "./fields.js";
@@ -58,38 +58,58 @@ function entityUrl(target) {
 }
 
 /**
- * The Entity page's Actions menu (§11.5): Rename id, Archive/Unarchive, Delete.
- * @param {{detail: Target, readOnly: boolean}} props
+ * The Entity page's Actions menu (§11.5): Create N To-dos (Notes), Rename id, Archive,
+ * Open file (`openFile`) and Delete, in a popover under a "…" button. Read-only, only
+ * Open file is left.
+ * @param {{detail: Target, readOnly: boolean, openFile?: boolean}} props
  */
-export function Actions({ detail, readOnly }) {
+export function Actions({ detail, readOnly, openFile = false }) {
   const [open, setOpen] = useState(false);
+  const box = useRef(/** @type {HTMLDivElement | null} */ (null));
+  useEffect(() => {
+    if (!open) return;
+    // Close on a click anywhere else, as a menu would.
+    /** @param {MouseEvent} e */
+    const away = (e) => !box.current?.contains(/** @type {Node} */ (e.target)) && setOpen(false);
+    document.addEventListener("mousedown", away);
+    return () => document.removeEventListener("mousedown", away);
+  }, [open]);
   const isMe = sameId(meId() ?? "", detail.id);
+  const todos = detail.unconverted_todos ?? 0;
   /** @param {LifecycleRequest["kind"]} kind */
   const pick = (kind) => {
     setOpen(false);
     openLifecycle(kind, detail);
   };
-  if (readOnly) return null;
+  if (readOnly && !openFile) return null;
   return html`
-    <div class="new-menu actions-menu">
-      <button type="button" aria-haspopup="menu" aria-expanded=${open} onClick=${() => setOpen(!open)}>
-        Actions <${Icon} name="chevron-down" />
+    <div class="actions-menu" ref=${box}>
+      <button type="button" class="tool icon-tool" aria-label="Actions" title="Actions" aria-haspopup="menu"
+        aria-expanded=${open} onClick=${() => setOpen(!open)}>
+        <${Icon} name="ellipsis" />
       </button>
       ${open &&
-      html`<ul class="menu" role="menu" onKeyDown=${(/** @type {KeyboardEvent} */ e) => e.key === "Escape" && setOpen(false)}>
-        ${(detail.unconverted_todos ?? 0) > 0 &&
-        html`<li><button type="button" role="menuitem" onClick=${() => {
+      html`<ul class="menu popover" role="menu" onKeyDown=${(/** @type {KeyboardEvent} */ e) => e.key === "Escape" && setOpen(false)}>
+        ${!readOnly && todos > 0 &&
+        html`<li><button type="button" role="menuitem" class="popover-item" onClick=${() => {
           setOpen(false);
           void openCapture({ id: detail.id, title: detail.title });
-        }}><${Icon} name="plus" /> Create ${detail.unconverted_todos} To-do${detail.unconverted_todos === 1 ? "" : "s"}…</button></li>`}
-        <li><button type="button" role="menuitem" onClick=${() => pick("rename")}><${Icon} name="pencil" /> Rename id…</button></li>
-        ${detail.archivable &&
-        !detail.fields?.archived &&
-        html`<li><button type="button" role="menuitem" disabled=${isMe} title=${isMe ? "Me can't be archived" : undefined}
-          onClick=${() => pick("archive")}>Archive…</button></li>`}
-        <li><button type="button" role="menuitem" disabled=${isMe}
+        }}><${Icon} name="plus" /><span class="grow">Create ${todos} To-do${todos === 1 ? "" : "s"}…</span></button></li>`}
+        ${!readOnly &&
+        html`<li><button type="button" role="menuitem" class="popover-item" onClick=${() => pick("rename")}>
+          <${Icon} name="pencil" /><span class="grow">Rename id…</span>${" "}<span class="item-hint mono">${detail.id}</span></button></li>`}
+        ${!readOnly && detail.archivable && !detail.fields?.archived &&
+        html`<li><button type="button" role="menuitem" class="popover-item" disabled=${isMe}
+          title=${isMe ? "Me can't be archived" : undefined}
+          onClick=${() => pick("archive")}><${Icon} name="archive" /><span class="grow">Archive…</span></button></li>`}
+        ${openFile &&
+        html`<li><a role="menuitem" class="popover-item" href=${fileHref(detail.path)} onClick=${() => setOpen(false)}>
+          <${Icon} name="file-text" /><span class="grow">Open file</span>${" "}<span class="item-hint mono">.md</span></a></li>`}
+        ${!readOnly &&
+        html`<li class="popover-sep" role="separator"></li>
+        <li><button type="button" role="menuitem" class="popover-item danger" disabled=${isMe}
           title=${isMe ? "Me can't be deleted: change Me in Settings first" : undefined}
-          onClick=${() => pick("delete")}><${Icon} name="trash-2" /> Delete…</button></li>
+          onClick=${() => pick("delete")}><${Icon} name="trash-2" /><span class="grow">Delete…</span>${" "}<span class="item-hint">to Trash</span></button></li>`}
       </ul>`}
     </div>
   `;
