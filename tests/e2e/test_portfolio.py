@@ -162,3 +162,17 @@ def test_outline_shows_cells_until_one_is_clicked_to_edit(app: Page, server: App
     app.get_by_role("button", name="Collapse Data migration").click()
     expect(app.get_by_role("row", name="Cutover")).to_have_count(0)
     expect(app.get_by_role("row", name="Data migration")).to_contain_text("1 Deliverable")
+
+
+def test_outline_edits_a_themes_lead_in_place(app: Page, server: AppState, root: Path):
+    theme = "---\ntitle: Platform\n---\n"
+    put(root, "themes/platform.md", theme)
+    put(root, "people/alice-smith.md", "---\ntitle: Alice Smith\n---\n")
+    put(root, "projects/data-migration.md", PROJECT)
+    portfolio(app, server, "outline")
+
+    row = app.get_by_role("row", name="Platform")
+    expect(row).to_contain_text("Theme · 1 Project")
+    row.get_by_role("button", name="Edit Lead of Platform").click()
+    app.get_by_label("Lead of Platform", exact=True).select_option(label="Alice Smith")
+    wait_for_disk(root / "themes/platform.md", "---\ntitle: Platform\nlead: alice-smith\n---\n")

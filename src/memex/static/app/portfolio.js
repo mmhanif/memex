@@ -350,19 +350,9 @@ function Outline({ outline, readOnly, showArchived }) {
         ${outline.themes.map((g) => {
           const key = g.theme ? `t:${g.theme.id}` : "t:";
           const open = !collapsed.has(key);
-          const title = g.theme?.title ?? "No theme";
           return html`
-            <tr class="theme-row ${g.theme ? "" : "no-theme"}" key=${key}>
-              <td colspan="6">
-                <div class="outline-name">
-                  <button type="button" class="caret" aria-expanded=${open} aria-label="${open ? "Collapse" : "Expand"} ${title}"
-                    onClick=${() => toggle(key)}><span class="tri ${open ? "open" : ""}"></span></button>
-                  ${g.theme ? html`<a class="theme-title" href=${entityHref(g.theme.id, "theme")}>${title}</a>` : html`<span class="theme-title">${title}</span>`}
-                  ${g.theme?.fields.archived && html`<span class="status status-cancelled">archived</span>`}
-                  <span class="row-meta">${g.theme ? "Theme · " : ""}${count(g.projects.length, "Project")}</span>
-                </div>
-              </td>
-            </tr>
+            <${ThemeRow} ...${row} key=${key} theme=${g.theme} open=${open} onToggle=${() => toggle(key)}
+              projects=${g.projects.length} />
             ${open &&
             g.projects.map((p) => {
               const pkey = `p:${p.project.id}`;
@@ -399,6 +389,46 @@ function Outline({ outline, readOnly, showArchived }) {
 }
 
 /**
+ * A Theme's group header: caret, name and Project count, then its Lead, Team and
+ * Stakeholders edited in place like a Project's (a Theme has no Status or Due). "No theme"
+ * is a header only.
+ * @param {{
+ *   theme: Summary | null, projects: number, candidates: Summary[], names: Record<string, string>,
+ *   readOnly: boolean, showArchived: boolean, open: boolean, onToggle: () => void,
+ * }} props
+ */
+function ThemeRow({ theme, projects, candidates, names, readOnly, showArchived, open, onToggle }) {
+  const [error, setError] = useState(/** @type {string | null} */ (null));
+  const title = theme?.title ?? "No theme";
+  const specs = FIELDS.theme;
+  const cell = { candidates, names, locked: readOnly || !!theme?.ambiguous, showArchived };
+  /** @param {string} name @param {any} value */
+  const save = (name, value) => {
+    if (theme) void saveField(theme, name, value, setError);
+  };
+  return html`
+    <tr class="theme-row ${theme ? "" : "no-theme"}">
+      <td class="col-name" colspan=${theme ? 1 : 6}>
+        <div class="outline-name">
+          <button type="button" class="caret" aria-expanded=${open} aria-label="${open ? "Collapse" : "Expand"} ${title}"
+            onClick=${onToggle}><span class="tri ${open ? "open" : ""}"></span></button>
+          ${theme ? html`<a class="theme-title" href=${entityHref(theme.id, "theme")}>${title}</a>` : html`<span class="theme-title">${title}</span>`}
+          ${theme?.fields.archived && html`<span class="status status-cancelled">archived</span>`}
+          <span class="row-meta">${theme ? "Theme · " : ""}${count(projects, "Project")}</span>
+          ${error && html`<span class="field-error" role="alert">${error}</span>`}
+        </div>
+      </td>
+      ${theme &&
+      html`<td class="col-status"></td>
+        ${["lead", "team", "stakeholders"].map((name) => html`<td class="col-${name}">
+          <${EditCell} item=${theme} spec=${specs.find((s) => s.name === name)} save=${save} ...${cell} />
+        </td>`)}
+        <td class="col-due"></td>`}
+    </tr>
+  `;
+}
+
+/**
  * A Project or Deliverable: bullet and name, then its Status, Lead, Team, Stakeholders and
  * Due, each shown as text until clicked.
  * @param {{
@@ -413,6 +443,7 @@ function Row({ item, depth, candidates, names, readOnly, showArchived, open, onT
   const locked = readOnly || item.ambiguous;
   /** @param {string} name @param {any} value */
   const save = (name, value) => void saveField(item, name, value, setError);
+  const cell = { candidates, names, locked, showArchived };
   return html`
     <tr class="outline-row depth-${depth} ${item.type} ${finished ? "finished" : ""} ${open === false ? "collapsed" : ""}">
       <td class="col-name">
@@ -434,25 +465,34 @@ function Row({ item, depth, candidates, names, readOnly, showArchived, open, onT
       <td class="col-status">
         <${StatusMenu} item=${item} readOnly=${readOnly} variant="cell" onPick=${(/** @type {string} */ s) => save("status", s)} />
       </td>
-      ${CELLS.map((name) => {
-        const spec = specs.find((s) => s.name === name);
-        return html`<td class="col-${name}">
-          ${spec &&
-          html`<${Cell} item=${item} spec=${spec} names=${names} locked=${locked}
-            editor=${html`<${FieldInput}
-              spec=${spec}
-              value=${item.fields[spec.name]}
-              onChange=${(/** @type {any} */ v) => save(spec.name, v)}
-              candidates=${candidates}
-              names=${names}
-              showArchived=${showArchived}
-              inputId=${`${item.id}-${spec.name}`}
-              ariaLabel="${spec.label} of ${item.title}"
-            />`} />`}
-        </td>`;
-      })}
+      ${CELLS.map((name) => html`<td class="col-${name}">
+        <${EditCell} item=${item} spec=${specs.find((s) => s.name === name)} save=${save} ...${cell} />
+      </td>`)}
     </tr>
   `;
+}
+
+/**
+ * A field's outline cell: its value until clicked, then its FieldInput. Empty for a field
+ * the type doesn't have.
+ * @param {{
+ *   item: Summary, spec: FieldSpec | undefined, save: (name: string, value: any) => void,
+ *   candidates: Summary[], names: Record<string, string>, locked: boolean, showArchived: boolean,
+ * }} props
+ */
+function EditCell({ item, spec, save, candidates, names, locked, showArchived }) {
+  if (!spec) return null;
+  return html`<${Cell} item=${item} spec=${spec} names=${names} locked=${locked}
+    editor=${html`<${FieldInput}
+      spec=${spec}
+      value=${item.fields[spec.name]}
+      onChange=${(/** @type {any} */ v) => save(spec.name, v)}
+      candidates=${candidates}
+      names=${names}
+      showArchived=${showArchived}
+      inputId=${`${item.id}-${spec.name}`}
+      ariaLabel="${spec.label} of ${item.title}"
+    />`} />`;
 }
 
 /**
