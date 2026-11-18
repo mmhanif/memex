@@ -112,6 +112,21 @@ def test_todo_views_return_groups_and_names(api: TestClient, state: AppState, al
     assert api.get("/api/views/todos?view=mine").json()["groups"] == []
 
 
+def test_todo_views_count_each_views_open_todos_and_say_when_the_week_ends(
+    api: TestClient, state: AppState, alice: str
+):
+    put(
+        state,
+        "todos/t.md",
+        "---\ntitle: T\nowner: alice-smith\nrequester: ada-lovelace\nstatus: open\n---\n",
+    )
+    put(state, "todos/u.md", "---\ntitle: U\nowner: ada-lovelace\nrequester: alice-smith\n---\n")
+    body = api.get("/api/views/todos?view=waiting-on-me").json()
+    assert body["counts"] == {"mine": 1, "waiting-on-them": 1, "waiting-on-me": 1}
+    assert body["week_ends"] == "2026-11-15"  # today is Thursday 2026-11-12
+    assert api.get("/api/tree").json()["workspace"]["open_todos"] == body["counts"]["mine"]
+
+
 def test_todo_views_for_a_person_are_their_person_view_columns(
     api: TestClient, state: AppState, alice: str
 ):

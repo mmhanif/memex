@@ -40,25 +40,38 @@ def todo_view(ws: Workspace, view: str, include_done: bool = False) -> TodoView:
     """One of Me's three To-do lists (§6.2). Raises MeNotSet without Me."""
     if view not in TODO_VIEWS:
         raise Validation(f"Unknown To-do view {view!r}: one of {', '.join(TODO_VIEWS)}")
+    name = cast(TodoViewName, view)
+    picked = _in_view(ws, name, ws.require_me().id)
+    if name == "mine":
+        return TodoView(name, _by_due(ws, picked, include_done))
+    field = "owner" if name == "waiting-on-them" else "requester"
+    return TodoView(name, _by_party(ws, picked, field, include_done))
+
+
+def todo_counts(ws: Workspace) -> dict[TodoViewName, int]:
+    """Each view's open To-dos: the To-dos page's switch (§6.2). Raises MeNotSet without Me."""
     me = ws.require_me().id
-    if view == "mine":
-        picked = [t for t in todos(ws) if refers(t, ["owner"], me)]
-        return TodoView("mine", _by_due(ws, picked, include_done))
-    if view == "waiting-on-them":
-        picked = [
-            t for t in todos(ws) if refers(t, ["requester"], me) and not refers(t, ["owner"], me)
-        ]
-        return TodoView("waiting-on-them", _by_party(ws, picked, "owner", include_done))
-    picked = [t for t in todos(ws) if refers(t, ["owner"], me) and not refers(t, ["requester"], me)]
-    return TodoView("waiting-on-me", _by_party(ws, picked, "requester", include_done))
+    return {view: sum(map(is_open, _in_view(ws, view, me))) for view in TODO_VIEWS}
 
 
 def open_todo_count(ws: Workspace) -> int | None:
-    """How many open To-dos Me owns: the sidebar's To-dos badge (§11.2). None without Me."""
+    """How many open To-dos Me owns: the sidebar's To-dos badge (§11.2), the same as
+    Mine's count. None without Me."""
     me = ws.me()
     if me is None:
         return None
-    return sum(1 for t in todos(ws) if is_open(t) and refers(t, ["owner"], me.id))
+    return sum(map(is_open, _in_view(ws, "mine", me.id)))
+
+
+def _in_view(ws: Workspace, view: TodoViewName, me: str) -> list[CachedFile]:
+    """The To-dos a view picks, open or not (§6.2)."""
+    if view == "mine":
+        return [t for t in todos(ws) if refers(t, ["owner"], me)]
+    if view == "waiting-on-them":
+        return [
+            t for t in todos(ws) if refers(t, ["requester"], me) and not refers(t, ["owner"], me)
+        ]
+    return [t for t in todos(ws) if refers(t, ["owner"], me) and not refers(t, ["requester"], me)]
 
 
 def todos(ws: Workspace) -> list[CachedFile]:

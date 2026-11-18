@@ -10,7 +10,7 @@ import { Icon } from "./icons.js";
 import { openNew } from "./newform.js";
 import { entityHref, personHref } from "./router.js";
 import { html, meId, sameId, useView } from "./state.js";
-import { isOverdue, today, toggleTodo } from "./todos.js";
+import { PersonRef, isOverdue, today, toggleTodo } from "./todos.js";
 
 /**
  * @typedef {import("./fields.js").Summary} Summary
@@ -130,11 +130,6 @@ function Block({ title, href, flat, children }) {
 /** The dashed note a Me-dependent block shows while Me isn't set (§3.5). @param {{children?: any}} props */
 function Paused({ children }) {
   return html`<p class="paused">${children}</p>`;
-}
-
-/** A link to a Person, written as a Mention. @param {{id: string, names: Names}} props */
-function PersonRef({ id, names }) {
-  return html`<a href=${personHref(id)} title=${names[id]}>@${id}</a>`;
 }
 
 /**

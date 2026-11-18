@@ -110,15 +110,22 @@ def todo_view(
     person: Annotated[str | None, Query()] = None,
     include_done: Annotated[bool, Query()] = False,
 ) -> dict:
-    """Me's three lists; with `person`, that Person View's columns (`waiting-on-them`
-    is what they owe, `waiting-on-me` what they're waiting on)."""
+    """Me's three lists, with each one's open count and the day "This week" runs
+    through; with `person`, that Person View's columns (`waiting-on-them` is what they
+    owe, `waiting-on-me` what they're waiting on)."""
     if person is None:
         groups = views.todo_view(ws, view, include_done).groups
-    elif view not in PERSON_COLUMNS:
+        return {
+            "view": view,
+            "groups": _groups(groups),
+            "names": _todo_names(ws, groups),
+            "counts": views.todo_counts(ws),
+            "week_ends": views.end_of_week(ws.clock.today()).isoformat(),
+        }
+    if view not in PERSON_COLUMNS:
         raise Validation(f"With person, view is one of {', '.join(PERSON_COLUMNS)}")
-    else:
-        found = views.person_view(ws, person, include_done)
-        groups = found.waiting_on_them if view == "waiting-on-them" else found.waiting_on_me
+    found = views.person_view(ws, person, include_done)
+    groups = found.waiting_on_them if view == "waiting-on-them" else found.waiting_on_me
     return {"view": view, "groups": _groups(groups), "names": _todo_names(ws, groups)}
 
 

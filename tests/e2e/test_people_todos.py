@@ -20,7 +20,7 @@ def test_quick_add_on_the_todos_page_creates_a_todo_in_mine(
     expect(app.locator(".quick-add-preview")).to_contain_text("Buy milk")
     box.press("Enter")
 
-    expect(app.locator(".todo", has_text="Buy milk")).to_contain_text("due 2026-12-01")
+    expect(app.locator(".todo-block", has_text="Buy milk")).to_contain_text("due Tue 1 Dec")
     text = (root / "todos/2026-11-12-buy-milk.md").read_text("utf-8")
     assert "owner: ada-lovelace" in text
 

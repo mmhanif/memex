@@ -816,7 +816,7 @@ Decided in [Frontend architecture & build step](https://github.com/mmhanif/memex
 | `#/portfolio/outline` | Outline table: Theme → Project → Deliverable, collapsible (a collapsed Project counts its Deliverables), Projects without a Theme under "No theme". A Project's or Deliverable's Status (the same status menu), Lead, Team, Stakeholders and Due show as text and avatars, and become editable in place when clicked. "+ Project in <Theme>" / "+ Deliverable" rows create inline. The eyebrow counts Themes, Projects and Deliverables. A Board / Outline toggle switches between the two. |
 | `#/people` | Org tree from Me (Me's Manager shown above Me; Directs and their reports below), other Team Members not under Me in a separate list, and a Stakeholders table (name, organisation, role, Tag count) |
 | `#/people/<id>` | **Person View** (§11.6). `#/e/<person-id>` redirects here. |
-| `#/todos/mine`, `#/todos/waiting-on-them`, `#/todos/waiting-on-me` | One page with a three-way switch, Show completed toggle and quick-add box (§6.2) |
+| `#/todos/mine`, `#/todos/waiting-on-them`, `#/todos/waiting-on-me` | One page (§6.2): an eyebrow counting the shown view's open and overdue To-dos, a three-way switch with each view's open count (Mine's equals the sidebar badge), a Show completed toggle, and the quick-add box whose live preview names the title, Owner, Requester and due date and says which list the To-do goes to. The lists are outline blocks: Mine always shows its four groups once anything is open ("This week" says the Sunday it runs through, an empty group says so), the Waiting views a group per Person linking to their Person View. Rows tick in place and show the other party and the due date, with lateness in rust. |
 | `#/glossary` | A–Z Glossary |
 | `#/bookmarks` | Bookmarks |
 | `#/files`, `#/f/<path>` | Raw tree, and the raw whole-file editor (frontmatter included) with a live preview pane. This is the escape hatch for any file. |
@@ -1298,7 +1298,7 @@ Error body: `{"error": {"code", "message", "field_errors"?: [{field, message, al
 | `POST /api/todos/quick-add` `{text, defaults?}` | Create a To-do from quick-add text |
 | `GET /api/notes/{id}/capture` / `POST /api/notes/{id}/capture` `{hash, rows}` | Inline capture preview and confirm |
 | `GET /api/views/dashboard` | Dashboard cards |
-| `GET /api/views/todos?view=&person=&include_done=` | To-do views |
+| `GET /api/views/todos?view=&person=&include_done=` | To-do views; without `person`, also each view's open count (`counts`) and the Sunday "This week" runs through (`week_ends`) |
 | `GET /api/views/portfolio?mode=board\|outline&kind=&themes=&include_archived=` | Portfolio |
 | `GET /api/views/people` | Org tree and Stakeholders table |
 | `GET /api/views/person/{id}` | Person View |
