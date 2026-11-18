@@ -15,11 +15,13 @@ import {
   fetchSearch,
   hitContext,
   isTextHit,
+  MatchedText,
   openHit,
   openInNewTab,
   searchHref,
   SnippetText,
   typeIcon,
+  typeName,
 } from "./search.js";
 import { html, reloadTree, tree, viewVersion } from "./state.js";
 
@@ -28,7 +30,7 @@ import { html, reloadTree, tree, viewVersion } from "./state.js";
  * @typedef {{label: string, icon: string, context?: string, run: (how: {newTab?: boolean}) => void,
  *   href?: string}} Command
  * @typedef {{key: string, section: string, icon: string, title: string, context?: string,
- *   snippet?: import("./search.js").Snippet, finished?: boolean,
+ *   snippet?: import("./search.js").Snippet, finished?: boolean, kind?: "text" | "see-all",
  *   run: (how: {newTab?: boolean, toLine?: boolean, stay?: boolean}) => void | Promise<void>}} Row
  */
 
@@ -172,16 +174,25 @@ function commandRow(c, section) {
   return /** @type {Row} */ ({ key: `${section}:${c.label}`, section, icon: c.icon, title: c.label, run: c.run });
 }
 
-/** @param {SearchHit} hit @param {string} section */
+/**
+ * A server hit as a palette row. Go to rows say the type and context ("Deliverable · Data
+ * Migration"); In text rows say where the text is (a Note's folder, else the type) and
+ * show the snippet under the title.
+ * @param {SearchHit} hit @param {string} section
+ */
 function hitRow(hit, section) {
+  const text = section === "In text";
+  const context = hitContext(hit);
+  const where = hit.bookmark ? context : hit.type === "note" ? (context ? `${context}/` : "") : typeName(hit.type);
   return /** @type {Row} */ ({
     key: `hit:${hit.path}:${hit.bookmark?.line ?? 0}`,
     section,
     icon: typeIcon(hit.type),
     title: hit.title,
-    context: hitContext(hit),
-    snippet: section === "In text" ? hit.snippets[0] : undefined,
+    context: text ? where : [typeName(hit.type), context].filter(Boolean).join(" · "),
+    snippet: text ? hit.snippets[0] : undefined,
     finished: hit.finished,
+    kind: text ? "text" : undefined,
     run: (how) => openHit(hit, how),
   });
 }
@@ -303,7 +314,8 @@ function PaletteBox({ initial }) {
       {
         key: "see-all",
         section: "",
-        icon: "search",
+        kind: "see-all",
+        icon: "arrow-right",
         title: `See all results for '${q}'`,
         run: (how) => go(searchHref(q), how.newTab),
       },
@@ -338,12 +350,16 @@ function PaletteBox({ initial }) {
 
   let lastSection = "";
   return html`
-    <div class="dialog-backdrop" onClick=${(/** @type {Event} */ e) => e.target === e.currentTarget && close()}>
-      <div class="dialog palette" role="dialog" aria-label="Command palette" onKeyDown=${onKeyDown}>
-        <input ref=${input} class="palette-input" aria-label="Search or run a command" role="combobox"
-          aria-expanded="true" aria-controls="palette-rows" aria-activedescendant=${rows[at] ? `palette-row-${at}` : undefined}
-          placeholder="Search, > for commands, + to add a To-do" value=${text}
-          onInput=${(/** @type {Event} */ e) => setText(/** @type {HTMLInputElement} */ (e.currentTarget).value)} />
+    <div class="dialog-backdrop palette-backdrop" onClick=${(/** @type {Event} */ e) => e.target === e.currentTarget && close()}>
+      <div class="palette" role="dialog" aria-label="Command palette" onKeyDown=${onKeyDown}>
+        <div class="palette-input">
+          <${Icon} name="search" />
+          <input ref=${input} aria-label="Search or run a command" role="combobox"
+            aria-expanded="true" aria-controls="palette-rows" aria-activedescendant=${rows[at] ? `palette-row-${at}` : undefined}
+            placeholder="Search, > for commands, + to add a To-do" value=${text}
+            onInput=${(/** @type {Event} */ e) => setText(/** @type {HTMLInputElement} */ (e.currentTarget).value)} />
+          <kbd>Esc</kbd>
+        </div>
         ${problem && html`<p class="error-text" role="alert">${problem}</p>`}
         ${errors.map((m) => html`<p class="error-text" role="alert">${m}</p>`)}
         ${mode === "quick-add" && preview?.errors.map(
@@ -354,22 +370,36 @@ function PaletteBox({ initial }) {
           ${rows.map((row, i) => {
             const heading = row.section && row.section !== lastSection ? row.section : null;
             lastSection = row.section;
+            const title = mode === "search" && row.kind !== "see-all"
+              ? html`<${MatchedText} text=${row.title} q=${q} />`
+              : row.title;
             return html`
               ${heading && html`<li class="palette-section" role="presentation">${heading}</li>`}
               <li id=${`palette-row-${i}`} role="option" aria-selected=${i === at}
-                class="palette-row ${i === at ? "selected" : ""} ${row.finished ? "finished" : ""}"
+                class="palette-row ${row.kind ?? ""} ${i === at ? "selected" : ""} ${row.finished ? "finished" : ""}"
                 onMouseMove=${() => i !== at && setSelected(i)}
                 onClick=${(/** @type {MouseEvent} */ e) => choose(row, { newTab: e.ctrlKey || e.metaKey })}>
-                <${Icon} name=${row.icon} />
-                <span class="palette-text">
-                  <span class="palette-title">${row.title}</span>
-                  ${row.context && html`<span class="muted palette-context">${row.context}</span>`}
-                  ${row.snippet && html`<span class="muted palette-context"><${SnippetText} snippet=${row.snippet} /></span>`}
-                </span>
+                <span class="palette-icon"><${Icon} name=${row.icon} /></span>
+                ${row.kind === "text"
+                  ? html`<span class="palette-text">
+                      <span class="palette-title">${title}${row.context && html` <span class="palette-where">· ${row.context}</span>`}</span>
+                      ${row.snippet && html`<span class="palette-snippet"><${SnippetText} snippet=${row.snippet} /></span>`}
+                    </span>`
+                  : html`<span class="palette-title">${title}</span>
+                      <span class="palette-context">${row.context ?? ""}</span>`}
+                ${i === at && html`<span class="palette-enter" aria-hidden="true">↵</span>`}
               </li>
             `;
           })}
         </ul>
+        <div class="palette-keys" aria-hidden="true">
+          <span><b>↑↓</b> move</span>
+          <span><b>↵</b> open</span>
+          <span><b>Ctrl ↵</b> new tab</span>
+          <span class="grow"></span>
+          <span><b class="mono">${">"}</b> commands</span>
+          <span><b class="mono">+</b> add To-do</span>
+        </div>
       </div>
     </div>
   `;

@@ -692,7 +692,8 @@ Ranked in tiers:
   - a final row, **See all results for '…'**, which opens `#/search?q=…`
 
   Views and commands are a static list in the frontend, matched in the browser and merged in.
-- **Row:** type icon, title, and a muted context line (a Project's Theme, a Deliverable's Project, a To-do's Owner→Requester, or a Note's folder).
+- **Look:** a centred modal over a scrim: the query box (with an Esc hint), the grouped rows, and a footer of key hints (↑↓ move, ↵ open, Ctrl ↵ new tab, `>` commands, `+` add To-do).
+- **Row:** type icon, title with the query's words in bold, and a muted context line: the type and its context (a Project's Theme, a Deliverable's Project, a To-do's Owner → Requester, or a Note's folder; Me shows as "Me"). An In text row puts the Note's folder (else the type) after the title and the snippet under it. The selected row shows ↵.
 - **Prefixes:**
   - `>` limits the palette to commands.
   - `+` turns it into To-do quick-add with a live preview row (server-parsed). Enter creates and closes; Shift-Enter creates and stays open.
@@ -707,9 +708,9 @@ Ranked in tiers:
 
 ### 9.7 Search page (`#/search?q=…`)
 
-- A query box and chips (Type, Status, Person, Label, Due, Hide completed) at the top.
-- One ranked list, with per-type counts that act as quick filters.
-- Each row shows title, type badge, status badge, context line and up to 2 highlighted snippets.
+- The heading counts the results ("7 results for ‘cutover’"). A query box (with a hint at the filter tokens) and chips (Type, Status, Person, Label, Due, Hide completed) sit under it; filters already in the query show as removable chips.
+- One ranked list, with per-type counts as tabs over it ("All 7", "To-do 3", …) that act as quick filters. The counts ignore the `type:` filter, so the tabs stay while one is picked; All clears it.
+- Each row shows title, type badge, status badge (a dot for work, a box for an open To-do, a pill once done, cancelled or archived), a context line and up to 2 highlighted snippets. The context line adds to the palette's: the Lead and due date for work ("Data Migration · lead Alice Smith · due 11 Dec"); the due or completed date and the `about` for To-dos; the date and Labels for Notes ("notes/ · Tue 17 Nov · #one-on-one"). Done, cancelled and archived rows are greyed.
 - 50 results at a time, with **Show more** for the next 50.
 
 ### 9.8 Opening a hit
@@ -1303,7 +1304,7 @@ Error body: `{"error": {"code", "message", "field_errors"?: [{field, message, al
 | `GET /api/views/people?include_archived=` | Org tree, other Team Members and Stakeholders table, plus `waiting`: open To-dos between Me and each Person (`on_them`, `on_me`) |
 | `GET /api/views/person/{id}` | Person View |
 | `GET /api/views/glossary` | Glossary |
-| `GET /api/search?q=&limit=&offset=&include_archived=` | Search results plus parsed filters and token errors |
+| `GET /api/search?q=&limit=&offset=&include_archived=&hide_completed=` | Search results plus parsed filters and token errors. A file row carries `context` and, for the search page's context line, `lead`, `about` (names; Me as "Me"), `due`, `completed`, `date` and `labels` |
 | `GET /api/bookmarks?label=` / `POST /api/bookmarks` | Bookmarks list and add |
 | `GET /api/broken-references` / `POST /api/broken-references/repair` `{id, action, replacement?, type?, dry_run, hashes?}` | Broken references and repair |
 | `GET /api/trash` / `POST /api/trash/restore` `{entry}` | Trash list and restore |

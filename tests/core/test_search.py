@@ -180,7 +180,7 @@ def test_each_bookmark_line_is_its_own_result(b: Builder):
     assert lines("type:bookmark tips") == [4]
 
 
-def test_context_lines_name_the_theme_project_parties_or_folder(b: Builder):
+def test_context_lines_name_the_theme_project_parties_or_folder_with_me_as_me(b: Builder):
     b.person("alice", title="Alice")
     b.theme("platform", title="Platform")
     b.project("data-migration", title="Data migration", theme="platform")
@@ -189,7 +189,7 @@ def test_context_lines_name_the_theme_project_parties_or_folder(b: Builder):
     b.note("notes/1on1/2026-11-01.md", "x\n")
     assert context_of(b.ws, cached(b, "projects/data-migration.md")) == "Platform"
     assert context_of(b.ws, cached(b, "deliverables/cutover.md")) == "Data migration"
-    assert context_of(b.ws, cached(b, "todos/2026-11-01-call.md")) == "Alice → Ada"
+    assert context_of(b.ws, cached(b, "todos/2026-11-01-call.md")) == "Alice → Me"
     assert context_of(b.ws, cached(b, "notes/1on1/2026-11-01.md")) == "notes/1on1"
     assert context_of(b.ws, cached(b, "themes/platform.md")) == ""
 

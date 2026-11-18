@@ -6,6 +6,7 @@
 
 import { useEffect, useState } from "preact/hooks";
 import { describe, request } from "./api.js";
+import { dayMonth, shortDate } from "./dates.js";
 import { typeLabel } from "./fields.js";
 import { Icon } from "./icons.js";
 import { entityHref, fileHref, navigate } from "./router.js";
@@ -16,7 +17,8 @@ import { html, viewVersion } from "./state.js";
  * @typedef {{line: number, title: string, url: string, note: string, labels: string[]}} BookmarkInfo
  * @typedef {{kind: "file" | "bookmark", id: string, type: string, title: string, path: string,
  *   status?: string | null, finished?: boolean, tier: number, context?: string,
- *   bookmark?: BookmarkInfo, snippets: Snippet[]}} SearchHit
+ *   lead?: string | null, due?: string | null, completed?: string | null, date?: string | null,
+ *   about?: string | null, labels?: string[], bookmark?: BookmarkInfo, snippets: Snippet[]}} SearchHit
  * @typedef {{kind: string, values: string[], token: string}} ParsedFilter
  * @typedef {{token: string, message: string, candidates: string[]}} TokenError
  * @typedef {{query: {text: string, filters: ParsedFilter[], errors: TokenError[]},
@@ -29,9 +31,9 @@ const BODY_TIER = 6;
 /** @type {Record<string, string>} */
 const TYPE_ICONS = {
   theme: "briefcase",
-  project: "briefcase",
-  deliverable: "briefcase",
-  person: "users",
+  project: "columns-3",
+  deliverable: "panel-left",
+  person: "user",
   todo: "square-check",
   "glossary-term": "book-a",
   note: "file-text",
@@ -168,6 +170,79 @@ export function hitContext(hit) {
 }
 
 /**
+ * The search page's fuller context line (§9.7): "Data Migration · lead Alice Smith · due 11 Dec",
+ * "Alice Smith → Me · due Fri 20 Nov · about Data Migration", "notes/ · Tue 17 Nov · #one-on-one".
+ * @param {SearchHit} hit
+ */
+export function hitLine(hit) {
+  if (hit.bookmark) return hit.bookmark.url;
+  const context = hit.context ?? "";
+  const labels = (hit.labels ?? []).map((l) => `#${l}`);
+  /** @type {(string | null | undefined | false)[]} */
+  let parts;
+  if (hit.type === "todo") {
+    const when = hit.finished && hit.completed
+      ? `completed ${dayMonth(hit.completed)}`
+      : hit.due ? `due ${shortDate(hit.due)}` : !hit.finished && "no due date";
+    parts = [context, when, hit.about && `about ${hit.about}`];
+  } else if (hit.type === "note") {
+    parts = [context && `${context}/`, hit.date && shortDate(hit.date), ...labels];
+  } else {
+    parts = [context, hit.lead && `lead ${hit.lead}`, hit.due && `due ${dayMonth(hit.due)}`, ...labels];
+  }
+  return parts.filter(Boolean).join(" · ");
+}
+
+/**
+ * Where a word of the query starts a word of `text`, as [start, end) spans: the palette
+ * bolds them in titles. Filter tokens are skipped. Matching ignores case and accents.
+ * @param {string} text
+ * @param {string} q
+ * @returns {[number, number][]}
+ */
+export function wordMatches(text, q) {
+  const folded = [...text].map((c) => fold(c).charAt(0) || c).join("");
+  const words = q.replace(/"/g, " ").split(/\s+/)
+    .filter((w) => w && !w.includes(":") && !/^[@<>]/.test(w) && !/^due[<>]/i.test(w))
+    .map(fold);
+  /** @type {[number, number][]} */
+  const spans = [];
+  for (const word of words) {
+    for (let at = folded.indexOf(word); at >= 0; at = folded.indexOf(word, at + 1)) {
+      if (at === 0 || !/[a-z0-9]/.test(folded[at - 1])) spans.push([at, at + word.length]);
+    }
+  }
+  spans.sort((a, b) => a[0] - b[0]);
+  return spans;
+}
+
+/** @param {string} text */
+function fold(text) {
+  return text.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+/** A title with the query's words marked. @param {{text: string, q: string}} props */
+export function MatchedText({ text, q }) {
+  return html`<${SnippetText} snippet=${{ text, highlights: wordMatches(text, q) }} />`;
+}
+
+/** @param {string} status */
+function statusLabel(status) {
+  const text = status.replace(/-/g, " ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** A hit's status: a dot for work, a box for an open To-do, a pill once finished. @param {{status: string}} props */
+function StatusBadge({ status }) {
+  if (status === "done") return html`<span class="result-status pill done"><${Icon} name="check" />Done</span>`;
+  if (status === "cancelled" || status === "archived") {
+    return html`<span class="result-status pill">${statusLabel(status)}</span>`;
+  }
+  const mark = status === "open" ? html`<span class="box"></span>` : html`<span class="dot dot-${status}"></span>`;
+  return html`<span class="result-status ${status === "blocked" ? "blocked" : ""}">${mark}${statusLabel(status)}</span>`;
+}
+
+/**
  * Drop one whitespace-separated token from a query.
  * @param {string} q
  * @param {string} token
@@ -213,6 +288,8 @@ export function SearchPage({ query }) {
   const [text, setText] = useState(q);
   const [data, setData] = useState(/** @type {SearchResponse | null} */ (null));
   const [hits, setHits] = useState(/** @type {SearchHit[]} */ ([]));
+  /** Per-type counts without the `type:` filter, so the tabs stay put while one is picked. */
+  const [allCounts, setAllCounts] = useState(/** @type {Record<string, number> | null} */ (null));
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const version = viewVersion.value;
 
@@ -220,10 +297,15 @@ export function SearchPage({ query }) {
   useEffect(() => {
     let live = true;
     fetchSearch(q, { hideCompleted, limit: Math.max(PAGE_SIZE, hits.length) })
-      .then((next) => {
+      .then(async (next) => {
+        const typeToken = next.query.filters.find((f) => f.kind === "type")?.token;
+        const wide = typeToken
+          ? (await fetchSearch(withoutToken(q, typeToken), { hideCompleted, limit: 1 })).counts
+          : next.counts;
         if (!live) return;
         setData(next);
         setHits(next.hits);
+        setAllCounts(wide);
         setError(null);
       })
       .catch((e) => live && setError(describe(e)));
@@ -263,62 +345,73 @@ export function SearchPage({ query }) {
       go(replaceToken(q, existing.token, `${prefix}${[...existing.values, value].join(",")}`));
     }
   };
-  /** A type count toggles that type in the `type:` filter. @param {string} type */
+  const typeToken = tokenFor("type:");
+  /** A type tab toggles that type in the `type:` filter. @param {string} type */
   const toggleType = (type) => {
-    const existing = tokenFor("type:");
-    if (!existing?.values.includes(type)) return add("type:", type);
-    const rest = existing.values.filter((v) => v !== type);
-    go(rest.length ? replaceToken(q, existing.token, `type:${rest.join(",")}`) : withoutToken(q, existing.token));
+    if (!typeToken?.values.includes(type)) return add("type:", type);
+    const rest = typeToken.values.filter((v) => v !== type);
+    go(rest.length ? replaceToken(q, typeToken.token, `type:${rest.join(",")}`) : withoutToken(q, typeToken.token));
   };
-  const typeShown = (/** @type {string} */ type) => Boolean(tokenFor("type:")?.values.includes(type));
+  const typeShown = (/** @type {string} */ type) => Boolean(typeToken?.values.includes(type));
+  const counts = allCounts ?? data?.counts ?? {};
+  const all = Object.values(counts).reduce((a, b) => a + b, 0);
+  const asked = q.trim();
 
   return html`
     <section class="page search-page">
-      <form class="search-box" onSubmit=${(/** @type {Event} */ e) => {
-        e.preventDefault();
-        go(text.trim());
-      }}>
-        <label class="search">
+      <header class="search-head">
+        <p class="eyebrow">Search</p>
+        <h1 class="title">${data && asked
+          ? `${data.total} result${data.total === 1 ? "" : "s"} for ‘${asked}’`
+          : "Search"}</h1>
+      </header>
+      <div class="search-controls">
+        <form class="search-box" onSubmit=${(/** @type {Event} */ e) => {
+          e.preventDefault();
+          go(text.trim());
+        }}>
           <${Icon} name="search" />
           <input type="search" aria-label="Search query" value=${text}
             onInput=${(/** @type {Event} */ e) => setText(/** @type {HTMLInputElement} */ (e.currentTarget).value)} />
-        </label>
-        <button type="submit">Search</button>
-      </form>
-      <div class="search-chips">
-        ${filters.map(
-          (f) => html`<span class="chip filter-chip">${f.token}
-            <button type="button" class="icon-button" aria-label=${`Remove ${f.token}`}
-              onClick=${() => go(withoutToken(q, f.token))}><${Icon} name="x" /></button>
-          </span>`,
-        )}
-        <${AddChip} label="Type" choices=${TYPE_CHOICES} names=${typeName} onPick=${(/** @type {string} */ v) => add("type:", v)} />
-        <${AddChip} label="Status" choices=${STATUS_CHOICES} onPick=${(/** @type {string} */ v) => add("status:", v)} />
-        <${AddText} label="Person" prefix="@" onAdd=${(/** @type {string} */ v) => add("@", v)} />
-        <${AddText} label="Label" prefix="label:" onAdd=${(/** @type {string} */ v) => add("label:", v)} />
-        <${AddChip} label="Due" choices=${DUE_CHOICES} onPick=${(/** @type {string} */ v) => add("due:", v)} />
-        <label class="check" title=${has("status") ? "A status filter overrides this" : ""}>
-          <input type="checkbox" checked=${hideCompleted} disabled=${has("status")}
-            onChange=${() => go(q, !hideCompleted)} />
-          Hide completed
-        </label>
+          <span class="search-hint">filter with <code>type:</code> <code>status:</code> <code>@person</code></span>
+        </form>
+        <div class="search-chips">
+          ${filters.map(
+            (f) => html`<span class="filter-chip">${f.token}
+              <button type="button" aria-label=${`Remove ${f.token}`}
+                onClick=${() => go(withoutToken(q, f.token))}><${Icon} name="x" /></button>
+            </span>`,
+          )}
+          <${AddChip} label="Type" choices=${TYPE_CHOICES} names=${typeName} onPick=${(/** @type {string} */ v) => add("type:", v)} />
+          <${AddChip} label="Status" choices=${STATUS_CHOICES} onPick=${(/** @type {string} */ v) => add("status:", v)} />
+          <${AddText} label="Person" prefix="@" onAdd=${(/** @type {string} */ v) => add("@", v)} />
+          <${AddText} label="Label" prefix="label:" onAdd=${(/** @type {string} */ v) => add("label:", v)} />
+          <${AddChip} label="Due" choices=${DUE_CHOICES} onPick=${(/** @type {string} */ v) => add("due:", v)} />
+          <label class="hide-chip" title=${has("status") ? "A status filter overrides this" : ""}>
+            <input type="checkbox" class="checkbox" checked=${hideCompleted} disabled=${has("status")}
+              onChange=${() => go(q, !hideCompleted)} />
+            Hide completed
+          </label>
+        </div>
+        ${all > 0 &&
+        html`<div class="type-tabs" role="group" aria-label="Results by type">
+          <button type="button" aria-pressed=${!typeToken}
+            onClick=${() => typeToken && go(withoutToken(q, typeToken.token))}>All <span class="count">${all}</span></button>
+          ${Object.entries(counts).sort((a, b) => b[1] - a[1]).map(
+            ([type, n]) => html`<button type="button" aria-pressed=${typeShown(type)}
+              onClick=${() => toggleType(type)}>${typeName(type)} <span class="count">${n}</span></button>`,
+          )}
+        </div>`}
       </div>
       ${data?.query.errors.map((er) => html`<p class="error-text" role="alert">${er.token}: ${er.message}</p>`)}
       ${error && html`<p class="error-text" role="alert">${error}</p>`}
-      ${data && data.total > 0 &&
-      html`<div class="type-counts" aria-label="Results by type">
-        ${Object.entries(data.counts).map(
-          ([type, n]) => html`<button type="button" class="chip"
-            aria-pressed=${typeShown(type)} onClick=${() => toggleType(type)}>${typeName(type)} <span class="muted">${n}</span></button>`,
-        )}
-      </div>`}
-      ${data && !q.trim() && html`<p class="hint">Type words to find, or filters like type:project @alice due:this-week.</p>`}
-      ${data && q.trim() && data.total === 0 && !data.query.errors.length && html`<p class="hint">Nothing matches.</p>`}
+      ${data && !asked && html`<p class="hint">Type words to find, or filters like type:project @alice due:this-week.</p>`}
+      ${data && asked && data.total === 0 && !data.query.errors.length && html`<p class="hint">Nothing matches.</p>`}
       <ul class="search-results">
         ${hits.map((hit) => html`<${ResultRow} key=${`${hit.path}:${hit.bookmark?.line ?? 0}`} hit=${hit} />`)}
       </ul>
       ${data && hits.length < data.total &&
-      html`<button type="button" onClick=${() => void more()}>Show more</button>`}
+      html`<button type="button" class="show-more" onClick=${() => void more()}>Show more</button>`}
     </section>
   `;
 }
@@ -328,10 +421,10 @@ function ResultRow({ hit }) {
   const finished = hit.finished;
   const href = hit.bookmark ? hit.bookmark.url : hitHref(hit);
   const external = Boolean(hit.bookmark);
+  const line = hitLine(hit);
   return html`
     <li class="result ${finished ? "finished" : ""}">
       <div class="result-head">
-        <${Icon} name=${typeIcon(hit.type)} />
         <a href=${href} target=${external ? "_blank" : undefined} rel=${external ? "noopener noreferrer" : undefined}
           onClick=${(/** @type {MouseEvent} */ e) => {
             if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
@@ -339,9 +432,9 @@ function ResultRow({ hit }) {
             openHit(hit);
           }}>${hit.title}</a>
         <span class="type-badge">${typeName(hit.type)}</span>
-        ${hit.status && html`<span class="status status-${hit.status}">${hit.status}</span>`}
+        ${hit.status && html`<${StatusBadge} status=${hit.status} />`}
       </div>
-      ${hitContext(hit) && html`<div class="muted result-context">${hitContext(hit)}</div>`}
+      ${line && html`<div class="result-context">${line}</div>`}
       ${hit.snippets.slice(0, 2).map((s) => html`<div class="result-snippet"><${SnippetText} snippet=${s} /></div>`)}
     </li>
   `;
@@ -353,15 +446,18 @@ function ResultRow({ hit }) {
  */
 function AddChip({ label, choices, names, onPick }) {
   return html`
-    <select class="add-chip" aria-label=${`Add ${label} filter`}
-      onChange=${(/** @type {Event} */ e) => {
-        const select = /** @type {HTMLSelectElement} */ (e.currentTarget);
-        onPick(select.value);
-        select.value = "";
-      }}>
-      <option value="">${label}…</option>
-      ${choices.map((c) => html`<option value=${c}>${names ? names(c) : c}</option>`)}
-    </select>
+    <span class="add-chip">
+      <select aria-label=${`Add ${label} filter`}
+        onChange=${(/** @type {Event} */ e) => {
+          const select = /** @type {HTMLSelectElement} */ (e.currentTarget);
+          onPick(select.value);
+          select.value = "";
+        }}>
+        <option value="">${label}</option>
+        ${choices.map((c) => html`<option value=${c}>${names ? names(c) : statusLabel(c)}</option>`)}
+      </select>
+      <${Icon} name="chevron-down" />
+    </span>
   `;
 }
 
@@ -377,8 +473,9 @@ function AddText({ label, prefix, onAdd }) {
       onAdd(value.trim().replace(/\s+/g, "-"));
       setValue("");
     }}>
-      <input aria-label=${`Add ${label} filter`} placeholder=${`${prefix}${label.toLowerCase()}`} size="10"
-        value=${value} onInput=${(/** @type {Event} */ e) => setValue(/** @type {HTMLInputElement} */ (e.currentTarget).value)} />
+      <input aria-label=${`Add ${label} filter`} placeholder=${label} title=${`${prefix}${label.toLowerCase()}: type and press Enter`}
+        size="7" value=${value} onInput=${(/** @type {Event} */ e) => setValue(/** @type {HTMLInputElement} */ (e.currentTarget).value)} />
+      <${Icon} name="chevron-down" />
     </form>
   `;
 }

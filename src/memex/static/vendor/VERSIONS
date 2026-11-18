@@ -42,6 +42,7 @@ integrity = "sha512-QhdZ60O7Zcs/e8gw40uMfEn055xZTHBZoNi0xb+/1R2dTd0v4FXS46VL6rKS
 files = [
     "LICENSE",
     "icons/archive.svg",
+    "icons/arrow-right.svg",
     "icons/book-a.svg",
     "icons/bookmark.svg",
     "icons/briefcase.svg",
@@ -61,6 +62,7 @@ files = [
     "icons/house.svg",
     "icons/list-tree.svg",
     "icons/lock.svg",
+    "icons/panel-left.svg",
     "icons/pencil.svg",
     "icons/plus.svg",
     "icons/refresh-cw.svg",
