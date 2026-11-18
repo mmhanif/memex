@@ -9,6 +9,7 @@ import { ApiError, describe, request } from "./api.js";
 import { Icon } from "./icons.js";
 import { fileHref, navigate } from "./router.js";
 import { html, tree, useView } from "./state.js";
+import { fold } from "./text.js";
 
 /**
  * @typedef {{line: number, title: string, url: string, note: string, labels: string[]}} Bookmark
@@ -19,11 +20,6 @@ import { html, tree, useView } from "./state.js";
 
 const FILE = "bookmarks.md";
 const HEADING = /^#{1,6}\s+(.*)$/;
-
-/** Labels compare ignoring case and accents, as the server's filter does. @param {string} s */
-function fold(s) {
-  return s.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
-}
 
 /**
  * The shown lines split at each heading; lines before the first heading have none.

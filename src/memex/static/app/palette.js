@@ -24,6 +24,7 @@ import {
   typeName,
 } from "./search.js";
 import { html, reloadTree, tree, viewVersion } from "./state.js";
+import { fold } from "./text.js";
 
 /**
  * @typedef {import("./search.js").SearchHit} SearchHit
@@ -115,11 +116,6 @@ async function newCommands() {
     }
   });
   return commands;
-}
-
-/** @param {string} text */
-function fold(text) {
-  return text.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
 
 /**
