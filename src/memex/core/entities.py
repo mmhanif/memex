@@ -6,6 +6,7 @@ frontmatter or a Broken Reference.
 
 import datetime as dt
 import difflib
+import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import PurePosixPath
@@ -415,6 +416,19 @@ def entity_detail(ws: Workspace, id: str) -> EntityDetail:
         notes=tuple(f for f in files if f.type is None and names_it(f, "about")),
         mentioned_in=tuple(f for f in files if key in {m.casefold() for m in f.mentions}),
     )
+
+
+_LINE_MARKER = re.compile(r"^\s*(?:#{1,6}\s+|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+|>\s*)*")
+
+
+def mention_context(body: str, id: str) -> str | None:
+    """The first line of `body` that Mentions `id` (ignoring case), without its list or
+    heading marker: what a Linked Reference shows (§11.5)."""
+    mention = re.compile(r"\[\[\s*" + re.escape(id) + r"\s*\]\]", re.IGNORECASE)
+    for line in body.splitlines():
+        if mention.search(line):
+            return _LINE_MARKER.sub("", line, count=1).strip()
+    return None
 
 
 def refers(f: CachedFile, fields: Iterable[str], id: str) -> bool:

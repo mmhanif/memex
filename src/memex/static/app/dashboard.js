@@ -4,6 +4,7 @@
 
 import { useState } from "preact/hooks";
 import { describe } from "./api.js";
+import { dueLabel, longDate, noteDay, shortDate } from "./dates.js";
 import { typeLabel } from "./fields.js";
 import { Icon } from "./icons.js";
 import { openNew } from "./newform.js";
@@ -30,10 +31,6 @@ import { isOverdue, today, toggleTodo } from "./todos.js";
  */
 
 const PAUSED = "Paused until Me is set.";
-const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August",
-  "September", "October", "November", "December"];
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function Dashboard() {
   const { data, error } = useView("/api/views/dashboard");
@@ -112,53 +109,6 @@ function summaryLine(due, now) {
   if (overdue) parts.push(`${overdue} overdue`);
   if (due.length - overdue) parts.push(`${due.length - overdue} due this week`);
   return parts.join(" · ");
-}
-
-/** @param {string} iso `YYYY-MM-DD` */
-function toDate(iso) {
-  const [y, m, d] = iso.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
-/** "Tuesday, 17 November". @param {string} iso */
-function longDate(iso) {
-  const d = toDate(iso);
-  return `${DAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`;
-}
-
-/** "Fri 20 Nov". @param {string} iso */
-function shortDate(iso) {
-  const d = toDate(iso);
-  return `${DAYS[d.getDay()].slice(0, 3)} ${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)}`;
-}
-
-/** Whole days from `a` to `b`. @param {string} a @param {string} b */
-function daysBetween(a, b) {
-  return Math.round((toDate(b).getTime() - toDate(a).getTime()) / DAY_MS);
-}
-
-/**
- * A due date as the Due block shows it: "2 days late", "Today" or "Fri 20 Nov".
- * @param {string} due
- * @param {string} now
- */
-function dueLabel(due, now) {
-  const late = daysBetween(due, now);
-  if (late > 0) return `${late} day${late === 1 ? "" : "s"} late`;
-  return late === 0 ? "Today" : shortDate(due);
-}
-
-/**
- * A Note's day in Recent notes: "Today", a weekday this past week, else "12 Nov".
- * @param {string} day
- * @param {string} now
- */
-function noteDay(day, now) {
-  const ago = daysBetween(day, now);
-  if (ago === 0) return "Today";
-  const d = toDate(day);
-  if (ago > 0 && ago < 7) return DAYS[d.getDay()].slice(0, 3);
-  return `${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)}`;
 }
 
 /**

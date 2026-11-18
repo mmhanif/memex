@@ -242,3 +242,26 @@ def test_settings_bad_value_is_422(api: TestClient):
         headers={"If-Match": settings["hash"]},
     )
     assert response.status_code == 422
+
+
+def test_entity_detail_gives_each_linked_reference_the_line_that_mentions_it(
+    api: TestClient, root: Path
+):
+    new(api, "project", title="Data migration")
+    (root / "notes/steering.md").write_text(
+        "---\ntitle: Steering\n---\n# Agenda\n\n- Alice walks through [[Data-Migration]] numbers\n"
+        "- Again [[data-migration]]\n"
+    )
+    (root / "notes/bare.md").write_text("[[data-migration]]\n")
+    state: AppState = api.app.state.memex  # type: ignore[attr-defined]
+    assert state.workspace is not None
+    state.workspace.changed("notes/steering.md")  # no watcher in tests
+    state.workspace.changed("notes/bare.md")
+
+    body = api.get("/api/entities/data-migration").json()
+
+    contexts = {m["id"]: m["context"] for m in body["mentioned_in"]}
+    assert contexts == {
+        "steering": "Alice walks through [[Data-Migration]] numbers",
+        "bare": "[[data-migration]]",
+    }

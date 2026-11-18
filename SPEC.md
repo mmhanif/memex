@@ -848,21 +848,22 @@ The Dashboard also shows the "N Notes have To-dos to create" line (§6.4) and th
 ### 11.5 Entity page
 
 - **Read mode by default.**
-- A **properties card** shows the typed fields, editable in place without entering edit mode: status, dates, Lead, Tags as avatar checklists, and the person pickers. Each edit is a hash-checked one-field write.
-- The body is rendered Markdown. **✎ Edit** switches just the body to a raw `<textarea>` with auto-save (§5.7). The textarea has small helpers: Tab indents, Enter continues lists.
-- **Below the body:**
-  - related children (a Theme's Projects, a Project's Deliverables)
-  - To-dos about this Entity
-  - Notes with `about` pointing here
-  - **Mentioned in**
+- **Header:** an eyebrow with the type and, for a Note, its `date` ("Note · Thu 12 Nov 2026"), for a Project its Theme and for a Deliverable its Project; then the title, editable in place; then **✎ Edit**, **Create N To-dos** (Notes, §6.4) and the **…** Actions menu.
+- A **properties well** shows the typed fields by their frontmatter key, editable in place without entering edit mode: status, dates, Lead, Tags as avatar checklists, and the person pickers. References read as links. Each edit is a hash-checked one-field write.
+- The body is rendered Markdown as **outline blocks**: each heading and every bulleted item has a bullet, and what sits under a heading or item hangs off a guide line. Clicking the bullet of a block with children collapses it (the bullet gets a halo) or expands it; this is a view only and writes nothing. A task item whose only content is a To-do Mention is a live To-do row (§6.4): its box, its title, its Owner when not Me, and its due date, in rust when late. **✎ Edit** switches just the body to a raw `<textarea>` with auto-save (§5.7). The textarea has small helpers: Tab indents, Enter continues lists.
+- **Below the body**, each under a section header with a count and a chevron that folds it:
+  - related children (a Theme's Projects, a Project's Deliverables), with status, Lead and due date or lateness, and a row to add one
+  - To-dos about this Entity, ticked in place; finished ones behind **Show completed (N)**
+  - Notes with `about` pointing here, newest first, with **New Note about this**
+  - **Mentioned in:** each file that Mentions this Entity, with the first line that Mentions it
 - **Actions menu:**
-  - Rename id
-  - Archive or Unarchive (Themes, Persons)
-  - Delete
-  - Open file (`#/f/…`)
   - Create N To-dos (Notes, §6.4)
-- Validation warnings appear in a bar. Broken References are flagged inline with repair actions (§8.5).
-- **Notes** use the same page: the properties card shows `date`, Participants, `about` and Labels.
+  - Rename id
+  - Archive (Themes, Persons); Unarchive is on the "Archived on" bar (§8.3)
+  - Open file (`#/f/…`)
+  - Delete
+- Validation warnings appear in an amber bar. Broken References appear in a rust bar ("1 Broken Reference. `stakeholders` points to `marco-ruiz`, which isn't in the Workspace."), with their repair actions under it (§8.5), and are flagged inline where shown.
+- **Notes** use the same page: the properties well shows `date`, Participants, `about` and Labels.
 
 ### 11.6 Person View
 

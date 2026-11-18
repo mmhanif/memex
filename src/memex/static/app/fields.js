@@ -244,7 +244,7 @@ function RefSelect(props) {
   const known = !value || options.some((c) => c.id === value);
   return html`
     <select id=${id} value=${value ?? ""} disabled=${disabled} aria-label=${props.ariaLabel}
-      class=${props.broken?.has(value) ? "broken" : ""}
+      class=${props.broken?.has(value) ? "ref broken" : "ref"}
       onChange=${(/** @type {Event} */ e) => onChange(target(e).value || null)}>
       <option value="">${props.placeholder ?? "—"}</option>
       ${!known && html`<option value=${value}>${names?.[value] ?? value}${props.broken?.has(value) ? " (broken)" : ""}</option>`}

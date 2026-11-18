@@ -86,7 +86,10 @@ def detail_json(ws: Workspace, detail: entities.EntityDetail) -> dict:
         "children": [summary(f) for f in detail.children],
         "todos": [summary(f) for f in detail.todos],
         "notes": [summary(f) for f in detail.notes],
-        "mentioned_in": [summary(f) for f in detail.mentioned_in],
+        "mentioned_in": [
+            {**summary(f), "context": entities.mention_context(f.body, detail.file.id)}
+            for f in detail.mentioned_in
+        ],
         # Mentioned To-dos, so a converted task item renders as a live To-do row (§6.4).
         "mentioned_todos": [summary(f) for f in _mentioned_todos(ws, detail.file)],
         # Archive (§8.3): Themes and Persons, and what it would leave hanging.
