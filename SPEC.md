@@ -920,7 +920,7 @@ Decided in [Localhost hardening](https://github.com/mmhanif/memex/issues/6). **R
 - **Per-launch secret** (R5–R7):
   - The launcher generates a 256-bit secret and a one-time code, and opens `http://127.0.0.1:PORT/auth?code=…`.
   - `/auth` compares the code in constant time, burns it on first use, sets `memex_session=<secret>; HttpOnly; SameSite=Strict; Path=/`, and redirects `303` to `/`.
-  - Every route except `/auth`, `/relaunch` (a static "run memex again" page) and `/launcher/*` (§13.4) needs the cookie, or returns `401`. The SPA treats any `401` as "go to `/relaunch`".
+  - Every route except `/auth`, `/relaunch` (a static "run memex again" page, which loads no script and only its own stylesheet, `/relaunch.css`) and `/launcher/*` (§13.4) needs the cookie, or returns `401`. The SPA treats any `401` as "go to `/relaunch`".
   - The secret never appears in logs or responses.
 - **No CORS** headers at all, and no successful preflight (R8).
 - **Writes** (R9–R11):
@@ -1283,6 +1283,7 @@ Error body: `{"error": {"code", "message", "field_errors"?: [{field, message, al
 |---|---|
 | `GET /auth?code=` | Exchange the one-time code for the session cookie, then `303` to `/` |
 | `GET /relaunch` | Static "run memex again" page (no cookie) |
+| `GET /relaunch.css` | That page's stylesheet (no cookie) |
 | `POST /launcher/hello`, `POST /launcher/open` | Already-running hand-off (§13.4; HMAC, no cookie) |
 | `GET /` and `/static/…` | SPA and assets |
 | `GET /api/events` | SSE stream (§5.6) |

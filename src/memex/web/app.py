@@ -95,6 +95,11 @@ def create_app(state: AppState, *, watch: bool = True) -> FastAPI:
     def relaunch() -> FileResponse:
         return FileResponse(STATIC / "relaunch.html", media_type="text/html")
 
+    @app.get("/relaunch.css", include_in_schema=False)
+    def relaunch_css() -> FileResponse:
+        # The relaunch page's own stylesheet: it, too, is served without the cookie.
+        return FileResponse(STATIC / "css/relaunch.css", media_type="text/css")
+
     app.mount("/static", AppStaticFiles(directory=STATIC), name="static")
     app.add_middleware(SecurityMiddleware, state=state)
     return app

@@ -101,3 +101,40 @@ def test_a_refused_folder_shows_why_and_writes_nothing(
     expect(page.get_by_role("alert")).to_contain_text("install folder")
     expect(page.get_by_label("Your name")).to_have_count(0)
     assert fresh.workspace is None
+
+
+def test_checking_a_folder_ticks_its_step_and_says_what_setup_will_add(
+    setup_page: Page, tmp_path: Path
+):
+    page = setup_page
+    folder = tmp_path / "existing"
+    folder.mkdir()
+    (folder / "standup.md").write_bytes(b"# Standup\n")
+    expect(page.get_by_role("img", name="Done")).to_have_count(0)
+
+    page.get_by_label("Folder").fill(str(folder))
+    page.get_by_role("button", name="Check folder").click()
+
+    expect(page.get_by_role("img", name="Done")).to_be_visible()
+    expect(page.get_by_role("status")).to_contain_text("Nothing has been written yet")
+    expect(page.get_by_role("group", name="Who are you?")).to_be_visible()
+    expect(page.locator(".setup-adds")).to_contain_text(".memex/config.yaml")
+    expect(page.locator(".setup-adds")).to_contain_text("bookmarks.md")
+    page.get_by_role("button", name="Change folder").click()
+    expect(page.get_by_role("img", name="Done")).to_have_count(0)
+
+
+def test_a_refusal_marks_the_folder_field_and_clears_when_it_changes(
+    setup_page: Page, tmp_path: Path
+):
+    page = setup_page
+    field = page.get_by_label("Folder")
+
+    field.fill(str(tmp_path / "i" / "ws"))
+    page.get_by_role("button", name="Check folder").click()
+
+    expect(field).to_have_attribute("aria-invalid", "true")
+    expect(page.get_by_role("alert")).to_contain_text("install folder")
+    field.fill(str(tmp_path / "elsewhere"))
+    expect(page.get_by_role("alert")).to_have_count(0)
+    expect(field).not_to_have_attribute("aria-invalid", "true")

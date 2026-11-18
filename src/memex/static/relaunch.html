@@ -3,10 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Memex: run memex again</title>
+<title>Memex: run Memex again</title>
+<link rel="stylesheet" href="/relaunch.css">
 </head>
 <body>
-<h1>Run memex again</h1>
-<p>This page's session has ended. Run <code>memex</code> again, or use the link it prints, to open Memex.</p>
+<main class="panel">
+  <div class="brand"><span class="mark" aria-hidden="true">m</span>memex</div>
+  <h1>Run Memex again</h1>
+  <p class="lede">This tab's session has ended: Memex was stopped or restarted, so the tab can't reconnect. Start it again and it opens a fresh tab for you.</p>
+  <dl class="ways">
+    <div><dt>From your shortcut</dt><dd><span class="shortcut"><span class="mark small" aria-hidden="true">m</span>Memex</span></dd></div>
+    <div><dt>or in a terminal</dt><dd><code class="command"><span class="prompt" aria-hidden="true">&gt;</span>memex</code></dd></div>
+  </dl>
+  <p class="note">Already running? Its console window prints a link that opens a new session. Everything you saved is already on disk in your Workspace.</p>
+</main>
 </body>
 </html>
