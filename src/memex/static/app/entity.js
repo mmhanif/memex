@@ -8,7 +8,7 @@ import { ApiError, describe, request } from "./api.js";
 import { openCapture } from "./capture.js";
 import { BodyDoc } from "./doc.js";
 import { FIELDS, FieldInput, typeLabel, useCandidates, writeField } from "./fields.js";
-import { DocBanners, RawText, SaveStatus } from "./files.js";
+import { RawText } from "./files.js";
 import { Icon } from "./icons.js";
 import { Actions, ArchivedBar } from "./lifecycle.js";
 import { InlineRepairs } from "./repair.js";
@@ -299,8 +299,6 @@ function BodyEditor({ id }) {
   if (!(doc instanceof BodyDoc) || doc.id !== id) return html`<p class="hint">Opening…</p>`;
   return html`
     <div class="body-editor">
-      <div class="body-editor-status"><${SaveStatus} doc=${doc} /></div>
-      <${DocBanners} doc=${doc} closeTo="#/home" />
       <${RawText} doc=${doc} label="Body text" onKeyDown=${listHelpers} />
     </div>
   `;

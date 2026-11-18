@@ -2,8 +2,10 @@
 
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
+from memex import version
 from memex.core.store import content_hash
 from memex.web.app import AppState
 from tests.web.conftest import PORT, client_for
@@ -307,15 +309,49 @@ def test_delete_missing_is_404(api: TestClient):
     assert response.status_code == 404
 
 
-def test_tree_carries_the_workspace_status_for_the_banners(api: TestClient):
+def test_tree_carries_the_workspace_status_for_the_shell(
+    api: TestClient, state: AppState, root: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv("HOME", str(root.parent))
+    monkeypatch.setenv("USERPROFILE", str(root.parent))
+    hinted(state, "todos/mine.md", b"---\ntitle: Mine\nowner: ada-lovelace\nstatus: open\n---\n")
+    hinted(state, "todos/done.md", b"---\ntitle: Done\nowner: ada-lovelace\nstatus: done\n---\n")
+
     status = api.get("/api/tree").json()["workspace"]
 
     assert status == {
+        "path": "~/ws",
         "read_only": False,
+        "format": 1,
+        "supported_format": 1,
+        "version": version(),
         "config_error": None,
+        "config_error_line": None,
         "me_set": True,
         "me": "ada-lovelace",
+        "me_ref": "ada-lovelace",
+        "open_todos": 1,
     }
+
+
+def test_tree_status_shows_a_workspace_outside_home_in_full(
+    api: TestClient, root: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv("HOME", str(root / "elsewhere"))
+    monkeypatch.setenv("USERPROFILE", str(root / "elsewhere"))
+
+    assert api.get("/api/tree").json()["workspace"]["path"] == str(root)
+
+
+def test_tree_status_keeps_a_me_that_matches_no_person(api: TestClient, state: AppState):
+    hinted(state, ".memex/config.yaml", b"format: 1\nme: jordan-lee\n")
+
+    status = api.get("/api/tree").json()["workspace"]
+
+    assert status["me_set"] is False
+    assert status["me"] is None
+    assert status["me_ref"] == "jordan-lee"
+    assert status["open_todos"] is None
 
 
 def test_tree_status_flags_a_broken_config_and_missing_me(api: TestClient, state: AppState):
@@ -326,6 +362,19 @@ def test_tree_status_flags_a_broken_config_and_missing_me(api: TestClient, state
     assert status["me_set"] is False
     assert status["me"] is None
     assert status["config_error"] is not None
+    assert isinstance(status["config_error_line"], int)
+
+
+def test_tree_status_says_which_format_a_read_only_workspace_is(root: Path, home: Path):
+    config = root / ".memex/config.yaml"
+    config.write_text(config.read_text().replace("format: 1", "format: 2"))
+    state = AppState.for_workspace(root, port=PORT, home=home)
+
+    with client_for(state) as api:
+        status = api.get("/api/tree").json()["workspace"]
+
+    assert status["read_only"] is True
+    assert (status["format"], status["supported_format"]) == (2, 1)
 
 
 def test_delete_a_type_folder_is_400_and_keeps_it(api: TestClient, root: Path):

@@ -791,15 +791,21 @@ Decided in [Frontend architecture & build step](https://github.com/mmhanif/memex
 
 ### 11.2 Shell
 
-- A left **sidebar** (Logseq-style, light), fixed at about 220px, with no collapse toggle and no narrow-width layout. From top to bottom:
-  - nav rows Home · Portfolio · People · To-dos · Glossary · Bookmarks · Files; the active route's row is highlighted
+- A left **sidebar** (Logseq-style, light), fixed at 248px, with no collapse toggle and no narrow-width layout. From top to bottom:
+  - a Workspace header: the Memex mark and the Workspace folder (under the home folder as `~/…`)
+  - nav rows Home · Portfolio · People · To-dos · Glossary · Bookmarks · Files; the active route's row is highlighted (a file's raw editor lights Files, a Person View lights People). The To-dos row shows how many open To-dos Me owns; the count is hidden while Me isn't set.
   - a **Bookmarked** list: the first 10 Bookmarks in `bookmarks.md` order, each showing its title (else its URL) and opening in a new tab like the Bookmarks page, then an **All Bookmarks →** row to `#/bookmarks` when there are more
   - a **Recent** list: the same recently opened Entities and files as the palette's empty state (§9.6), newest first, at most 8
-  - **+ New…** (one entry per type, plus Note) and Settings at the bottom
+  - **+ New…** (one entry per type, plus Note) and Settings at the bottom. `N` opens the New… menu from anywhere except a text field or an open dialog; Escape closes it.
 
   Both lists always show their heading; when one is empty it shows a muted line ("No Bookmarks yet" / "Nothing opened yet"). The raw file tree is the Files page, not part of the sidebar.
-- A **top bar** with the search box (opens Ctrl-K).
-- **Banners** at the top for Me not set, config errors, the read-only Workspace and save problems.
+- A **top bar**: Back and Forward (browser history), the search box (opens Ctrl-K), and, while a file or body is open, its save status (Saved / Unsaved / Saving… / Not saved).
+- A **banner strip** under the top bar, full width of Main. Workspace-wide banners stay until the cause is fixed:
+  - **Me not set** (amber): names the `me` value that matches no Person, with **Pick a Person** (Settings) and **Create Person**. Not shown while the config doesn't parse, whose banner already says so.
+  - **Config error** (rust): the line that doesn't parse, with **Open config.yaml** (the raw editor).
+  - **Read-only** (neutral): the Workspace's format and this Memex's, and `pipx upgrade memex` (§3.5, §13.5).
+
+  File banners belong to the open file or body and pause its auto-save (§5.7): **changed on disk** (Reload / Keep mine / Compare, with the diff below the strip), **deleted or moved outside Memex** (Recreate, for raw files / Close), and **Couldn't save** (Retry), which says when another program has the file locked.
 
 ### 11.3 Routes
 

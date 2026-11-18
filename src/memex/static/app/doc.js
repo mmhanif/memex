@@ -36,7 +36,7 @@ export class OpenDoc {
     this.state = signal(/** @type {SaveState} */ ("clean"));
     /** What is on disk now, while in conflict. */
     this.conflict = signal(/** @type {FileVersion | null} */ (null));
-    /** A failed save that wasn't a conflict ("Couldn't save"); the edits stay. */
+    /** Why a save failed, when it wasn't a conflict ("Couldn't save <title>: …"); the edits stay. */
     this.problem = signal(/** @type {string | null} */ (null));
     /** A brief note, e.g. "Updated from disk". */
     this.notice = signal(/** @type {string | null} */ (null));
@@ -160,8 +160,14 @@ export class OpenDoc {
       this.state.value = "deleted";
     } else {
       this.state.value = "dirty";
-      this.problem.value = `Couldn't save: ${describe(error)}`;
+      this.problem.value = whySaveFailed(error);
     }
+  }
+
+  /** The failed-save banner's Retry: save again, or recreate a deleted file. */
+  async retry() {
+    if (this.state.value === "deleted") await this.recreate();
+    else await this.save();
   }
 
   /** @param {FileVersion} current */
@@ -265,7 +271,7 @@ export class OpenDoc {
         this.state.value = "dirty";
         await this.recheck(); // someone else put a file there: compare against it
       } else {
-        this.problem.value = `Couldn't recreate: ${describe(error)}`;
+        this.problem.value = whySaveFailed(error);
       }
     }
   }
@@ -291,6 +297,17 @@ export class OpenDoc {
     clearTimeout(this.timer);
     clearTimeout(this.noticeTimer);
   }
+}
+
+/**
+ * The reason half of "Couldn't save <title>: …".
+ * @param {unknown} error
+ */
+function whySaveFailed(error) {
+  if (error instanceof ApiError && error.code === "locked") {
+    return "another program has the file open (a sync client or editor). Memex retried and stopped; your edits are still here.";
+  }
+  return describe(error);
 }
 
 /** An Entity page's body (SPEC §11.5): saved with a body replace, frontmatter untouched. */

@@ -13,7 +13,11 @@ export const html = htm.bind(h);
 /**
  * @typedef {{kind: string, message: string, line: number | null}} FileWarning
  * @typedef {{path: string, id: string, type: string | null, title: string, hash: string, warnings: FileWarning[]}} TreeFile
- * @typedef {{read_only: boolean, config_error: string | null, me_set: boolean, me: string | null}} WorkspaceStatus
+ * @typedef {{
+ *   path: string, read_only: boolean, format: number, supported_format: number, version: string,
+ *   config_error: string | null, config_error_line: number | null,
+ *   me_set: boolean, me: string | null, me_ref: string | null, open_todos: number | null,
+ * }} WorkspaceStatus
  * @typedef {{folders: string[], files: TreeFile[], workspace: WorkspaceStatus}} Tree
  */
 

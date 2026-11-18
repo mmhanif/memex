@@ -53,6 +53,14 @@ def todo_view(ws: Workspace, view: str, include_done: bool = False) -> TodoView:
     return TodoView("waiting-on-me", _by_party(ws, picked, "requester", include_done))
 
 
+def open_todo_count(ws: Workspace) -> int | None:
+    """How many open To-dos Me owns: the sidebar's To-dos badge (§11.2). None without Me."""
+    me = ws.me()
+    if me is None:
+        return None
+    return sum(1 for t in todos(ws) if is_open(t) and refers(t, ["owner"], me.id))
+
+
 def todos(ws: Workspace) -> list[CachedFile]:
     return [f for f in ws.cache.files() if f.type is EntityType.TODO]
 

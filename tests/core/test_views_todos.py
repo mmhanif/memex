@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from memex.core.errors import MeNotSet, Validation
-from memex.core.views import todo_view
+from memex.core.views import open_todo_count, todo_view
 from tests.core.builder import Builder
 
 # The Builder's today is Thursday 2026-11-12, so "this week" runs through Sunday 11-15.
@@ -89,3 +89,15 @@ def test_groups_merge_ids_written_in_different_case(b: Builder):
     b.todo("one", owner="alice")
     b.todo("two", owner="Alice")
     assert groups(todo_view(b.ws, "waiting-on-them")) == {"Alice": ["one", "two"]}
+
+
+def test_open_todo_count_is_mes_open_todos_for_the_sidebar_badge(b: Builder):
+    b.todo("mine", owner="ada", requester="alice")
+    b.todo("Mine-too", owner="Ada")
+    b.todo("bad-status", owner="ada", status="wip")
+    b.todo("done", owner="ada", status="done")
+    b.todo("cancelled", owner="ada", status="cancelled")
+    b.todo("alices", owner="alice")
+    assert open_todo_count(b.ws) == 3
+    b.file(".memex/config.yaml", "format: 1\n")
+    assert open_todo_count(b.ws) is None

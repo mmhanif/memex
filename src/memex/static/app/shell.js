@@ -1,7 +1,9 @@
 // @ts-check
 // The shell (SPEC §11.2): sidebar, top bar, banners, and the routed view.
 
-import { useState } from "preact/hooks";
+import { signal } from "@preact/signals";
+import { useEffect, useRef } from "preact/hooks";
+import { BannerStrip } from "./banners.js";
 import { BookmarkLink, BookmarksPage } from "./bookmarks.js";
 import { Dashboard } from "./dashboard.js";
 import { EntityPage } from "./entity.js";
@@ -21,7 +23,7 @@ import { TrashPage } from "./trash.js";
 import { route } from "./router.js";
 import { SearchPage } from "./search.js";
 import { SettingsPage } from "./settings.js";
-import { html, openDoc, tree, treeError, useView } from "./state.js";
+import { html, openDoc, tree, useView } from "./state.js";
 import { TodosPage } from "./todos.js";
 
 const NAV = [
@@ -40,14 +42,21 @@ const BOOKMARKED_MAX = 10;
 /** @type {Record<string, string>} */
 const NAV_FOR = { file: "files", person: "people" };
 
+/** Whether the sidebar's New… menu is open; `N` opens it from anywhere but a text field. */
+const newMenuOpen = signal(false);
+
 export function App() {
   const current = route.value;
+  useEffect(() => {
+    document.addEventListener("keydown", onShortcut);
+    return () => document.removeEventListener("keydown", onShortcut);
+  }, []);
   return html`
     <div class="shell">
       <${Sidebar} active=${NAV_FOR[current.name] ?? current.name} />
       <div class="main">
         <${TopBar} />
-        <${Banners} />
+        <${BannerStrip} />
         <main class="view">
           <${View} />
         </main>
@@ -62,11 +71,17 @@ export function App() {
 
 /** @param {{active: string}} props */
 function Sidebar({ active }) {
+  const open = tree.value?.workspace.open_todos ?? null;
   return html`
     <nav class="sidebar" aria-label="Sections">
+      <${WorkspaceHeader} />
       <div class="side-scroll">
         <ul class="side-nav">
-          ${NAV.map((item) => html`<li key=${item.route}><${NavRow} item=${item} active=${active} /></li>`)}
+          ${NAV.map(
+            (item) => html`<li key=${item.route}>
+              <${NavRow} item=${item} active=${active} count=${item.route === "todos" && open ? open : null} />
+            </li>`,
+          )}
         </ul>
         <${Bookmarked} />
         <${Recent} />
@@ -115,85 +130,121 @@ function Recent() {
 function SideSection({ title, empty, children }) {
   const id = `side-${title.toLowerCase()}`;
   return html`
-    <section class="side-section">
+    <section class="side-section ${id}">
       <h2 id=${id}>${title}</h2>
       ${empty ? html`<p class="muted side-empty">${empty}</p>` : html`<ul aria-labelledby=${id}>${children}</ul>`}
     </section>
   `;
 }
 
-/** @param {{item: {route: string, label: string, icon: string}, active: string}} props */
-function NavRow({ item, active }) {
+function WorkspaceHeader() {
+  const path = tree.value?.workspace.path ?? "";
+  return html`
+    <div class="side-workspace" title=${path}>
+      <span class="side-mark" aria-hidden="true">m</span>
+      <span class="side-workspace-name">
+        <strong>memex</strong>
+        <span class="side-workspace-path">${path}</span>
+      </span>
+    </div>
+  `;
+}
+
+/**
+ * A section's row; `count` is the To-dos badge (Me's open To-dos), hidden when null.
+ * @param {{item: {route: string, label: string, icon: string}, active: string, count?: number | null}} props
+ */
+function NavRow({ item, active, count = null }) {
   const current = item.route === active;
   return html`
     <a href="#/${item.route}" class="side-row ${current ? "active" : ""}" aria-current=${current ? "page" : undefined}>
-      <${Icon} name=${item.icon} /><span>${item.label}</span>
+      <${Icon} name=${item.icon} /><span class="side-label">${item.label}</span>
+      ${count !== null && html`<span class="side-count" aria-label="${count} open">${count}</span>`}
     </a>
   `;
 }
 
 function TopBar() {
+  route.value; // re-render on navigation, so Back/Forward know where they can go
+  const history = /** @type {any} */ (window).navigation;
+  const doc = openDoc.value;
   return html`
     <header class="topbar">
+      <div class="history">
+        <button type="button" class="icon-button" aria-label="Back" title="Back"
+          disabled=${history ? !history.canGoBack : false} onClick=${() => window.history.back()}>
+          <${Icon} name="chevron-left" />
+        </button>
+        <button type="button" class="icon-button" aria-label="Forward" title="Forward"
+          disabled=${history ? !history.canGoForward : false} onClick=${() => window.history.forward()}>
+          <${Icon} name="chevron-right" />
+        </button>
+      </div>
       <label class="search">
         <${Icon} name="search" />
-        <input type="search" aria-label="Search" placeholder="Search (Ctrl-K)" value=""
+        <input type="search" aria-label="Search" placeholder="Search notes, people, projects…" value=""
           onFocus=${(/** @type {FocusEvent} */ e) => {
             /** @type {HTMLInputElement} */ (e.currentTarget).blur();
             openPalette();
           }} />
+        <kbd aria-hidden="true">Ctrl K</kbd>
       </label>
+      <span class="topbar-spacer"></span>
+      ${doc && html`<${SaveStatus} doc=${doc} />`}
     </header>
   `;
 }
 
+const SAVE_LABELS = { clean: "Saved", dirty: "Unsaved", saving: "Saving…", conflict: "Not saved", deleted: "Not saved" };
+
+/** @param {{doc: import("./doc.js").OpenDoc}} props */
+function SaveStatus({ doc }) {
+  const state = doc.state.value;
+  return html`<span class="save-status ${state}" data-state=${state} role="status">${SAVE_LABELS[state]}</span>`;
+}
+
+/**
+ * `N` opens the New… menu, unless the user is typing or a dialog is open; Escape closes it.
+ * @param {KeyboardEvent} e
+ */
+function onShortcut(e) {
+  if (e.key === "Escape" && newMenuOpen.value) {
+    newMenuOpen.value = false;
+    return;
+  }
+  if (e.key !== "n" && e.key !== "N") return;
+  if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+  const target = /** @type {HTMLElement | null} */ (e.target);
+  if (target?.closest("input, textarea, select, [contenteditable], [role=dialog]")) return;
+  e.preventDefault();
+  newMenuOpen.value = true;
+}
+
 function NewMenu() {
-  const [open, setOpen] = useState(false);
+  const open = newMenuOpen.value;
+  const menu = useRef(/** @type {HTMLUListElement | null} */ (null));
+  useEffect(() => {
+    if (open) menu.current?.querySelector("button")?.focus();
+  }, [open]);
   return html`
     <div class="new-menu side-new">
-      <button type="button" class="primary" aria-expanded=${open} onClick=${() => setOpen(!open)}>
-        <${Icon} name="plus" /> New…
+      <button type="button" class="new-button" aria-expanded=${open} aria-keyshortcuts="N"
+        onClick=${() => (newMenuOpen.value = !open)}>
+        <${Icon} name="plus" /><span class="side-label">New…</span><kbd aria-hidden="true">N</kbd>
       </button>
       ${open &&
       html`
-        <ul class="menu" role="menu" onKeyDown=${(/** @type {KeyboardEvent} */ e) => e.key === "Escape" && setOpen(false)}>
+        <ul class="menu" role="menu" ref=${menu}>
           ${TYPES.map(
             (t) => html`<li>
               <button type="button" role="menuitem" onClick=${() => {
-                setOpen(false);
+                newMenuOpen.value = false;
                 openNew(t.key);
               }}>${t.label}</button>
             </li>`,
           )}
         </ul>
       `}
-    </div>
-  `;
-}
-
-function Banners() {
-  const status = tree.value?.workspace;
-  const doc = openDoc.value;
-  return html`
-    <div class="banners" role="status">
-      ${treeError.value && html`<div class="banner warn">${treeError.value}</div>`}
-      ${status?.read_only &&
-      html`<div class="banner warn">
-        This Workspace was written by a newer Memex, so it is read-only. Upgrade Memex to edit it.
-      </div>`}
-      ${status?.config_error &&
-      html`<div class="banner warn">
-        The Workspace config (.memex/config.yaml) doesn't parse: ${status.config_error}. Memex is
-        using defaults until it is fixed.
-      </div>`}
-      ${status &&
-      !status.me_set &&
-      html`<div class="banner warn">Me isn't set: pick or create your Person in Settings.</div>`}
-      ${doc?.problem.value &&
-      html`<div class="banner warn" role="alert">
-        <span>${doc.problem.value}</span>
-        <button type="button" onClick=${() => void doc.save()}>Try again</button>
-      </div>`}
     </div>
   `;
 }
