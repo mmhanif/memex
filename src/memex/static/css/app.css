@@ -25,6 +25,7 @@
   --muted: #656a71;
   --faint: #868c93;         /* incidental text only: counts, placeholders */
   --link: #0b5fad;
+  --link-tint: #e7eff8;     /* the Person View's avatar */
 
   /* Semantic */
   --rust: #c9531e;          /* dots, borders, fills */
@@ -103,6 +104,7 @@
     --muted: #a3a9b0;
     --faint: #80868d;
     --link: #6ca8ee;
+    --link-tint: #1e2a38;
 
     --rust: #e07a4c;
     --rust-text: #e8875a;
@@ -717,9 +719,6 @@ select {
 .mention { text-decoration: none; border-bottom: 1px dotted currentColor; }
 .mention.broken { color: var(--rust-text); }
 
-.related { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0 24px; }
-.link-list ul { list-style: none; margin: 0; padding: 0; }
-.link-list li { display: flex; gap: 8px; align-items: baseline; padding: 2px 0; }
 .status { font-size: 12px; padding: 0 6px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); }
 .status-blocked { color: var(--rust-text); }
 .status-done, .status-cancelled { color: var(--muted); }
@@ -821,14 +820,6 @@ select {
 .org-tree li { padding: 3px 0; }
 .org-tree ul { border-left: 1px solid var(--border); margin-left: 11px; }
 .people-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
-.person-view { max-width: 1200px; }
-.directs { margin: 8px 0; }
-.columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 0 24px; margin-top: 8px; }
-.column h2 { font-size: 15px; margin: 18px 0 4px; }
-.tagged { list-style: none; margin: 0 0 8px; padding: 0; }
-.tagged li { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; padding: 2px 0; }
-.tag-picker { display: flex; flex-wrap: wrap; gap: 6px; }
-.tag-picker select:first-child { flex: 1; min-width: 0; }
 
 /* Portfolio (§11.3) */
 .portfolio-page { max-width: none; }
@@ -1263,3 +1254,90 @@ button.add-row .icon { width: 16px; height: 12px; }
 .ref-title { font-size: 13px; line-height: 18px; font-weight: 600; }
 .ref-context { font-size: 14px; line-height: 22px; color: var(--text-2); }
 .ref-context p { margin: 0; }
+
+/*
+ * Person View (§11.6), per "Person — Alice Smith" in Paper: avatar, eyebrow and name, the
+ * properties well, three columns under dark rules, Notes with them, then the body.
+ * Content lines up 30px in, past the bullet slot, as on the Entity page.
+ */
+.entity.person-view { max-width: 1000px; margin: 0 auto; padding: 24px 16px 48px; box-sizing: content-box; }
+.person-head { align-items: flex-end; gap: 18px; padding: 0 0 20px 30px; }
+.avatar.person-avatar { width: 64px; height: 64px; background: var(--link-tint); color: var(--link); font-size: 22px; line-height: 26px; letter-spacing: -0.02em; }
+.person-name { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 6px; }
+.person-name .eyebrow { margin: 0; }
+.person-name .entity-title input {
+  margin-left: -6px;
+  padding: 0 5px;
+  font-size: 34px;
+  line-height: 40px;
+  font-weight: 700;
+  letter-spacing: -0.022em;
+  color: var(--text);
+}
+.person-head .entity-tools { gap: 8px; padding-bottom: 4px; }
+a.tool { display: inline-flex; align-items: center; text-decoration: none; }
+a.tool .icon { width: 14px; height: 14px; color: var(--avatar-text); }
+a.tool:hover { background: var(--hover); }
+.person-view > .banner { margin: 0 0 14px 30px; }
+.person-view .properties-block { padding-bottom: 28px; }
+.prop-value.directs a { color: var(--link); text-decoration: none; }
+
+.person-view a { text-decoration: none; }
+.person-view a:hover { text-decoration: underline; }
+.person-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0 36px; padding-left: 30px; }
+.column-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--text);
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 700;
+  color: var(--text);
+}
+.column-title { flex: 1; min-width: 0; }
+.column-header .count { font-size: 13px; line-height: 16px; font-weight: 600; color: var(--muted); }
+.person-column > .section-empty { margin: 10px 0 0; }
+.person-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--divider); }
+.person-row-text { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 1px; font-size: 14.5px; line-height: 20px; }
+.person-row-meta { font-size: 12.5px; line-height: 16px; color: var(--muted); }
+.person-view .alarm { font-weight: 600; color: var(--rust-text); }
+.person-role { flex: 0 0 78px; text-align: right; font-size: 12.5px; line-height: 16px; font-weight: 500; color: var(--muted); }
+.person-role.lead { font-weight: 600; color: var(--text); }
+.person-row.person-todo { align-items: flex-start; }
+.person-todo > .checkbox { margin: 2.5px 0.5px 0; }
+.person-todo .todo-title { color: var(--text); }
+.person-todo.finished .todo-title { color: var(--faint); text-decoration: line-through; }
+.person-todo.finished .person-row-meta { color: var(--faint); }
+.tag-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 0; }
+.tag-picker select { height: 28px; font-size: 13px; }
+.tag-picker select:first-child { flex: 1; min-width: 0; margin-left: -10px; border-color: transparent; background: transparent; color: var(--muted); }
+.tag-picker select:first-child:hover, .tag-picker select:first-child:focus { border-color: var(--border); background: var(--page); }
+.quick-add.boxed { margin: 12px 0 0; }
+.quick-add-box { cursor: text; }
+.quick-add-box .icon { width: 14px; height: 14px; color: var(--muted); }
+.quick-add-box input { height: 34px; font-size: 13.5px; color: var(--text); }
+.quick-add-hint { margin: 4px 0 0; font-size: 11.5px; line-height: 16px; color: var(--faint); }
+.quick-add-hint code { font: inherit; font-family: var(--mono); }
+.person-done { padding: 12px 0 0 30px; }
+
+.person-notes { padding: 36px 0 0 30px; }
+.person-notes .column-header { align-items: center; gap: 12px; }
+button.new-one-on-one { gap: 6px; padding: 6px 12px; border-radius: 7px; font-size: 13px; line-height: 16px; font-weight: 600; }
+button.new-one-on-one .icon { width: 13px; height: 13px; }
+.person-note { display: flex; align-items: baseline; gap: 16px; padding: 9px 0; border-bottom: 1px solid var(--divider); font-size: 14.5px; line-height: 22px; }
+.person-note .note-day { flex: 0 0 84px; font-size: 12.5px; font-weight: 500; color: var(--muted); }
+.person-note .note-with { flex: 1; min-width: 0; font-size: 13px; color: var(--muted); }
+.person-note .note-labels { font-size: 12.5px; color: var(--muted); }
+.person-notes > .section-empty { margin: 10px 0 0; }
+button.show-older { margin-top: 10px; gap: 6px; font-size: 13px; font-weight: 500; color: var(--muted); }
+button.show-older .icon { width: 12px; height: 12px; }
+
+.person-body { padding-top: 36px; }
+.person-body-tools { display: flex; justify-content: flex-end; }
+.person-body-tools button.link-button { font-size: 12.5px; font-weight: 500; color: var(--muted); }
+.person-body .body-editor { padding-left: 30px; }
+.person-view .mention:not(.broken) { border-bottom: none; }
+.person-view .mention:hover { text-decoration: underline; }

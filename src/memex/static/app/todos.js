@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { describe, request } from "./api.js";
 import { writeField } from "./fields.js";
+import { Icon } from "./icons.js";
 import { entityHref, personHref } from "./router.js";
 import { html, meId, reloadTree, sameId, useView, viewVersion } from "./state.js";
 
@@ -16,6 +17,9 @@ import { html, meId, reloadTree, sameId, useView, viewVersion } from "./state.js
  * @typedef {{title: string, owner: string | null, requester: string | null, due: string | null,
  *   errors: TokenError[], names: Record<string, string>}} Parsed
  */
+
+/** The quick-add syntax, as the boxes hint it (§6.3). */
+const SYNTAX = "@owner from @requester due:YYYY-MM-DD";
 
 const VIEWS = [
   { key: "mine", label: "Mine" },
@@ -110,10 +114,12 @@ export function TodoGroups({ list, hide, empty = "Nothing here", headings = true
 }
 
 /**
- * The quick-add box (§6.3): a live server-side parse as you type, Enter creates.
- * @param {{label: string, defaults?: {owner?: string, requester?: string}, placeholder?: string}} props
+ * The quick-add box (§6.3): a live server-side parse as you type, Enter creates. `boxed`
+ * draws it as the dashed box with a + and the syntax hint under it.
+ * @param {{label: string, defaults?: {owner?: string, requester?: string}, placeholder?: string,
+ *   boxed?: boolean}} props
  */
-export function QuickAdd({ label, defaults = {}, placeholder }) {
+export function QuickAdd({ label, defaults = {}, placeholder, boxed = false }) {
   const [text, setText] = useState("");
   const [parsed, setParsed] = useState(/** @type {Parsed | null} */ (null));
   const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -157,14 +163,18 @@ export function QuickAdd({ label, defaults = {}, placeholder }) {
   }
 
   const name = (/** @type {string | null} */ id) => (id ? (parsed?.names[id] ?? id) : "—");
+  const input = html`<input aria-label=${label} value=${text} disabled=${busy}
+    placeholder=${placeholder ?? `New To-do: Title ${SYNTAX}`}
+    onInput=${(/** @type {Event} */ e) => {
+      setText(/** @type {HTMLInputElement} */ (e.currentTarget).value);
+      setError(null);
+    }} />`;
   return html`
-    <form class="quick-add" onSubmit=${submit}>
-      <input aria-label=${label} value=${text} disabled=${busy}
-        placeholder=${placeholder ?? "New To-do: Title @owner from @requester due:YYYY-MM-DD"}
-        onInput=${(/** @type {Event} */ e) => {
-          setText(/** @type {HTMLInputElement} */ (e.currentTarget).value);
-          setError(null);
-        }} />
+    <form class="quick-add ${boxed ? "boxed" : ""}" onSubmit=${submit}>
+      ${boxed
+        ? html`<label class="quick-add-box"><${Icon} name="plus" />${input}</label>
+          <p class="quick-add-hint"><code>${SYNTAX}</code></p>`
+        : input}
       ${parsed &&
       html`<div class="quick-add-preview" aria-live="polite">
         ${parsed.errors.length

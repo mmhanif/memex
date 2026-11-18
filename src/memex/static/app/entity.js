@@ -229,7 +229,7 @@ function brokenLabel(status) {
 }
 
 /** Leave ✎ Edit: save what's pending, then let the document go. @param {string} id */
-function closeBody(id) {
+export function closeBody(id) {
   const doc = openDoc.value;
   if (doc instanceof BodyDoc && doc.id === id) {
     void doc.flush().then(() => doc.dispose());
@@ -284,8 +284,11 @@ export function Title({ detail, readOnly, onSaved }) {
   `;
 }
 
-/** @param {{detail: Detail, readOnly: boolean, onSaved: () => Promise<void>}} props */
-export function Properties({ detail, readOnly, onSaved }) {
+/**
+ * The properties well. `children` are extra read-only rows, after the fields.
+ * @param {{detail: Detail, readOnly: boolean, onSaved: () => Promise<void>, children?: any}} props
+ */
+export function Properties({ detail, readOnly, onSaved, children }) {
   const candidates = useCandidates();
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const [notice, setNotice] = useState(/** @type {string | null} */ (null));
@@ -332,6 +335,7 @@ export function Properties({ detail, readOnly, onSaved }) {
             </div>
           `,
         )}
+        ${children}
         <div class="prop">
           <span class="prop-key">created</span>
           <span class="prop-value">${detail.fields.created ?? html`<span class="muted">—</span>`}</span>
@@ -572,25 +576,5 @@ function NoteSection({ detail }) {
         </div>`;
       })}
     <//>
-  `;
-}
-
-/** @param {{title: string, items: Summary[], children?: any}} props */
-export function LinkList({ title, items, children }) {
-  return html`
-    <div class="link-list">
-      <div class="section-head"><h2>${title}</h2>${children}</div>
-      ${items.length
-        ? html`<ul>
-            ${items.map(
-              (item) => html`<li>
-                <a href=${entityHref(item.id, item.type)}>${item.title}</a>
-                ${item.fields.status && html`<span class="status status-${item.fields.status}">${item.fields.status}</span>`}
-                ${item.fields.due && html`<span class="muted">due ${item.fields.due}</span>`}
-              </li>`,
-            )}
-          </ul>`
-        : html`<p class="muted">None yet</p>`}
-    </div>
   `;
 }

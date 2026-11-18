@@ -867,14 +867,16 @@ The Dashboard also shows the "N Notes have To-dos to create" line (§6.4) and th
 
 ### 11.6 Person View
 
-- **Header:** name, role, organisation, kind, Manager, Directs, an archived badge, and Open file.
-- **Three columns:**
-  - **Tagged on:** each item with the role (Lead, Team, Stakeholder), plus a "Tag <name> to…" picker that writes the Tag on the chosen item
+- **Header:** an avatar with their initials, an eyebrow ("Person · Team Member · Direct": their kinds, and Direct when Me is their Manager), the name, Open file, and the "…" Actions menu (§11.5). Archived Persons get the "Archived on" bar.
+- **Properties well** (§11.5): kind, Manager, role, organisation, email, and their Directs.
+- **Three columns,** each under a heading with a count:
+  - **Tagged on:** each item with its type, its status (blocked or lateness in rust), and the role (Lead, Team, Stakeholder), plus a "Tag <name> to…" picker that writes the Tag on the chosen item
   - **Waiting on <name>**
   - **<name> is waiting on me**
 
-  Each To-do column has its own pre-filled quick-add box (§6.3).
-- **Below:** the **New 1:1** button, Notes with them (Notes whose `people` include them, newest `date` first), and the Person's body.
+  To-do rows tick in place and show due (or lateness), the other party when it isn't Me, and the Note they came from. Each To-do column ends in its own dashed quick-add box, pre-filled by context (§6.3), with the syntax hinted under it. "Show completed" adds finished To-dos.
+- **Notes with them** (Notes whose `people` include them, newest `date` first): day, title, the other Participants and Labels; the five newest show, the rest behind "Show N older". The **New 1:1** button sits on this section's header.
+- **Below:** the Person's body as outline blocks (§11.5), with Edit body.
 
 ### 11.7 Creating and tagging
 
