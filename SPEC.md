@@ -881,7 +881,8 @@ The Dashboard also shows the "N Notes have To-dos to create" line (§6.4) and th
 
 ### 11.7 Creating and tagging
 
-- **+ New… form per type:** a Template dropdown and person pickers for Lead, Team, Stakeholders, Owner, Requester, Manager and Participants. A Deliverable requires a Project. Pickers hide archived Entities unless toggled.
+- **New… menu:** a popover above the sidebar's New… button with a row per type and each type's other Templates as sub-rows ("Note: Meeting", "Note: 1:1", "Person: Stakeholder"; custom ones too, Blank left out). Rows carry hints: the Note folder, the date prefix of dated variants, "needs a Project" on Deliverable. Each row opens + New… with that Template.
+- **+ New… form per type:** a modal with the title, a live preview of the new file's path (the Id date-prefixed for a dated Note), then the fields in a properties well. The Template dropdown comes first: each usable Template with its headings, custom ones marked with their path, the default starred, and a Manage Templates link to Settings. Person pickers for Lead, Team, Stakeholders, Owner, Requester, Manager and Participants filter as you type, with the match in bold. A Deliverable requires a Project. Pickers hide archived Entities: the popover says how many matches it hid, and its Include archived switch shows them. Below the well, the Template's body as it will be copied. Create (Ctrl+Enter) opens the new file.
 - Inline create rows in the outline, Ctrl-K "New <Type>", and quick-add for To-dos.
 - **Tags** are edited from the avatar checklist on any work item, or from "Tag to…" on the Person View.
 
@@ -1290,6 +1291,7 @@ Error body: `{"error": {"code", "message", "field_errors"?: [{field, message, al
 | `GET /api/entities?type=&status=&theme=&project=&person=&label=&due_before=&include_archived=` | Entity summaries, each with a hash |
 | `GET /api/entities/{id}` | Fields, body, hash, warnings, Broken References, mentioned-in, children, related To-dos and Notes, `unconverted_todos` |
 | `POST /api/entities` `{type, fields, body?, template?}` | Create (§8.1) |
+| `POST /api/entities/placement` `{type, fields, folder?}` | The `{id, path, created}` a create would use, from `title` (and a Note's `date`); writes nothing. The + New… form's preview (§11.7) |
 | `PATCH /api/entities/{id}` `{set?, unset?}` + `If-Match` | Field update |
 | `PUT /api/entities/{id}/body` `{body}` + `If-Match` | Body replace |
 | `POST /api/entities/{id}/rename` `{new_id, dry_run, hashes?}` | Rename id (`hashes`: the preview's, by path) |

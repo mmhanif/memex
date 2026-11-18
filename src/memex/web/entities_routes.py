@@ -116,6 +116,13 @@ def create_entity(ws: WS, body: NewEntity, response: Response) -> dict:
     )
 
 
+@router.post("/entities/placement")
+def entity_placement(ws: WS, body: NewEntity) -> dict:
+    """Where + New… would put the file: the form's live Id/path preview (§11.7)."""
+    id, rel = entities.placement(ws, type_named(body.type), body.fields, body.folder)
+    return {"id": id, "path": rel, "created": ws.clock.today().isoformat()}
+
+
 @router.patch("/entities/{id}")
 def update_fields(
     ws: WS,

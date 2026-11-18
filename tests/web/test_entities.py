@@ -265,3 +265,27 @@ def test_entity_detail_gives_each_linked_reference_the_line_that_mentions_it(
         "steering": "Alice walks through [[Data-Migration]] numbers",
         "bare": "[[data-migration]]",
     }
+
+
+def test_placement_previews_the_id_and_path_a_create_would_use(api: TestClient):
+    new(api, "project", title="Data migration")
+    response = api.post(
+        "/api/entities/placement", json={"type": "project", "fields": {"title": "Data Migration"}}
+    )
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "id": "data-migration-2",
+        "path": "projects/data-migration-2.md",
+        "created": "2026-11-12",
+    }
+
+
+def test_placement_date_prefixes_a_dated_note_and_writes_nothing(api: TestClient, root: Path):
+    response = api.post(
+        "/api/entities/placement",
+        json={"type": "note", "fields": {"title": "Platform sync", "date": "2026-11-20"}},
+    )
+    assert response.json()["path"] == "notes/2026-11-20-platform-sync.md"
+    undated = api.post("/api/entities/placement", json={"type": "note", "fields": {}}).json()
+    assert undated["path"] == "notes/untitled.md"
+    assert not (root / "notes/2026-11-20-platform-sync.md").exists()

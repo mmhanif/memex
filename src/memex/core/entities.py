@@ -115,17 +115,41 @@ def create_entity(
         template_key=chosen.key,
     )
 
-    dated = entity_type is EntityType.TODO or (entity_type is None and "date" in merged)
-    date = today if entity_type is EntityType.TODO else parse_date(merged.get("date"))
     if id is not None:
         require_free_id(ws, id)
-        new_id = id
+        new_id, rel = id, f"{folder}/{id}.md" if folder else f"{id}.md"
     else:
-        new_id = make_id(title, {f.id for f in ws.cache.files()}, date if dated else None)
-    rel = f"{folder}/{new_id}.md" if folder else f"{new_id}.md"
+        new_id, rel = _placement(ws, entity_type, title, merged.get("date"), folder)
     text = frontmatter.with_fields("", _ordered(entity_type, merged))
     new_hash = ws.store.create(rel, text + (t_body if body is None else body))
     return Saved(new_id, rel, new_hash)
+
+
+def placement(
+    ws: Workspace,
+    entity_type: EntityType | None,
+    fields: Mapping[str, Any],
+    folder: str | None = None,
+) -> tuple[str, str]:
+    """The Id and path `create_entity` would give a new file, without writing (§11.7).
+
+    Only the title and, for Notes, the date matter; nothing is validated.
+    """
+    title = fields.get("title")
+    title = title.strip() if isinstance(title, str) else ""
+    return _placement(ws, entity_type, title, fields.get("date"), _note_folder(entity_type, folder))
+
+
+def _placement(
+    ws: Workspace, entity_type: EntityType | None, title: str, date: Any, folder: str
+) -> tuple[str, str]:
+    """A free Id from the title, date-prefixed for To-dos and dated Notes (§4.1)."""
+    if entity_type is EntityType.TODO:
+        prefix: dt.date | None = ws.clock.today()
+    else:
+        prefix = parse_date(date) if entity_type is None else None
+    new_id = make_id(title, {f.id for f in ws.cache.files()}, prefix)
+    return new_id, f"{folder}/{new_id}.md" if folder else f"{new_id}.md"
 
 
 def update_fields(

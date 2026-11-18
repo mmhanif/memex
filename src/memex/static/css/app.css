@@ -1712,3 +1712,116 @@ button.show-older .icon { width: 12px; height: 12px; }
   .portfolio-outline .col-lead, .portfolio-outline .col-team, .portfolio-outline .col-stakeholders { display: none; }
   .view-toggle { margin-left: 0; }
 }
+
+/* The New… menu (§11.7): a popover above the sidebar button, a row per type and its
+   other Templates as sub-rows. */
+.sidebar .side-new .menu.new-types { width: 288px; padding: 6px; border-radius: 9px; }
+.new-types-head { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; font-size: 11px; line-height: 14px; color: var(--faint); }
+.new-types-head span:first-child { font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.new-types hr { margin: 0 0 4px; border: none; border-top: 1px solid var(--border-soft); }
+.new-types button[role="menuitem"] { gap: 10px; padding: 7px 8px; border-radius: 6px; background: none; font-size: 13.5px; line-height: 18px; font-weight: 500; color: var(--text-2); text-align: left; }
+.new-types button[role="menuitem"]:hover, .new-types button[role="menuitem"]:focus { outline: none; background: var(--selected); color: var(--text); }
+.new-types button.new-variant { padding: 6px 8px 6px 36px; font-size: 13px; font-weight: 400; color: var(--avatar-text); }
+.new-types .icon { flex: 0 0 18px; width: 14px; height: 14px; color: var(--avatar-text); }
+.new-type-label { flex: 1; min-width: 0; }
+.new-types .faint { color: var(--faint); }
+.new-hint { flex: none; font-size: 11.5px; line-height: 14px; font-weight: 400; color: var(--faint); }
+.new-hint.mono { font: 11px/14px var(--mono); }
+.new-type .new-hint.mono { color: var(--muted); }
+
+/* The + New… form: a modal with a title box, a properties well and the body preview. */
+.dialog.new-form { width: min(620px, calc(100vw - 32px)); max-height: calc(100vh - 64px); padding: 0; border-radius: 12px; overflow: visible; display: flex; flex-direction: column; }
+.dialog-backdrop:has(.new-form) { padding: 56px 16px 16px; overflow: auto; }
+.new-head { display: flex; justify-content: space-between; align-items: flex-start; padding: 20px 24px 14px; }
+.new-head h2 { margin: 0; font-size: 20px; line-height: 26px; font-weight: 700; letter-spacing: -0.01em; }
+.new-path { margin: 4px 0 0; min-height: 16px; font: 12px/16px var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.new-path b { font-weight: 400; color: var(--text); }
+.new-head .icon-button { flex: none; width: 28px; height: 28px; }
+.new-head .icon-button .icon { width: 14px; height: 14px; }
+.new-title { padding: 0 24px 14px; }
+.new-title input { width: 100%; height: 42px; padding: 0 12px; border-radius: 7px; font-size: 17px; line-height: 22px; font-weight: 600; color: var(--text); }
+.new-title input:focus { outline: none; border-color: var(--link); }
+.new-title input::placeholder { font-weight: 400; color: var(--faint); }
+.well.new-props { gap: 0; margin: 0 24px; padding: 6px 14px; }
+.new-props .prop { min-height: 36px; gap: 0; font-size: 14px; line-height: 18px; }
+.new-props .prop-key { flex: 0 0 118px; font-size: 13px; color: var(--muted); }
+.new-props .prop-value { flex: 1; padding: 4px 0; }
+.new-props .prop-value > select, .new-props .prop-value > input, .new-props .prop-value > span > input:not([type="checkbox"]) { height: 28px; padding: 0 9px; border-color: var(--border); background: var(--page); font-size: 14px; }
+.new-props .prop-value > select, .new-props .prop-value > span > input:not([type="checkbox"], [type="date"]) { width: 240px; max-width: 100%; }
+.new-props .prop-value > select.ref { color: var(--link); }
+.new-props .checks .check { font-size: 13.5px; }
+
+.template-picker { position: relative; display: inline-flex; }
+button.template-button { gap: 8px; padding: 4px 10px; border-radius: 6px; background: var(--page); font-size: 14px; line-height: 18px; font-weight: 500; color: var(--text); }
+button.template-button .icon { width: 10px; height: 10px; color: var(--muted); }
+button.template-button[aria-expanded="true"] { border-color: var(--link); }
+.template-hint { padding-left: 4px; font-size: 12.5px; line-height: 16px; color: var(--faint); }
+.template-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; width: 360px; padding: 5px; border: 1px solid var(--border); border-radius: 9px; background: var(--page); box-shadow: var(--shadow-popover); }
+.template-menu ul { margin: 0; padding: 0; list-style: none; }
+.template-menu li { display: flex; align-items: flex-start; gap: 9px; padding: 7px 8px; border-radius: 6px; cursor: pointer; }
+.template-menu li:hover, .template-menu li:focus { outline: none; background: var(--hover); }
+.template-menu li[aria-selected="true"] { background: var(--selected); }
+.template-menu li > .icon { flex: none; width: 14px; height: 14px; margin-top: 2px; color: var(--link); }
+.template-star { flex: 0 0 14px; font-size: 13px; line-height: 18px; color: var(--muted); }
+.template-text { display: flex; flex: 1; flex-direction: column; gap: 1px; min-width: 0; }
+.template-name { display: flex; align-items: center; gap: 7px; font-size: 14px; line-height: 18px; color: var(--text); }
+li[aria-selected="true"] .template-name { font-weight: 600; }
+.custom-badge { padding: 0 5px; border: 1px solid var(--border); border-radius: 4px; font-size: 10.5px; line-height: 15px; font-weight: 400; color: var(--muted); }
+.template-sub { font-size: 12px; line-height: 16px; color: var(--faint); overflow-wrap: anywhere; }
+li[aria-selected="true"] .template-sub { color: var(--muted); }
+.template-sub.mono { font: 11.5px/16px var(--mono); }
+.template-foot, .picker-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 3px; padding: 8px 8px 5px; border-top: 1px solid var(--border-soft); font-size: 12px; line-height: 16px; color: var(--muted); }
+.template-foot a { color: var(--link); text-decoration: none; }
+.template-foot a:hover { text-decoration: underline; }
+
+/* Person pickers: type to filter; the popover hides archived people behind a switch. */
+.picker { position: relative; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.new-props .picker-input { width: 240px; height: 28px; padding: 0 9px; border-radius: 6px; background: var(--page); font-size: 14px; }
+.picker-input:focus { outline: none; border-color: var(--link); caret-color: var(--link); }
+.picker-input.chosen { color: var(--link); }
+.picker-input::placeholder { color: var(--faint); }
+.picker-input:focus::placeholder { color: var(--faint-mark); }
+.chip.picker-chip { gap: 6px; padding: 2px 4px 2px 3px; background: var(--page); font-size: 13px; line-height: 18px; color: var(--text-2); }
+.chip-remove { width: 16px; height: 16px; padding: 0; justify-content: center; border: none; border-radius: 50%; background: none; color: var(--faint); }
+.chip-remove:hover { background: var(--hover); color: var(--text); }
+.chip-remove .icon { width: 10px; height: 10px; }
+.new-props .picker.multiple .picker-input { width: 64px; border-color: transparent; background: none; font-size: 13px; }
+.new-props .picker.multiple .picker-input:hover { border-color: var(--border); }
+.new-props .picker.multiple .picker-input:focus { width: 180px; border-color: var(--link); background: var(--page); }
+.picker.multiple .picker-input::placeholder { color: var(--faint); }
+.picker-popover { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; width: 300px; padding: 5px; border: 1px solid var(--border); border-radius: 9px; background: var(--page); box-shadow: var(--shadow-popover); }
+.picker-popover ul { max-height: 240px; margin: 0; padding: 0; overflow: auto; list-style: none; }
+.picker-popover li { display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
+.picker-popover li.active { background: var(--selected); }
+.picker-popover li .avatar { width: 22px; height: 22px; }
+.picker-name { flex: 1; min-width: 0; font-size: 14px; line-height: 18px; color: var(--text); }
+.picker-name mark { background: none; font-weight: 700; color: inherit; }
+.picker-meta { flex: none; font-size: 12px; line-height: 16px; color: var(--muted); }
+.picker-popover li.picker-empty { cursor: default; font-size: 13px; color: var(--muted); }
+.picker-foot .toggle { margin-left: 0; gap: 7px; font-size: 12px; line-height: 16px; }
+.picker-foot > *, .template-foot > * { white-space: nowrap; }
+
+/* The Template's body, as it will be copied. */
+.new-body { display: flex; flex-direction: column; gap: 8px; padding: 16px 24px 4px; }
+.new-body-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 12px; line-height: 16px; color: var(--faint); }
+.new-body-head .eyebrow { font-size: 11px; line-height: 14px; letter-spacing: 0.08em; }
+.body-preview { max-height: 200px; overflow: auto; padding: 10px 14px; border: 1px dashed var(--border-strong); border-radius: 8px; font-size: 14px; line-height: 22px; color: var(--avatar-text); }
+.body-preview.outline .block-heading > .block-row > .bullet { height: 26px; }
+.body-preview.outline .block-heading > .block-row > .block-text,
+.body-preview.outline .block-children .block-heading > .block-row > .block-text { font-size: 15px; line-height: 26px; font-weight: 700; color: var(--avatar-text); }
+.body-preview.outline .block-heading + .block-heading, .body-preview.outline > .block-heading:not(:first-child) { padding-top: 0; }
+.body-preview .bullet::before { background: var(--faint-mark); }
+.new-form > .error-text { margin: 12px 24px 0; }
+.new-actions { display: flex; align-items: center; gap: 8px; padding: 16px 24px 20px; }
+.new-foot { flex: 1; min-width: 0; font-size: 12.5px; line-height: 16px; color: var(--faint); }
+.new-actions button { padding: 7px 14px; font-size: 14px; line-height: 18px; font-weight: 500; color: var(--text-2); }
+.new-actions button.solid { gap: 10px; border-color: var(--solid-bg); background: var(--solid-bg); font-weight: 600; color: var(--solid-text); }
+.new-actions button.solid kbd { padding: 0; border: none; background: none; font-size: 11px; font-weight: 400; color: var(--solid-hint); }
+@media (max-width: 560px) {
+  .new-props .prop { flex-wrap: wrap; }
+  .new-props .prop-key, .new-props .prop-value { flex-basis: 100%; }
+  .new-props .prop-key { padding-top: 6px; }
+  .template-hint { display: none; }
+  .new-props .picker-input, .template-menu { width: min(240px, 70vw); }
+  .new-foot { display: none; }
+}
