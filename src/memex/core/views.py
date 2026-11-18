@@ -342,6 +342,7 @@ class Dashboard:
     directs: tuple[DirectCounts, ...] | None
     recent_notes: tuple[CachedFile, ...]
     capture_notes: tuple[CachedFile, ...]  # Notes with To-dos to create (§6.4)
+    to_create: dict[str, int]  # how many each of those has, by id
     get_started: bool  # no Entity besides Me yet
 
 
@@ -376,6 +377,7 @@ def dashboard(ws: Workspace) -> Dashboard:
     notes = sorted(
         (f for f in files if f.type is None and f.rel != BOOKMARKS), key=lambda f: -f.mtime
     )
+    to_create = {n.id: count for n in notes if (count := len(task_items(ws, n.body)))}
     return Dashboard(
         due_soon=tuple(sorted(due_soon, key=by_due)),
         waiting_on_them=waiting_on_them,
@@ -385,7 +387,8 @@ def dashboard(ws: Workspace) -> Dashboard:
         ),
         directs=directs,
         recent_notes=tuple(notes[:RECENT_NOTES]),
-        capture_notes=tuple(sorted((n for n in notes if task_items(ws, n.body)), key=_by_title)),
+        capture_notes=tuple(sorted((n for n in notes if n.id in to_create), key=_by_title)),
+        to_create=to_create,
         get_started=not any(f.type is not None and (me is None or f.rel != me.rel) for f in files),
     )
 

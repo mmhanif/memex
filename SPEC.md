@@ -830,14 +830,18 @@ Decided in [Frontend architecture & build step](https://github.com/mmhanif/memex
 
 ### 11.4 Dashboard
 
-| Card | Contents |
+Home is titled with today's date ("Tuesday, 17 November", by this machine's clock), under a one-line summary of the Due block ("Today · 2 overdue · 2 due this week"). Below it, one outline block per list:
+
+| Block | Contents |
 |---|---|
-| **Due within 7 days** | Overdue and due-within-7-days Projects and Deliverables that aren't done/cancelled, plus Me's open To-dos (Owner Me); overdue first |
+| **Due within 7 days** | Overdue and due-within-7-days Projects and Deliverables that aren't done/cancelled, plus Me's open To-dos (Owner Me); overdue first. Each row leads with how late it is ("2 days late", in rust) or its day ("Fri 20 Nov") |
 | **Waiting on them** | Open To-dos with Requester Me and Owner not Me, grouped by Owner |
 | **Waiting on me** | Open To-dos with Owner Me and Requester not Me |
 | **Blocked work** | Projects and Deliverables with status `blocked` |
-| **Directs** | Each Direct with two counts: open To-dos waiting on them, and open To-dos they're waiting on from Me |
-| **Recent Notes** | The 10 most recently modified Notes |
+| **Directs** | A table: each Direct (with their role) and two counts, Waiting on them (open To-dos they owe Me) and Waiting on me (open To-dos they're waiting on from Me) |
+| **Recent notes** | The 10 most recently modified Notes, each with its date, and "N To-dos to create" when it has unconverted task items (§6.4), else its labels and `about` |
+
+While Me isn't set (§3.5), Waiting on them, Waiting on me and Directs show a dashed "Paused until Me is set" note instead of their contents, and Due within 7 days keeps its Projects and Deliverables with a note that Me's To-dos are paused.
 
 The Dashboard also shows the "N Notes have To-dos to create" line (§6.4) and the "get started" panel on an empty Workspace (§3.4).
 

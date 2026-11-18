@@ -144,9 +144,23 @@ def dashboard(ws: WS) -> dict:
         ],
         "recent_notes": [summary(f) for f in d.recent_notes],
         "capture_notes": [summary(f) for f in d.capture_notes],
+        "to_create": d.to_create,
         "get_started": d.get_started,
-        "names": _todo_names(ws, groups, shown_todos),
+        "names": {
+            **_todo_names(ws, groups, shown_todos),
+            **_names(ws, _row_refs([*d.due_soon, *d.blocked, *d.recent_notes])),
+        },
     }
+
+
+def _row_refs(files: Iterable[CachedFile]) -> list[object]:
+    """The ids a Dashboard row names: a Deliverable's Project, a Lead, a Note's `about`."""
+    refs: list[object] = []
+    for f in files:
+        for field in ("project", "lead", "about"):
+            value = f.fields.get(field)
+            refs.extend(value if isinstance(value, list) else [value])
+    return refs
 
 
 @router.get("/views/people")

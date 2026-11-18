@@ -149,6 +149,23 @@ def test_dashboard(api: TestClient, state: AppState, alice: str):
     assert body["get_started"] is False
 
 
+def test_dashboard_names_the_parents_leads_and_abouts_its_rows_show(
+    api: TestClient, state: AppState, alice: str
+):
+    put(state, "projects/p.md", "---\ntitle: Data Migration\nstatus: active\n---\n")
+    put(
+        state,
+        "deliverables/d.md",
+        "---\ntitle: Ledger Export\nproject: p\nstatus: blocked\nlead: alice-smith\n---\n",
+    )
+    put(state, "themes/t.md", "---\ntitle: Reliability\n---\n")
+    put(state, "notes/call.md", "---\ntitle: Vendor call\nabout: [t]\n---\n")
+    names = api.get("/api/views/dashboard").json()["names"]
+    assert names["p"] == "Data Migration"
+    assert names["t"] == "Reliability"
+    assert names["alice-smith"] == "Alice Smith"
+
+
 def test_dashboard_without_me_marks_the_me_cards(api: TestClient, state: AppState):
     unset_me(state)
     body = api.get("/api/views/dashboard").json()

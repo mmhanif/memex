@@ -32,7 +32,7 @@ export function isOverdue(due) {
 }
 
 /** Today on this machine, `YYYY-MM-DD`. */
-function today() {
+export function today() {
   const d = new Date();
   const pad = (/** @type {number} */ n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -51,8 +51,7 @@ export function TodoRow({ todo, names, hide }) {
   const name = (/** @type {string} */ id) => names[id] ?? id;
 
   async function toggle() {
-    setError(await writeField(todo, "status", finished ? "open" : "done"));
-    viewVersion.value += 1;
+    setError(await toggleTodo(todo));
   }
 
   return html`
@@ -69,6 +68,18 @@ export function TodoRow({ todo, names, hide }) {
       ${error && html`<span class="field-error">${error}</span>`}
     </li>
   `;
+}
+
+/**
+ * Tick or untick a To-do: a one-field write to its file (§6.1). Resolves to the write's
+ * error message, or null.
+ * @param {Summary} todo
+ */
+export async function toggleTodo(todo) {
+  const { status } = todo.fields;
+  const error = await writeField(todo, "status", status === "done" || status === "cancelled" ? "open" : "done");
+  viewVersion.value += 1;
+  return error;
 }
 
 /**
