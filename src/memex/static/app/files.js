@@ -4,6 +4,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { ApiError, describe, fileUrl, request } from "./api.js";
+import { lineSuffix } from "./banners.js";
 import { OpenDoc } from "./doc.js";
 import { fetchTemplates, openNew } from "./newform.js";
 import { renderMarkdown, splitFrontmatter } from "./markdown.js";
@@ -374,92 +375,14 @@ function Editor({ path }) {
       <header class="editor-head">
         <h1 class="editor-path">${path}</h1>
         ${file && html`<a class="button" href=${entityHref(file.id)}>Open page</a>`}
-        <${SaveStatus} doc=${doc} />
       </header>
       ${warnings.map(
-        (w) => html`<div class="banner warn">${w.message}${w.line ? ` (line ${w.line})` : ""}</div>`,
+        (w) => html`<div class="banner warn">${w.message}${lineSuffix(w.line)}</div>`,
       )}
-      <${DocBanners} doc=${doc} />
       <div class="split">
         <${RawText} doc=${doc} />
         <${Preview} text=${doc.text.value} />
       </div>
-    </div>
-  `;
-}
-
-/** @param {{doc: OpenDoc}} props */
-export function SaveStatus({ doc }) {
-  const labels = { clean: "Saved", dirty: "Unsaved", saving: "Saving…", conflict: "Not saved", deleted: "Not saved" };
-  return html`<span class="save-status ${doc.state.value}" data-state=${doc.state.value}>${labels[doc.state.value]}</span>`;
-}
-
-/** @param {{doc: OpenDoc, closeTo?: string}} props */
-export function DocBanners({ doc, closeTo = "#/files" }) {
-  const [rows, setRows] = useState(/** @type {import("./doc.js").DiffRow[] | null} */ (null));
-  const [error, setError] = useState(/** @type {string | null} */ (null));
-  const state = doc.state.value;
-  useEffect(() => {
-    if (state !== "conflict") setRows(null);
-  }, [state]);
-
-  async function compare() {
-    try {
-      setRows(await doc.compare());
-    } catch (e) {
-      setError(describe(e));
-    }
-  }
-
-  return html`
-    ${doc.notice.value && html`<div class="banner info" role="status">${doc.notice.value}</div>`}
-    ${state === "conflict" &&
-    html`<div class="banner conflict" role="alert">
-      <span>This file changed on disk while you were editing it.</span>
-      <button type="button" onClick=${() => doc.reload()}>Reload</button>
-      <button type="button" onClick=${() => void doc.keepMine()}>Keep mine</button>
-      <button type="button" onClick=${compare}>Compare</button>
-    </div>`}
-    ${state === "deleted" &&
-    html`<div class="banner conflict" role="alert">
-      <span>This file was deleted or moved outside Memex. Your text is still here.</span>
-      ${doc.canRecreate && html`<button type="button" onClick=${() => void doc.recreate()}>Recreate</button>`}
-      <button
-        type="button"
-        onClick=${() => {
-          doc.dispose();
-          openDoc.value = null;
-          navigate(closeTo);
-        }}
-      >
-        Close
-      </button>
-    </div>`}
-    ${error && html`<p class="error-text">${error}</p>`}
-    ${rows && state === "conflict" && html`<${DiffView} rows=${rows} onClose=${() => setRows(null)} />`}
-  `;
-}
-
-/** @param {{rows: import("./doc.js").DiffRow[], onClose: () => void}} props */
-function DiffView({ rows, onClose }) {
-  return html`
-    <div class="diff">
-      <div class="diff-head">
-        <span>On disk</span><span>Mine</span>
-        <button type="button" title="Close" aria-label="Close" onClick=${onClose}><${Icon} name="x" /></button>
-      </div>
-      <table>
-        <tbody>
-          ${rows.map(
-            (row) => html`
-              <tr class="diff-${row.kind}">
-                <td class="disk">${row.disk ?? ""}</td>
-                <td class="mine">${row.mine ?? ""}</td>
-              </tr>
-            `,
-          )}
-        </tbody>
-      </table>
     </div>
   `;
 }

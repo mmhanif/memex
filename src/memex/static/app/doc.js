@@ -16,6 +16,7 @@ import { ApiError, describe, fileUrl, request } from "./api.js";
  * @typedef {"clean" | "dirty" | "saving" | "conflict" | "deleted"} SaveState
  * @typedef {import("./api.js").FileVersion} FileVersion
  * @typedef {{kind: "equal" | "replace" | "delete" | "insert", disk: string | null, mine: string | null}} DiffRow
+ * @typedef {{reason: string, locked: boolean}} SaveProblem
  */
 
 export const SAVE_DELAY_MS = 1000;
@@ -36,8 +37,11 @@ export class OpenDoc {
     this.state = signal(/** @type {SaveState} */ ("clean"));
     /** What is on disk now, while in conflict. */
     this.conflict = signal(/** @type {FileVersion | null} */ (null));
-    /** A failed save that wasn't a conflict ("Couldn't save"); the edits stay. */
-    this.problem = signal(/** @type {string | null} */ (null));
+    /**
+     * Why a save failed, when it wasn't a conflict ("Couldn't save <title>: …"). The edits
+     * stay and auto-save pauses until Retry (§5.7); a conflict or deletion replaces it.
+     */
+    this.problem = signal(/** @type {SaveProblem | null} */ (null));
     /** A brief note, e.g. "Updated from disk". */
     this.notice = signal(/** @type {string | null} */ (null));
     /** Bumped whenever the text is replaced from disk, so the textarea resyncs. */
@@ -99,9 +103,9 @@ export class OpenDoc {
     const state = this.state.value;
     if (state === "clean" || state === "dirty") {
       this.state.value = "dirty";
-      this.schedule();
+      if (!this.problem.value) this.schedule();
     }
-    // saving: save() sees the text moved on. conflict, deleted: auto-save is paused.
+    // saving: save() sees the text moved on. conflict, deleted, a problem: auto-save is paused.
   }
 
   schedule() {
@@ -157,18 +161,31 @@ export class OpenDoc {
     } else if (current) {
       this.enterConflict(current);
     } else if (error instanceof ApiError && error.code === "not_found") {
-      this.state.value = "deleted";
+      this.becomeDeleted();
     } else {
       this.state.value = "dirty";
-      this.problem.value = `Couldn't save: ${describe(error)}`;
+      this.problem.value = saveProblem(error);
     }
+  }
+
+  /** The failed-save banner's Retry: save again, or recreate a deleted file. */
+  async retry() {
+    if (this.state.value === "deleted") await this.recreate();
+    else await this.save();
   }
 
   /** @param {FileVersion} current */
   enterConflict(current) {
     clearTimeout(this.timer);
+    this.problem.value = null;
     this.conflict.value = current;
     this.state.value = "conflict";
+  }
+
+  becomeDeleted() {
+    clearTimeout(this.timer);
+    this.problem.value = null;
+    this.state.value = "deleted";
   }
 
   /**
@@ -191,10 +208,7 @@ export class OpenDoc {
     try {
       disk = await this.fetchVersion();
     } catch (error) {
-      if (error instanceof ApiError && error.code === "not_found") {
-        clearTimeout(this.timer);
-        this.state.value = "deleted";
-      }
+      if (error instanceof ApiError && error.code === "not_found") this.becomeDeleted();
       return;
     }
     // Read after the await: typing or a save may have moved it on since the check above.
@@ -265,7 +279,7 @@ export class OpenDoc {
         this.state.value = "dirty";
         await this.recheck(); // someone else put a file there: compare against it
       } else {
-        this.problem.value = `Couldn't recreate: ${describe(error)}`;
+        this.problem.value = saveProblem(error);
       }
     }
   }
@@ -273,6 +287,7 @@ export class OpenDoc {
   /** @param {FileVersion} version */
   replaceText(version) {
     clearTimeout(this.timer);
+    this.problem.value = null;
     this.hash = version.hash;
     this.base = version.content;
     this.text.value = version.content;
@@ -291,6 +306,21 @@ export class OpenDoc {
     clearTimeout(this.timer);
     clearTimeout(this.noticeTimer);
   }
+}
+
+/**
+ * What the "Couldn't save <title>: …" banner says, and whether a lock is to blame.
+ * @param {unknown} error
+ * @returns {SaveProblem}
+ */
+function saveProblem(error) {
+  if (error instanceof ApiError && error.code === "locked") {
+    return {
+      reason: "another program has the file open (a sync client or editor). Memex retried and stopped; your edits are still here.",
+      locked: true,
+    };
+  }
+  return { reason: describe(error), locked: false };
 }
 
 /** An Entity page's body (SPEC §11.5): saved with a body replace, frontmatter untouched. */

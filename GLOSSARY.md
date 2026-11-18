@@ -115,8 +115,8 @@ A term or phrase from the user's work, with its definition.
 _Avoid_: Definition, acronym, jargon
 
 **Bookmark**:
-A saved external link with an optional title and tags.
-_Avoid_: Link, favourite, URL
+A saved external link with an optional title and tags. The sidebar's **Bookmarked** list is the first 10 Bookmarks in `bookmarks.md`; there is no separate pinning of Entities (#41).
+_Avoid_: Link, favourite, URL, pin, pinned page
 
 ## Views
 

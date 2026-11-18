@@ -6,9 +6,10 @@
 import { useEffect, useState } from "preact/hooks";
 import { ApiError, describe, request } from "./api.js";
 import { openCapture } from "./capture.js";
+import { lineSuffix } from "./banners.js";
 import { BodyDoc } from "./doc.js";
 import { FIELDS, FieldInput, typeLabel, useCandidates, writeField } from "./fields.js";
-import { DocBanners, RawText, SaveStatus } from "./files.js";
+import { RawText } from "./files.js";
 import { Icon } from "./icons.js";
 import { Actions, ArchivedBar } from "./lifecycle.js";
 import { InlineRepairs } from "./repair.js";
@@ -90,7 +91,7 @@ export function Warnings({ detail }) {
   const repairable = detail.broken.filter((b) => b.status !== "wrong_type").map((b) => b.id);
   return html`
     ${detail.warnings.map(
-      (w) => html`<div class="banner warn" role="status">${w.message}${w.line ? ` (line ${w.line})` : ""}</div>`,
+      (w) => html`<div class="banner warn" role="status">${w.message}${lineSuffix(w.line)}</div>`,
     )}
     ${detail.broken.length > 0 &&
     html`<div class="banner warn" role="status">
@@ -299,8 +300,6 @@ function BodyEditor({ id }) {
   if (!(doc instanceof BodyDoc) || doc.id !== id) return html`<p class="hint">Opening…</p>`;
   return html`
     <div class="body-editor">
-      <div class="body-editor-status"><${SaveStatus} doc=${doc} /></div>
-      <${DocBanners} doc=${doc} closeTo="#/home" />
       <${RawText} doc=${doc} label="Body text" onKeyDown=${listHelpers} />
     </div>
   `;

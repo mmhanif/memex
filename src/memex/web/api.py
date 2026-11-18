@@ -1,16 +1,19 @@
 """The `/api/*` routes built so far (SPEC §17.2)."""
 
+from pathlib import Path
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Header, Query, Response
 from pydantic import BaseModel, Field
 
+from memex import version
 from memex.core.cache import CachedFile
 from memex.core.diff import side_by_side
 from memex.core.entities import body_of
 from memex.core.errors import CoreError, Validation
 from memex.core.store import FileVersion
-from memex.core.workspace import Workspace
+from memex.core.views import open_todo_count
+from memex.core.workspace import FORMAT, Workspace
 from memex.web.state import AppState, app_state
 
 router = APIRouter(prefix="/api")
@@ -54,16 +57,33 @@ def expected_hash(if_match: str | None) -> str:
 @router.get("/tree")
 def tree(ws: WS) -> dict:
     me = ws.me()
+    error = ws.config_error
     return {
         "folders": ws.cache.folders(),
         "files": [_tree_file(f) for f in ws.cache.files()],
-        "workspace": {  # for the shell's banners (§11.2)
+        "workspace": {  # for the shell's sidebar header, badge and banners (§11.2)
+            "path": _display_path(ws.root),
             "read_only": ws.read_only,
-            "config_error": ws.config_error and ws.config_error.message,
+            "format": ws.config.format,
+            "supported_format": FORMAT,
+            "version": version(),
+            "config_error": error and error.message,
+            "config_error_line": error and error.line,
             "me_set": me is not None,
             "me": me and me.id,  # for To-do rows and pre-fills
+            "me_ref": ws.config.me,  # as written, even when it matches no Person
+            "open_todos": open_todo_count(ws),
         },
     }
+
+
+def _display_path(root: Path) -> str:
+    """The Workspace folder as the sidebar shows it: under home as `~/…`."""
+    try:
+        rel = root.resolve().relative_to(Path.home().resolve())
+    except ValueError:
+        return str(root)
+    return "~" if rel == Path() else f"~/{rel.as_posix()}"
 
 
 def _tree_file(f: CachedFile) -> dict:
