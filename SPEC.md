@@ -791,8 +791,14 @@ Decided in [Frontend architecture & build step](https://github.com/mmhanif/memex
 
 ### 11.2 Shell
 
-- A narrow left **icon rail**: Home · Portfolio · People · To-dos · Glossary · Bookmarks · Files (plus Settings at the bottom). The raw file tree is the Files page, not a permanent sidebar.
-- A **top bar** with the search box (opens Ctrl-K) and a **+ New…** menu (one entry per type, plus Note).
+- A left **sidebar** (Logseq-style, light), fixed at about 220px, with no collapse toggle and no narrow-width layout. From top to bottom:
+  - nav rows Home · Portfolio · People · To-dos · Glossary · Bookmarks · Files; the active route's row is highlighted
+  - a **Bookmarked** list: the first 10 Bookmarks in `bookmarks.md` order, each showing its title (else its URL) and opening in a new tab like the Bookmarks page, then an **All Bookmarks →** row to `#/bookmarks` when there are more
+  - a **Recent** list: the same recently opened Entities and files as the palette's empty state (§9.6), newest first, at most 8
+  - **+ New…** (one entry per type, plus Note) and Settings at the bottom
+
+  Both lists always show their heading; when one is empty it shows a muted line ("No Bookmarks yet" / "Nothing opened yet"). The raw file tree is the Files page, not part of the sidebar.
+- A **top bar** with the search box (opens Ctrl-K).
 - **Banners** at the top for Me not set, config errors, the read-only Workspace and save problems.
 
 ### 11.3 Routes
@@ -1128,7 +1134,7 @@ Decided in [Mind Map views](https://github.com/mmhanif/memex/issues/14). The thr
   - a **Map panel** on every Theme, Project, Deliverable and Person View page, with a **Full screen** link
   - buttons on Portfolio ("Map") and People ("Directs map", "Stakeholders map")
   - Ctrl-K targets
-  - no rail icon
+  - no sidebar row
 - **Open check:** confirm the "+n" stub as the way to expand with the user when building it.
 
 **Acceptance**
