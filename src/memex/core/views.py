@@ -420,6 +420,8 @@ class Board:
     kind: BoardKind
     columns: tuple[BoardColumn, ...]
     chips: tuple[CachedFile, ...]  # the Theme filter chips
+    # A Project card's Deliverables that need a look: blocked, or late. By Project Id.
+    attention: dict[str, tuple[CachedFile, ...]]
 
 
 def portfolio_board(
@@ -427,12 +429,14 @@ def portfolio_board(
     kind: str = "project",
     themes: Iterable[str] = (),
     include_archived: bool = False,
+    unthemed: bool = False,
 ) -> Board:
     """Projects or Deliverables in status columns, soonest due first. Cancelled isn't a
-    column. Items with a bad status get a flagged column of their own, first (§4.5)."""
+    column. Items with a bad status get a flagged column of their own, first (§4.5).
+    With `themes` or `unthemed`, only work under those Themes, or with none, is shown."""
     if kind not in BOARD_KINDS:
         raise Validation(f"Unknown board kind {kind!r}: one of {', '.join(BOARD_KINDS)}")
-    items = _under_themes(ws, BOARD_KINDS[kind], themes)
+    items = _under_themes(ws, BOARD_KINDS[kind], themes, unthemed)
     by_status: dict[str | None, list[CachedFile]] = {s: [] for s in BOARD_STATUSES}
     invalid: list[CachedFile] = []
     for f in items:
@@ -444,7 +448,27 @@ def portfolio_board(
     columns = [BoardColumn(s, tuple(sorted(fs, key=by_due))) for s, fs in by_status.items()]
     if invalid:
         columns.insert(0, BoardColumn(None, tuple(sorted(invalid, key=by_due))))
-    return Board(cast(BoardKind, kind), tuple(columns), theme_chips(ws, include_archived))
+    attention = _attention(ws, items) if kind == "project" else {}
+    return Board(
+        cast(BoardKind, kind), tuple(columns), theme_chips(ws, include_archived), attention
+    )
+
+
+def _attention(ws: Workspace, projects: list[CachedFile]) -> dict[str, tuple[CachedFile, ...]]:
+    """Each Project's Deliverables that are blocked, or past due and not finished."""
+    today = ws.clock.today()
+    shown = {p.rel for p in projects}
+    found: dict[str, list[CachedFile]] = {}
+    for d in (f for f in ws.cache.files() if f.type is EntityType.DELIVERABLE):
+        status = d.fields.get("status")
+        due = due_of(d)
+        late = due is not None and due < today and status not in ("done", "cancelled")
+        if status != "blocked" and not late:
+            continue
+        project = _resolved(ws, d.fields.get("project"), EntityType.PROJECT)
+        if project is not None and project.rel in shown:
+            found.setdefault(project.id, []).append(d)
+    return {p: tuple(sorted(ds, key=by_due)) for p, ds in found.items()}
 
 
 def theme_chips(ws: Workspace, include_archived: bool = False) -> tuple[CachedFile, ...]:
@@ -456,13 +480,21 @@ def _themes(ws: Workspace) -> list[CachedFile]:
     return sorted((f for f in ws.cache.files() if f.type is EntityType.THEME), key=_by_title)
 
 
-def _under_themes(ws: Workspace, kind: EntityType, themes: Iterable[str]) -> list[CachedFile]:
-    """Every item of `kind`, or with `themes`, those whose Theme is one of them."""
+def _under_themes(
+    ws: Workspace, kind: EntityType, themes: Iterable[str], unthemed: bool = False
+) -> list[CachedFile]:
+    """Every item of `kind`, or with `themes`, those whose Theme is one of them, and with
+    `unthemed`, those whose Theme doesn't resolve."""
     items = [f for f in ws.cache.files() if f.type is kind]
     wanted = {t.casefold() for t in themes}
-    if not wanted:
+    if not wanted and not unthemed:
         return items
-    return [f for f in items if (t := theme_of(ws, f)) is not None and t.id.casefold() in wanted]
+    return [
+        f
+        for f in items
+        if ((t := theme_of(ws, f)) is None and unthemed)
+        or (t is not None and t.id.casefold() in wanted)
+    ]
 
 
 def theme_of(ws: Workspace, f: CachedFile) -> CachedFile | None:
@@ -498,15 +530,19 @@ class Outline:
 
 
 def portfolio_outline(
-    ws: Workspace, themes: Iterable[str] = (), include_archived: bool = False
+    ws: Workspace,
+    themes: Iterable[str] = (),
+    include_archived: bool = False,
+    unthemed: bool = False,
 ) -> Outline:
     """Theme → Project → Deliverable, each level by title so rows stay put while edited.
 
     Archived Themes come after the others; they're only left out of the chips (§8.3).
-    Projects whose Theme doesn't resolve go under "No theme", last. With `themes`, only
-    those Themes' groups are shown.
+    Projects whose Theme doesn't resolve go under "No theme", last. With `themes` or
+    `unthemed`, only those Themes' groups, or "No theme", are shown.
     """
     wanted = {t.casefold() for t in themes}
+    filtered = bool(wanted) or unthemed
     files = ws.cache.files()
     deliverables: dict[str, list[CachedFile]] = {}
     without_project: list[CachedFile] = []
@@ -525,13 +561,13 @@ def portfolio_outline(
     groups = [
         OutlineTheme(t, tuple(projects.get(t.rel, ())))
         for t in all_themes
-        if not wanted or t.id.casefold() in wanted
+        if not filtered or t.id.casefold() in wanted
     ]
-    if not wanted and projects.get(None):
+    if (not filtered or unthemed) and projects.get(None):
         groups.append(OutlineTheme(None, tuple(projects[None])))
     return Outline(
         tuple(groups),
-        () if wanted else tuple(sorted(without_project, key=_by_title)),
+        () if filtered else tuple(sorted(without_project, key=_by_title)),
         theme_chips(ws, include_archived),
     )
 

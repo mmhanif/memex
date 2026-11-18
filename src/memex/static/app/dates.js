@@ -58,3 +58,9 @@ export function noteDay(day, now) {
 export function dayDate(iso) {
   return `${shortDate(iso)} ${toDate(iso).getFullYear()}`;
 }
+
+/** "11 Dec". @param {string} iso */
+export function dayMonth(iso) {
+  const d = toDate(iso);
+  return `${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)}`;
+}

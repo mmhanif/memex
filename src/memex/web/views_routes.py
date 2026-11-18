@@ -206,11 +206,13 @@ def portfolio(
     kind: Annotated[str, Query()] = "project",
     themes: Annotated[str, Query()] = "",
     include_archived: Annotated[bool, Query()] = False,
+    unthemed: Annotated[bool, Query()] = False,
 ) -> dict:
-    """The board or the outline (§11.3). `themes` is a comma-separated list of Theme Ids."""
+    """The board or the outline (§11.3). `themes` is a comma-separated list of Theme Ids;
+    `unthemed` adds the work with no Theme."""
     chosen = [t for t in (t.strip() for t in themes.split(",")) if t]
     if mode == "board":
-        board = views.portfolio_board(ws, kind, chosen, include_archived)
+        board = views.portfolio_board(ws, kind, chosen, include_archived, unthemed)
         shown = [f for c in board.columns for f in c.items]
         return {
             "mode": "board",
@@ -219,11 +221,12 @@ def portfolio(
                 {"status": c.status, "items": [summary(f) for f in c.items]} for c in board.columns
             ],
             "chips": [summary(t) for t in board.chips],
+            "attention": {p: [summary(d) for d in ds] for p, ds in board.attention.items()},
             "names": _work_names(ws, shown),
         }
     if mode != "outline":
         raise Validation(f"Unknown Portfolio mode {mode!r}: one of {', '.join(PORTFOLIO_MODES)}")
-    outline = views.portfolio_outline(ws, chosen, include_archived)
+    outline = views.portfolio_outline(ws, chosen, include_archived, unthemed)
     shown = [
         *(f for g in outline.themes for f in ([g.theme] if g.theme else [])),
         *(p.project for g in outline.themes for p in g.projects),

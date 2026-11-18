@@ -248,6 +248,24 @@ def test_portfolio_board(api: TestClient, portfolio: None):
     assert [i["id"] for i in body["columns"][3]["items"]] == ["migrate"]
     assert [t["id"] for t in body["chips"]] == ["platform"]
     assert body["names"] == {"alice-smith": "Alice Smith", "platform": "Platform"}
+    assert body["attention"] == {}
+
+
+def test_portfolio_board_carries_attention_and_the_no_theme_filter(
+    api: TestClient, state: AppState, portfolio: None
+):
+    put(state, "projects/loose.md", "---\ntitle: Loose\nstatus: active\n---\n")
+    put(
+        state,
+        "deliverables/stuck.md",
+        "---\ntitle: Stuck\nproject: migrate\nstatus: blocked\n---\n",
+    )
+    body = api.get("/api/views/portfolio?mode=board").json()
+    assert [d["id"] for d in body["attention"]["migrate"]] == ["stuck"]
+    body = api.get("/api/views/portfolio?mode=board&unthemed=true").json()
+    assert [i["id"] for c in body["columns"] for i in c["items"]] == ["loose"]
+    body = api.get("/api/views/portfolio?mode=outline&unthemed=true").json()
+    assert [g["theme"] for g in body["themes"]] == [None]
 
 
 def test_portfolio_outline(api: TestClient, portfolio: None):
