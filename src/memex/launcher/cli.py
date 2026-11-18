@@ -14,11 +14,11 @@ import sys
 import threading
 import time
 import webbrowser
-from importlib import metadata
 from pathlib import Path
 
 import uvicorn
 
+from memex import version
 from memex.core.config import load_app_config, locate_workspace, memex_home
 from memex.launcher import handoff
 from memex.launcher.logs import configure_logging
@@ -60,7 +60,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="memex", description="Run Memex.")
-    parser.add_argument("--version", action="version", version=f"memex {_version()}")
+    parser.add_argument("--version", action="version", version=f"memex {version()}")
     parser.add_argument("--workspace", type=Path, help="the Workspace folder (remembered)")
     parser.add_argument("--port", type=_port, help="the port to listen on (default 47615)")
     parser.add_argument("--no-browser", action="store_true", help="print the link, don't open it")
@@ -75,10 +75,6 @@ def _port(text: str) -> int:
     if not 0 < port < 65536:
         raise argparse.ArgumentTypeError("a port is a number from 1 to 65535")
     return port
-
-
-def _version() -> str:
-    return metadata.version("memex")
 
 
 def _hand_off(home: Path, port: int, workspace: Path | None, *, open_browser: bool) -> int | None:
@@ -134,7 +130,7 @@ def _serve(sock: socket.socket, home: Path, workspace: Path | None, *, open_brow
     threading.Thread(
         target=_announce, args=(server, state, open_browser), name="memex-announce", daemon=True
     ).start()
-    log.info("Memex %s starting on %s:%d", _version(), HOST, port)
+    log.info("Memex %s starting on %s:%d", version(), HOST, port)
     try:
         server.run(sockets=[sock])
     except KeyboardInterrupt:

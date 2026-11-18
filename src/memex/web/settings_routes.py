@@ -3,12 +3,12 @@
 The app-config half (Workspace path, port) arrives with the rest of the Settings page.
 """
 
-from importlib import metadata
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Header, Response
 from pydantic import BaseModel, Field
 
+from memex import version
 from memex.core.settings import save_workspace_settings
 from memex.web.api import WS, expected_hash
 
@@ -34,7 +34,7 @@ def read_settings(ws: WS, response: Response) -> dict:
         },
         "config_error": ws.config_error and ws.config_error.message,
         "read_only": ws.read_only or ws.config_error is not None,
-        "version": metadata.version("memex"),
+        "version": version(),
     }
 
 
