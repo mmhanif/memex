@@ -12,7 +12,8 @@ from tests.e2e.test_editor import put
 def test_add_a_bookmark_then_filter_by_its_label(app: Page, server: AppState, root: Path):
     put(root, "bookmarks.md", "# Work\n- [Jira](https://j.example) #eng\n")
     app.goto(f"{origin(server)}/#/bookmarks")
-    expect(app.get_by_role("link", name="Jira")).to_be_visible()
+    view = app.get_by_role("main")  # the sidebar lists Bookmarks too
+    expect(view.get_by_role("link", name="Jira")).to_be_visible()
     expect(app.get_by_text("Work", exact=True)).to_be_visible()
 
     form = app.get_by_role("form", name="Add a Bookmark")
@@ -22,7 +23,7 @@ def test_add_a_bookmark_then_filter_by_its_label(app: Page, server: AppState, ro
     form.get_by_label("Labels").fill("ref")
     form.get_by_role("button", name="Add").click()
 
-    wiki = app.get_by_role("link", name="Wiki")
+    wiki = view.get_by_role("link", name="Wiki")
     expect(wiki).to_have_attribute("target", "_blank")
     expect(wiki).to_have_attribute("rel", "noopener noreferrer")
     assert (
@@ -30,8 +31,8 @@ def test_add_a_bookmark_then_filter_by_its_label(app: Page, server: AppState, ro
     )
 
     app.get_by_role("group", name="Label filter").get_by_role("button", name="#ref").click()
-    expect(app.get_by_role("link", name="Wiki")).to_be_visible()
-    expect(app.get_by_role("link", name="Jira")).to_have_count(0)
+    expect(view.get_by_role("link", name="Wiki")).to_be_visible()
+    expect(view.get_by_role("link", name="Jira")).to_have_count(0)
 
 
 def test_glossary_lists_terms_with_aliases_and_definitions(app: Page, server: AppState, root: Path):

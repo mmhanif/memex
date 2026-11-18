@@ -118,27 +118,48 @@ input, textarea {
 /* Shell (§11.2) */
 .shell { display: flex; height: 100vh; }
 
-.rail {
+.sidebar {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  width: 52px;
+  gap: 8px;
+  flex: 0 0 220px;
   padding: 10px 8px;
   background: var(--rail);
   border-right: 1px solid var(--border);
 }
-.rail a {
+.side-scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+.sidebar ul { list-style: none; margin: 0; padding: 0; }
+.side-row {
   display: flex;
   align-items: center;
-  justify-content: center;
-  height: 36px;
+  gap: 8px;
+  min-height: 30px;
+  padding: 4px 8px;
   border-radius: var(--radius);
   color: var(--muted);
+  text-decoration: none;
+  overflow: hidden;
 }
-.rail a .icon { width: 20px; height: 20px; }
-.rail a:hover { color: var(--text); }
-.rail a.active { background: var(--selected); color: var(--accent); }
-.rail .rail-bottom { margin-top: auto; }
+.side-row span, .side-section a.side-row { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-section a.side-row { display: block; line-height: 22px; }
+.side-row .icon { flex-shrink: 0; width: 16px; height: 16px; }
+.side-row:hover { color: var(--text); background: var(--selected); }
+.side-row.active { background: var(--selected); color: var(--accent); }
+.side-section h2 {
+  margin: 0 0 4px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.side-empty { margin: 0; padding: 4px 8px; font-size: 13px; }
+.side-more { font-size: 13px; }
+.side-bottom { display: flex; flex-direction: column; gap: 4px; }
+.sidebar .side-new { margin-left: 0; display: block; }
+.side-new > button { width: 100%; justify-content: center; }
+.sidebar .side-new .menu { top: auto; bottom: calc(100% + 4px); left: 0; right: auto; }
 
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 

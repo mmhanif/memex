@@ -157,7 +157,7 @@ def test_launch_code_sets_the_cookie_once(page: Page, server: AppState):
     code = server.session.issue_code()
 
     page.goto(f"{origin(server)}/auth?code={code}")
-    expect(page.locator(".rail")).to_be_visible()
+    expect(page.locator(".sidebar")).to_be_visible()
 
     reused = page.request.get(f"{origin(server)}/auth?code={code}", max_redirects=0)
     assert reused.status == 401

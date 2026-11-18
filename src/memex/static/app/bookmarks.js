@@ -77,12 +77,9 @@ function LineRow({ line, onLabel }) {
     if (heading) return html`<li id=${id} class="bookmark-heading">${heading[2]}</li>`;
     return html`<li id=${id} class="bookmark-text">${line.text}</li>`;
   }
-  const safe = /^https?:\/\//i.test(b.url);
   return html`
     <li id=${id} class="bookmark">
-      ${safe
-        ? html`<a href=${b.url} target="_blank" rel="noopener noreferrer">${b.title || b.url}</a>`
-        : html`<span>${b.title || b.url}</span>`}
+      <${BookmarkLink} bookmark=${b} />
       ${b.title && html`<span class="bookmark-url muted">${b.url}</span>`}
       ${b.note && html`<span class="bookmark-note">${b.note}</span>`}
       ${b.labels.map(
@@ -90,6 +87,17 @@ function LineRow({ line, onLabel }) {
       )}
     </li>
   `;
+}
+
+/**
+ * A Bookmark's title (else its URL), opened by the browser in a new tab. Only http(s) URLs
+ * become links.
+ * @param {{bookmark: Bookmark, class?: string}} props
+ */
+export function BookmarkLink({ bookmark: b, class: cls }) {
+  const label = b.title || b.url;
+  if (!/^https?:\/\//i.test(b.url)) return html`<span class=${cls}>${label}</span>`;
+  return html`<a href=${b.url} class=${cls} target="_blank" rel="noopener noreferrer">${label}</a>`;
 }
 
 /** @param {{onAdded: () => Promise<void>}} props */

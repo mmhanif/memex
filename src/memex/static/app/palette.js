@@ -3,13 +3,14 @@
 // views and commands are a static list matched here in the browser and merged in.
 // `>` limits it to commands; `+` turns it into To-do quick-add.
 
-import { effect, signal } from "@preact/signals";
+import { signal } from "@preact/signals";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { describe, request } from "./api.js";
 import { TYPES } from "./fields.js";
 import { Icon } from "./icons.js";
 import { fetchTemplates, openNew } from "./newform.js";
-import { fileHref, navigate, route } from "./router.js";
+import { recents } from "./recent.js";
+import { navigate } from "./router.js";
 import {
   fetchSearch,
   hitContext,
@@ -29,16 +30,13 @@ import { html, reloadTree, tree, viewVersion } from "./state.js";
  * @typedef {{key: string, section: string, icon: string, title: string, context?: string,
  *   snippet?: import("./search.js").Snippet, finished?: boolean,
  *   run: (how: {newTab?: boolean, toLine?: boolean, stay?: boolean}) => void | Promise<void>}} Row
- * @typedef {{href: string, title: string, icon: string}} Recent
  */
 
 const DEBOUNCE_MS = 100;
 const GO_TO_MAX = 8;
 const COMMANDS_MAX = 4;
 const IN_TEXT_MAX = 5;
-const RECENT_MAX = 8;
 const SEARCH_LIMIT = 200; // the API's maximum
-const RECENT_KEY = "memex.recent";
 
 /** Whether the palette is open, and the text it opened with. */
 export const palette = signal(/** @type {{initial: string} | null} */ (null));
@@ -51,43 +49,6 @@ document.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "k") {
     e.preventDefault();
     openPalette();
-  }
-});
-
-// Recently opened Entities and files, in this browser only: a convenience (§9.6).
-
-/** @returns {Recent[]} */
-function readRecents() {
-  try {
-    const stored = JSON.parse(window.localStorage.getItem(RECENT_KEY) ?? "[]");
-    return Array.isArray(stored) ? stored.slice(0, RECENT_MAX) : [];
-  } catch {
-    return [];
-  }
-}
-
-/** @param {Recent} recent */
-function remember(recent) {
-  const kept = readRecents().filter((r) => r.href !== recent.href);
-  try {
-    window.localStorage.setItem(RECENT_KEY, JSON.stringify([recent, ...kept].slice(0, RECENT_MAX)));
-  } catch {
-    // Storage off or full: recents are only a convenience.
-  }
-}
-
-effect(() => {
-  const r = route.value;
-  const files = tree.value?.files ?? [];
-  if (r.name === "file" && r.path) {
-    const found = files.find((f) => f.path === r.path);
-    remember({ href: fileHref(r.path), title: found?.title ?? r.path, icon: typeIcon(found?.type ?? "note") });
-  } else if ((r.name === "entity" || r.name === "person") && r.id) {
-    const key = r.id.toLowerCase();
-    const found = files.find((f) => f.id.toLowerCase() === key && f.type);
-    if (!found) return;
-    const href = r.name === "person" ? `#/people/${encodeURIComponent(r.id)}` : `#/e/${encodeURIComponent(r.id)}`;
-    remember({ href, title: found.title, icon: typeIcon(found.type ?? "note") });
   }
 });
 
@@ -317,7 +278,7 @@ function PaletteBox({ initial }) {
     rows = matchCommands(allCommands, q).map((c) => commandRow(c, "Commands"));
   } else if (!q) {
     rows = [
-      ...readRecents().map((r) => /** @type {Row} */ ({
+      ...recents.value.map((r) => /** @type {Row} */ ({
         key: `recent:${r.href}`,
         section: "Recent",
         icon: r.icon,
