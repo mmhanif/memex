@@ -1067,6 +1067,7 @@ button.cell-value:hover { background: var(--hover); }
 /* Search: the Ctrl-K palette and the search page (§9.6, §9.7), per "Palette — Ctrl-K"
    and "Search — cutover" in Paper. */
 .icon-arrow-right { mask-image: url("/static/vendor/lucide-static/icons/arrow-right.svg"); }
+.icon-arrow-up-right { mask-image: url("/static/vendor/lucide-static/icons/arrow-up-right.svg"); }
 .icon-panel-left { mask-image: url("/static/vendor/lucide-static/icons/panel-left.svg"); }
 .snippet mark { background: none; font-weight: 700; color: var(--text); }
 ::highlight(search-hit) { background-color: #ffe08a; color: inherit; }
@@ -1202,27 +1203,82 @@ table.trash th, table.trash td { text-align: left; padding: 6px 8px; border-bott
 .repair-preview { margin-top: 8px; }
 .inline-repairs { margin-top: 4px; }
 
-/* Bookmarks and Glossary (§10) */
-.bookmarks-page, .glossary-page { max-width: 900px; }
-.bookmark-add { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: end; margin: 12px 0; }
-.bookmark-add label { display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--muted); }
-.bookmark-add .error-text { flex-basis: 100%; margin: 0; }
-.label-filter { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
-.label-filter .chip, .bookmark .chip { padding: 1px 8px; cursor: pointer; }
-.label-filter .chip[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
-ul.bookmarks { list-style: none; margin: 12px 0; padding: 0; }
-ul.bookmarks li { padding: 6px 4px; border-radius: var(--radius); }
-.bookmark { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; border-top: 1px solid var(--border); }
-.bookmark-url { font-size: 12px; overflow-wrap: anywhere; }
-.bookmark-heading { font-weight: 600; margin-top: 12px; }
-.bookmark-text { color: var(--muted); }
-ul.bookmarks li.flash { animation: flash 2s ease-out; }
+/*
+ * Bookmarks and Glossary (§10), per "Bookmarks" and "Glossary" in Paper: eyebrow and title,
+ * then outline blocks; content lines up 30px in, past the bullet slot.
+ */
+.page.bookmarks-page, .page.glossary-page { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; box-sizing: content-box; }
+.bookmarks-head, .glossary-head { display: flex; flex-direction: column; gap: 10px; padding: 0 0 18px 30px; }
+.bookmarks-head .eyebrow, .glossary-head .eyebrow { margin: 0; min-height: 16px; }
+.bookmarks-head .file-link { font-family: var(--mono); font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--link); text-decoration: none; }
+.bookmarks-head .file-link:hover { text-decoration: underline; }
+.bookmarks-page .block-empty, .glossary-page .block-empty { margin: 18px 0 0 30px; font-size: 14px; line-height: 26px; color: var(--faint); }
+.bullet-slot { flex: 0 0 30px; }
+.block-row > p.block-text { margin: 0; }
 @keyframes flash { from { background: var(--warn-bg); } to { background: transparent; } }
-.letters { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 8px 0 4px; font-weight: 600; }
-.glossary-group h2 { font-size: 16px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
-.glossary-group dt { font-weight: 600; margin-top: 10px; }
-.glossary-group dd { margin: 2px 0 0 0; }
-.glossary-group .aliases { margin: 0; font-size: 13px; }
+.bookmarks .flash { animation: flash 2s ease-out; border-radius: var(--radius); }
+
+/* The Add form: a well of two rows. */
+.well.bookmark-add { gap: 10px; padding: 14px 14px 14px 16px; border: 1px solid var(--border-soft); border-radius: 9px; }
+.bookmark-add-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; }
+.bookmark-add-head .add-hint { font-size: 12px; line-height: 16px; color: var(--faint); }
+.bookmark-add-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.bookmark-add input { flex: 1 1 0; min-width: 160px; height: 34px; box-sizing: border-box; padding: 0 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--page); font-size: 14px; line-height: 18px; color: var(--text); }
+.bookmark-add input::placeholder { color: var(--faint); }
+.bookmark-add input:focus { outline: none; border-color: var(--link); box-shadow: 0 0 0 3px color-mix(in srgb, var(--link) 12%, transparent); }
+.bookmark-add input.url { font-family: var(--mono); font-size: 13px; }
+.bookmark-add input.title-field { flex: 0 1 300px; }
+.bookmark-add input.labels { flex: 0 1 220px; color: var(--link); }
+.bookmark-add button.solid { flex: 0 0 72px; justify-content: center; height: 34px; border: none; border-radius: 6px; background: var(--solid-bg); font-size: 14px; font-weight: 600; color: var(--solid-text); }
+.bookmark-add .error-text { margin: 0; }
+
+/* Label chips with counts; All is dark when on. */
+.label-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 22px 0 4px 30px; }
+button.label-chip { gap: 5px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--page); font-size: 13px; line-height: 18px; color: var(--link); }
+button.label-chip .count { color: var(--faint-mark); }
+button.label-chip.all { font-weight: 600; color: var(--text); }
+button.label-chip:hover:not([aria-pressed="true"]) { background: var(--hover); }
+button.label-chip[aria-pressed="true"] { border-color: var(--solid-bg); background: var(--solid-bg); font-weight: 600; color: var(--solid-text); }
+button.label-chip[aria-pressed="true"] .count { font-weight: 500; color: var(--solid-hint); }
+
+/* The outline: headings as heading blocks, Bookmarks as blocks, prose as plain text. */
+.bookmarks > .block { padding-top: 6px; }
+.bookmarks > .block-heading { padding-top: 18px; }
+.bookmarks .block-heading h2.block-text { margin: 0; }
+.bookmarks .block-children { display: flex; flex-direction: column; gap: 6px; }
+.bookmarks .block-children > .block { padding: 3px 0; }
+.bookmark-text .block-text { color: var(--text-2); }
+.bookmark-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px; }
+.bookmark-title { font-size: 15px; line-height: 26px; font-weight: 500; color: var(--link); text-decoration: none; overflow-wrap: anywhere; }
+a.bookmark-title:hover { text-decoration: underline; }
+.bookmark-title.mono { font-family: var(--mono); font-size: 13.5px; font-weight: 400; }
+.bookmark-line .icon { width: 11px; height: 11px; color: var(--link); }
+.bookmark-domain { font-family: var(--mono); font-size: 12px; line-height: 16px; color: var(--faint-mark); }
+.bookmark-note { margin: 0; font-size: 14px; line-height: 22px; color: var(--muted); }
+button.label-link { display: inline; padding: 0; border: none; background: none; font: inherit; color: var(--link); }
+button.label-link:hover { text-decoration: underline; }
+
+/* The Glossary: an A–Z strip (letters without Terms faded), then letters as heading blocks. */
+.glossary-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 0 0 8px 30px; border-bottom: 1px solid var(--border-soft); }
+.letters { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
+.letters > * { flex: 0 0 20px; font-size: 13px; line-height: 28px; font-weight: 600; text-align: center; text-decoration: none; }
+.letters a { color: var(--link); }
+.letters a:hover { text-decoration: underline; }
+.letters span { color: var(--border-strong); }
+.glossary-bar button { gap: 6px; padding: 5px 10px; border-radius: 6px; font-size: 13px; line-height: 18px; font-weight: 500; color: var(--text-2); }
+.glossary-bar button .icon { width: 12px; height: 12px; }
+.glossary-bar button:hover { background: var(--hover); }
+.glossary-group { padding-top: 18px; }
+.glossary-group h2.block-text { margin: 0; }
+.glossary-group > .block-children { display: flex; flex-direction: column; gap: 6px; }
+.glossary-term { padding: 4px 0; }
+.term-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; }
+.term-name { font-size: 15px; line-height: 26px; font-weight: 600; color: var(--link); text-decoration: none; }
+.term-name:hover { text-decoration: underline; }
+.glossary-term .aliases { font-family: var(--mono); font-size: 12px; line-height: 16px; color: var(--muted); }
+.glossary-term .definition { margin-top: 2px; color: var(--text-2); }
+.glossary-term .definition > :first-child { margin-top: 0; }
+.glossary-term .definition > :last-child { margin-bottom: 0; }
 
 /* Inline To-do capture (§6.4) */
 .capture-rows { list-style: none; margin: 0; padding: 0; }

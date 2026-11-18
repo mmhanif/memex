@@ -745,13 +745,13 @@ Decided in [Entity frontmatter schema & reference syntax](https://github.com/mmh
 
   - Lines that don't match (headings, prose, bare URLs) are kept and shown as text. A bare `- https://…` line is treated as a Bookmark with no title.
   - `bookmarks.md` is a Note, so it can be edited raw at `#/f/bookmarks.md`.
-- **`#/bookmarks`** shows the rendered list with a Label filter and an **Add** form (URL, title, note, Labels). Add appends a line through the hash-checked write.
+- **`#/bookmarks`** shows the rendered list as outline blocks: each heading starts a heading block with the lines under it nested, prose lines are plain text, and each Bookmark shows its title (a bare URL in mono), ↗ and the domain, then its note and `#labels`. Above it, an **Add** form (URL, title, note, Labels) in a well and a Label filter of chips with counts (All, then each Label, most used first); with a Label picked, only its Bookmarks show, without headings. Add appends a line through the hash-checked write.
 - Bookmark URLs are only ever opened by the user's browser in a new tab. Memex never fetches them.
 
 ### 10.2 Glossary
 
 - One file per term in `glossary/`. The title is the term, `aliases` are alternative spellings, and the body is the definition.
-- **`#/glossary`** is an A–Z list with definitions shown inline and aliases listed under each term.
+- **`#/glossary`** is an A–Z list: a strip of letters (those with no terms faded, the rest jump to their group), then each letter as a heading block with its terms under it, aliases beside each term ("aka go-live · switchover") and the definition inline with its Mentions as links.
 
 **Acceptance**
 - [core] Parsing `- [Wiki](https://w.example) team wiki #ref #eng` gives title "Wiki", URL, note "team wiki" and Labels `ref` and `eng`; a heading line is preserved as text.
@@ -1305,7 +1305,7 @@ Error body: `{"error": {"code", "message", "field_errors"?: [{field, message, al
 | `GET /api/views/person/{id}` | Person View |
 | `GET /api/views/glossary` | Glossary |
 | `GET /api/search?q=&limit=&offset=&include_archived=&hide_completed=` | Search results plus parsed filters and token errors. A file row carries `context` and, for the search page's context line, `lead`, `about` (names; Me as "Me"), `due`, `completed`, `date` and `labels` |
-| `GET /api/bookmarks?label=` / `POST /api/bookmarks` | Bookmarks list and add |
+| `GET /api/bookmarks?label=` / `POST /api/bookmarks` | Bookmarks list and add. The list gives every line, `labels` (`name`, `count`, most used first) and `total`, both counted over the whole file whatever the filter |
 | `GET /api/broken-references` / `POST /api/broken-references/repair` `{id, action, replacement?, type?, dry_run, hashes?}` | Broken references and repair |
 | `GET /api/trash` / `POST /api/trash/restore` `{entry}` | Trash list and restore |
 | `GET /api/templates?type=` / `POST /api/templates/customise` `{type, name}` | Templates |

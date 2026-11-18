@@ -43,6 +43,7 @@ files = [
     "LICENSE",
     "icons/archive.svg",
     "icons/arrow-right.svg",
+    "icons/arrow-up-right.svg",
     "icons/book-a.svg",
     "icons/bookmark.svg",
     "icons/briefcase.svg",

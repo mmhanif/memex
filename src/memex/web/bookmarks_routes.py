@@ -28,7 +28,8 @@ def bookmark_list(ws: WS, label: Annotated[str | None, Query()] = None) -> dict:
             {"line": r.line, "text": r.text, "bookmark": r.bookmark and bookmark_json(r.bookmark)}
             for r in view.lines
         ],
-        "labels": list(view.labels),
+        "labels": [{"name": name, "count": count} for name, count in view.labels],
+        "total": view.total,
     }
 
 

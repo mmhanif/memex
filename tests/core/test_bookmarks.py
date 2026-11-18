@@ -46,7 +46,18 @@ def test_the_label_filter_keeps_only_bookmarks_with_that_label(b: Builder):
     view = bookmarks_view(b.ws, label="ref")
     assert [n.bookmark.title for n in view.lines if n.bookmark] == ["Wiki"]
     assert [n.text for n in view.lines if n.bookmark is None] == []
-    assert view.labels == ("eng", "Ref")
+    assert view.labels == (("eng", 1), ("Ref", 1))
+
+
+def test_labels_count_their_bookmarks_most_used_first_and_ignore_the_filter(b: Builder):
+    b.file(
+        "bookmarks.md",
+        "- https://a.example #ops #slo\n- https://b.example #Ops\n"
+        "- https://c.example #ref\n- https://d.example\nprose #not-a-label\n",
+    )
+    view = bookmarks_view(b.ws, label="slo")
+    assert view.labels == (("ops", 2), ("ref", 1), ("slo", 1))
+    assert view.total == 4
 
 
 def test_a_missing_bookmarks_file_is_an_empty_page(b: Builder):
