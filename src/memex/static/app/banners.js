@@ -41,9 +41,9 @@ function WorkspaceBanners() {
         icon="triangle-alert"
         actions=${html`<a class="button" href=${fileHref(CONFIG)}>Open config.yaml</a>`}
       >
-        <strong title=${status.config_error}>Workspace config won't parse</strong>${status.config_error_line
-          ? ` (line ${status.config_error_line})`
-          : ""}. Running on defaults, so Me is unset; Settings is read-only until it's fixed.
+        <strong>Workspace config won't parse</strong>${lineSuffix(status.config_error_line)}:
+        ${" "}${status.config_error.replace(/[.!?]$/, "")}.
+        Running on defaults, so Me is unset; Settings is read-only until it's fixed.
       <//>`}
       ${status && !status.me_set && !status.config_error && html`<${MeBanner} written=${status.me_ref} />`}
     </div>
@@ -73,6 +73,7 @@ function DocBanners({ doc }) {
   const [rows, setRows] = useState(/** @type {import("./doc.js").DiffRow[] | null} */ (null));
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const state = doc.state.value;
+  const problem = doc.problem.value;
   useEffect(() => {
     if (state !== "conflict") setRows(null);
   }, [state]);
@@ -123,14 +124,14 @@ function DocBanners({ doc }) {
       <strong><code>${doc.path}</code> was deleted or moved outside Memex.</strong> The editor kept its text. Memex
       doesn't follow renames.
     <//>`}
-    ${doc.problem.value &&
+    ${problem &&
     html`<${Banner}
-      tone="amber"
-      icon="lock"
+      tone=${problem.locked ? "amber" : "rust"}
+      icon=${problem.locked ? "lock" : "triangle-alert"}
       alert
       actions=${html`<button type="button" class="solid" onClick=${() => void doc.retry()}>Retry</button>`}
     >
-      <strong>Couldn't save ${title}:</strong> ${doc.problem.value}
+      <strong>Couldn't save ${title}:</strong> ${problem.reason}
     <//>`}
     ${error && html`<p class="error-text">${error}</p>`}
     ${rows && state === "conflict" && html`<${DiffView} rows=${rows} onClose=${() => setRows(null)} />`}
@@ -149,6 +150,14 @@ function Banner({ tone, icon, alert = false, actions, children }) {
       ${actions && html`<div class="banner-actions">${actions}</div>`}
     </div>
   `;
+}
+
+/**
+ * " (line 7)" after a message, when the line is known.
+ * @param {number | null} line
+ */
+export function lineSuffix(line) {
+  return line ? ` (line ${line})` : "";
 }
 
 /** @param {{rows: import("./doc.js").DiffRow[], onClose: () => void}} props */

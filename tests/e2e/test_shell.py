@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import pytest
 from playwright.sync_api import Page, expect
 
 from memex.web.app import AppState
@@ -170,3 +171,67 @@ def test_save_status_and_file_banners_live_in_the_shell(app: Page, server: AppSt
     banner = app.locator(".banner-strip .banner.conflict")
     expect(banner).to_contain_text("Alpha changed on disk", timeout=5000)
     expect(bar.locator(".save-status")).to_have_text("Not saved")
+
+
+def test_n_does_nothing_while_a_dialog_is_open(app: Page):
+    app.keyboard.press("Control+k")
+    palette = app.get_by_role("dialog", name="Command palette")
+    expect(palette).to_be_visible()
+    app.locator("body").evaluate("el => document.activeElement.blur()")
+    app.keyboard.press("n")
+    sidebar = app.get_by_role("navigation", name="Sections")
+    expect(sidebar.get_by_role("menuitem", name="Project")).to_have_count(0)
+
+
+LOCKED = {
+    "status": 503,
+    "content_type": "application/json",
+    "body": '{"error": {"code": "locked", "message": "notes/a.md is locked by another program"}}',
+}
+
+
+def test_a_locked_save_pauses_auto_save_until_retry_and_gives_way_to_a_conflict(
+    app: Page, server: AppState, root: Path
+):
+    put(root, "notes/a.md", "---\ntitle: Alpha\n---\n# A\n")
+    app.goto(f"{origin(server)}/#/f/notes/a.md")
+    expect(app.get_by_role("banner").locator(".save-status")).to_have_text("Saved")
+    puts: list[str] = []
+    app.on("request", lambda r: puts.append(r.url) if r.method == "PUT" else None)
+    app.route(
+        "**/api/files",
+        lambda r: r.fulfill(**LOCKED) if r.request.method == "PUT" else r.continue_(),
+    )
+
+    text = app.get_by_label("File text")
+    text.fill("---\ntitle: Alpha\n---\n# Mine\n")
+    banner = app.locator(".banner-strip .banner", has_text="Couldn't save Alpha")
+    expect(banner).to_contain_text("another program has the file open", timeout=5000)
+    expect(banner.locator(".icon-lock")).to_have_count(1)
+    attempts = len(puts)
+    text.press("End")
+    text.type(" more")
+    app.wait_for_timeout(1500)  # auto-save is paused: typing doesn't retry
+    assert len(puts) == attempts
+
+    put(root, "notes/a.md", "---\ntitle: Alpha\n---\n# Outside\n")
+    banner.get_by_role("button", name="Retry").click()  # the PUT is still refused...
+    expect(banner).to_be_visible()
+    app.unroute("**/api/files")
+    app.evaluate("window.dispatchEvent(new Event('focus'))")  # ...then the recheck finds a conflict
+    expect(app.locator(".banner-strip .banner.conflict")).to_be_visible(timeout=5000)
+    expect(banner).to_have_count(0)
+
+
+class TestReadOnly:
+    @pytest.fixture
+    def root(self, root: Path) -> Path:
+        config = root / ".memex/config.yaml"
+        config.write_text(config.read_text().replace("format: 1", "format: 2"))
+        return root
+
+    def test_read_only_banner_names_both_formats_and_the_upgrade(self, app: Page):
+        banner = app.locator(".banner-strip .banner.neutral")
+        expect(banner).to_contain_text("This Workspace is format 2")
+        expect(banner).to_contain_text("understands format 1")
+        expect(banner).to_contain_text("pipx upgrade memex")

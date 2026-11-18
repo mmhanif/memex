@@ -6,6 +6,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { ApiError, describe, request } from "./api.js";
 import { openCapture } from "./capture.js";
+import { lineSuffix } from "./banners.js";
 import { BodyDoc } from "./doc.js";
 import { FIELDS, FieldInput, typeLabel, useCandidates, writeField } from "./fields.js";
 import { RawText } from "./files.js";
@@ -90,7 +91,7 @@ export function Warnings({ detail }) {
   const repairable = detail.broken.filter((b) => b.status !== "wrong_type").map((b) => b.id);
   return html`
     ${detail.warnings.map(
-      (w) => html`<div class="banner warn" role="status">${w.message}${w.line ? ` (line ${w.line})` : ""}</div>`,
+      (w) => html`<div class="banner warn" role="status">${w.message}${lineSuffix(w.line)}</div>`,
     )}
     ${detail.broken.length > 0 &&
     html`<div class="banner warn" role="status">

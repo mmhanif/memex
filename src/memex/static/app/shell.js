@@ -71,7 +71,7 @@ export function App() {
 
 /** @param {{active: string}} props */
 function Sidebar({ active }) {
-  const open = tree.value?.workspace.open_todos ?? null;
+  const openTodos = tree.value?.workspace.open_todos || null; // hidden at 0 and without Me
   return html`
     <nav class="sidebar" aria-label="Sections">
       <${WorkspaceHeader} />
@@ -79,7 +79,7 @@ function Sidebar({ active }) {
         <ul class="side-nav">
           ${NAV.map(
             (item) => html`<li key=${item.route}>
-              <${NavRow} item=${item} active=${active} count=${item.route === "todos" && open ? open : null} />
+              <${NavRow} item=${item} active=${active} count=${item.route === "todos" ? openTodos : null} />
             </li>`,
           )}
         </ul>
@@ -165,7 +165,7 @@ function NavRow({ item, active, count = null }) {
 }
 
 function TopBar() {
-  route.value; // re-render on navigation, so Back/Forward know where they can go
+  void route.value; // subscribe: re-render on navigation, so Back/Forward know where they can go
   const history = /** @type {any} */ (window).navigation;
   const doc = openDoc.value;
   return html`
@@ -215,7 +215,8 @@ function onShortcut(e) {
   if (e.key !== "n" && e.key !== "N") return;
   if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
   const target = /** @type {HTMLElement | null} */ (e.target);
-  if (target?.closest("input, textarea, select, [contenteditable], [role=dialog]")) return;
+  if (target?.closest("input, textarea, select, [contenteditable]:not([contenteditable=false])")) return;
+  if (document.querySelector("[role=dialog]")) return;
   e.preventDefault();
   newMenuOpen.value = true;
 }

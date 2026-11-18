@@ -4,6 +4,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { ApiError, describe, fileUrl, request } from "./api.js";
+import { lineSuffix } from "./banners.js";
 import { OpenDoc } from "./doc.js";
 import { fetchTemplates, openNew } from "./newform.js";
 import { renderMarkdown, splitFrontmatter } from "./markdown.js";
@@ -376,7 +377,7 @@ function Editor({ path }) {
         ${file && html`<a class="button" href=${entityHref(file.id)}>Open page</a>`}
       </header>
       ${warnings.map(
-        (w) => html`<div class="banner warn">${w.message}${w.line ? ` (line ${w.line})` : ""}</div>`,
+        (w) => html`<div class="banner warn">${w.message}${lineSuffix(w.line)}</div>`,
       )}
       <div class="split">
         <${RawText} doc=${doc} />
