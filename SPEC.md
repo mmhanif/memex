@@ -889,14 +889,15 @@ The Dashboard also shows the "N Notes have To-dos to create" line (§6.4) and th
 
 ### 11.8 Files page
 
-- A tree of the Workspace, without dot-folders or ignored paths.
+- A tree of the Workspace, without dot-folders or ignored paths. Each folder shows how many files it holds; non-Markdown files are listed greyed and read-only. The open file is highlighted, with a dot when it has warnings.
+- The open file's header shows its path, type and Id, with Rename / move, Delete and **Open page ↗**.
 - **Actions:**
   - New file here (with Template picker)
   - New folder
   - Rename/move
   - Delete (to trash, §8.4)
 - Typed Entities can be opened and edited raw, but not moved out of their folder.
-- A file with invalid frontmatter opens here with its warning bar.
+- A file with invalid frontmatter opens here with its warning bar; **Go to line N** puts the cursor on the line, which the editor's gutter marks.
 
 **Acceptance**
 - [REST] `index.html` is served with a CSP whose `script-src` is `'self'` plus exactly the hash of its inline import map.
@@ -1281,7 +1282,7 @@ Error body: `{"error": {"code", "message", "field_errors"?: [{field, message, al
 | `POST /launcher/hello`, `POST /launcher/open` | Already-running hand-off (§13.4; HMAC, no cookie) |
 | `GET /` and `/static/…` | SPA and assets |
 | `GET /api/events` | SSE stream (§5.6) |
-| `GET /api/tree` | Workspace tree (files and folders, typed or Note, warnings), plus `workspace: {read_only, config_error, me_set}` for the shell's banners |
+| `GET /api/tree` | Workspace tree (files and folders, typed or Note, warnings; `other_files`: non-Markdown files, listed read-only), plus `workspace: {read_only, config_error, me_set}` for the shell's banners |
 | `GET /api/files?path=` | Raw file content plus `ETag` |
 | `POST /api/files` `{path, content}` | Create a raw file (`exists` if taken) |
 | `PUT /api/files` `{path, content}` + `If-Match` | Overwrite a raw file |

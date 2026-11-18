@@ -180,6 +180,19 @@ def test_tree_lists_folders_and_indexed_files(api: TestClient, state: AppState):
     assert by_path["people/ada-lovelace.md"]["id"] == "ada-lovelace"
 
 
+def test_tree_lists_non_markdown_files_apart_as_read_only(api: TestClient, state: AppState):
+    # SPEC §2: listed in the Files tree, read-only, not openable in the editor.
+    hinted(state, "notes/c.txt", b"not markdown\n")
+    hinted(state, "org-chart.png", b"\x89PNG")
+    hinted(state, ".obsidian/workspace.json", b"{}")
+    hinted(state, "notes/.hidden.txt", b"x")
+
+    tree = api.get("/api/tree").json()
+
+    assert tree["other_files"] == ["notes/c.txt", "org-chart.png"]
+    assert "notes/c.txt" not in {f["path"] for f in tree["files"]}
+
+
 def test_tree_flags_warnings(api: TestClient, state: AppState):
     hinted(state, "notes/bad.md", b"---\ntitle: [unclosed\n---\n")
 

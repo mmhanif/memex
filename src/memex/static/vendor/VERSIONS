@@ -54,6 +54,7 @@ files = [
     "icons/check.svg",
     "icons/circle-alert.svg",
     "icons/columns-3.svg",
+    "icons/file.svg",
     "icons/file-plus.svg",
     "icons/file-text.svg",
     "icons/file-x.svg",

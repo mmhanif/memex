@@ -60,6 +60,7 @@ def tree(ws: WS) -> dict:
     error = ws.config_error
     return {
         "folders": ws.cache.folders(),
+        "other_files": ws.cache.other_files(),  # read-only in the tree (§2)
         "files": [_tree_file(f) for f in ws.cache.files()],
         "workspace": {  # for the shell's sidebar header, badge and banners (§11.2)
             "path": _display_path(ws.root),
