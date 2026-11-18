@@ -1256,7 +1256,6 @@ button.cell-value:hover { background: var(--hover); }
 .cell-editor .checklist-menu { z-index: 10; }
 .without-project { padding-top: 24px; }
 .without-project .section-empty { margin-bottom: 8px; }
-.icon-button { border: none; background: none; padding: 0; width: 18px; height: 18px; }
 
 /* Search: the Ctrl-K palette and the search page (§9.6, §9.7), per "Palette — Ctrl-K"
    and "Search — cutover" in Paper. */
