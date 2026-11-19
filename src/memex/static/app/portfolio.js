@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { describe, request } from "./api.js";
 import { Avatar } from "./avatar.js";
-import { daysBetween, dayMonth, dueLabel, shortDate } from "./dates.js";
+import { daysBetween, daysLate, dayMonth, lateLabel, shortDate } from "./dates.js";
 import { useDismiss } from "./dismiss.js";
 import { FIELDS, FieldInput, WORK_STATUSES, isFinished, useCandidates, writeField } from "./fields.js";
 import { Icon } from "./icons.js";
@@ -292,11 +292,10 @@ function Card({ item, names, attention, readOnly }) {
       html`<ul class="card-attention">
         ${attention.map((d) => {
           const blocked = d.fields.status === "blocked";
-          const days = typeof d.fields.due === "string" ? daysBetween(d.fields.due, now) : 0;
           return html`<li key=${d.id}>
             <span class="mini-bullet" aria-hidden="true"></span>
             <a href=${entityHref(d.id, d.type)}>${d.title}</a>${" "}
-            <span class=${blocked ? "blocked-tag" : "late"}>${blocked ? "blocked" : `${days}d late`}</span>
+            <span class=${blocked ? "blocked-tag" : "late"}>${blocked ? "blocked" : typeof d.fields.due === "string" ? lateLabel(d.fields.due, now, { short: true }) : ""}</span>
           </li>`;
         })}
       </ul>`}
@@ -304,7 +303,7 @@ function Card({ item, names, attention, readOnly }) {
         <${StatusMenu} item=${item} readOnly=${readOnly} variant="pill"
           onPick=${(/** @type {string} */ s) => void saveField(item, "status", s, setError)} />
         <span class="card-due ${late ? "late" : soon ? "soon" : ""}">
-          ${typeof due === "string" && (late ? dueLabel(due, now) : soon ? shortDate(due) : dayMonth(due))}
+          ${typeof due === "string" && (late ? lateLabel(due, now) : soon ? shortDate(due) : dayMonth(due))}
         </span>
         ${typeof lead === "string" && lead && html`<${Avatar} id=${lead} name=${names[lead] ?? lead} alone />`}
         ${item.warnings.length > 0 && html`<span class="broken" title=${item.warnings.map((w) => w.message).join("; ")}>!</span>`}
@@ -530,9 +529,8 @@ function CellValue({ item, name, names }) {
   if (name === "due") {
     if (typeof value !== "string" || !value) return none;
     const now = today();
-    const late = daysBetween(value, now);
-    if (late > 0 && !isFinished(item.fields.status)) {
-      return html`<span class="cell-due late">${dayMonth(value)}<span class="late-by">${dueLabel(value, now)}</span></span>`;
+    if (daysLate(value, now) > 0 && !isFinished(item.fields.status)) {
+      return html`<span class="cell-due late">${dayMonth(value)}<span class="late-by">${lateLabel(value, now)}</span></span>`;
     }
     return html`<span class="cell-due">${dayMonth(value)}</span>`;
   }

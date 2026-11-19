@@ -5,7 +5,7 @@
 
 import { useEffect, useRef, useState } from "preact/hooks";
 import { describe, request } from "./api.js";
-import { daysBetween, shortDate } from "./dates.js";
+import { daysLate, lateLabel, shortDate } from "./dates.js";
 import { isFinished, writeField } from "./fields.js";
 import { Icon } from "./icons.js";
 import { entityHref, personHref } from "./router.js";
@@ -45,7 +45,7 @@ const BY_DUE = [
  * @param {string} due
  */
 export function isOverdue(due) {
-  return due < today();
+  return daysLate(due, today()) > 0;
 }
 
 /** Today on this machine, `YYYY-MM-DD`. */
@@ -195,7 +195,7 @@ function TodoBlock({ todo, names, hide, now }) {
   const me = meId();
   const { owner, requester, status, due } = todo.fields;
   const finished = isFinished(status);
-  const late = typeof due === "string" && !finished ? daysBetween(due, now) : 0;
+  const late = typeof due === "string" && !finished ? lateLabel(due, now) : "";
   return html`
     <div class="block-row todo-block ${finished ? "finished" : ""}">
       <span class="bullet"></span>
@@ -211,9 +211,7 @@ function TodoBlock({ todo, names, hide, now }) {
         ${hide !== "requester" && requester && !sameId(requester, me) &&
         html` <span class="muted">from</span> <${PersonRef} id=${requester} names=${names} />`}
         ${typeof due === "string" &&
-        html` <span class="due ${late > 0 ? "late" : ""}">due ${shortDate(due)}${
-          late > 0 ? ` · ${late} day${late === 1 ? "" : "s"} late` : ""
-        }</span>`}
+        html` <span class="due ${late ? "late" : ""}">due ${shortDate(due)}${late ? ` · ${late}` : ""}</span>`}
         ${todo.warnings.length > 0 &&
         html` <span class="broken" title=${todo.warnings.map((w) => w.message).join("; ")}>!</span>`}
         ${error && html` <span class="field-error">${error}</span>`}
@@ -283,7 +281,7 @@ function summaryLine(list, view, now) {
   const overdue = list.groups
     .filter((g) => g.label !== "Completed")
     .flatMap((g) => g.todos)
-    .filter((t) => typeof t.fields.due === "string" && t.fields.due < now).length;
+    .filter((t) => typeof t.fields.due === "string" && daysLate(t.fields.due, now) > 0).length;
   return open ? `${open} open${overdue ? ` · ${overdue} overdue` : ""}` : "Nothing open";
 }
 

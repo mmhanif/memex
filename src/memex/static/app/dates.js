@@ -1,6 +1,6 @@
 // @ts-check
 // Dates as the redesigned screens show them, by this machine's clock: "Tuesday, 17 November",
-// "Fri 20 Nov", "2 days late".
+// "Fri 20 Nov", "2 days late" (or "2d late" on board cards).
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August",
@@ -31,14 +31,31 @@ export function daysBetween(a, b) {
 }
 
 /**
+ * Whole days `due` is past `now`: 0 when it falls today or later. Lateness is decided here,
+ * by days, never by comparing date strings. @param {string} due @param {string} now
+ */
+export function daysLate(due, now) {
+  return Math.max(0, daysBetween(due, now));
+}
+
+/**
+ * How late `due` is: "2 days late", or "2d late" where room is short (board cards); "" when
+ * it isn't late. @param {string} due @param {string} now @param {{short?: boolean}} [opts]
+ */
+export function lateLabel(due, now, { short = false } = {}) {
+  const late = daysLate(due, now);
+  if (!(late > 0)) return "";
+  return short ? `${late}d late` : `${late} day${late === 1 ? "" : "s"} late`;
+}
+
+/**
  * A due date as the Due block shows it: "2 days late", "Today" or "Fri 20 Nov".
  * @param {string} due
  * @param {string} now
  */
 export function dueLabel(due, now) {
-  const late = daysBetween(due, now);
-  if (late > 0) return `${late} day${late === 1 ? "" : "s"} late`;
-  return late === 0 ? "Today" : shortDate(due);
+  if (daysLate(due, now) > 0) return lateLabel(due, now);
+  return daysBetween(due, now) === 0 ? "Today" : shortDate(due);
 }
 
 /**

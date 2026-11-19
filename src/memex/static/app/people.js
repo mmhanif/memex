@@ -6,7 +6,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { describe } from "./api.js";
 import { Avatar } from "./avatar.js";
-import { daysBetween, dueLabel, noteDay, shortDate } from "./dates.js";
+import { daysLate, dueLabel, lateLabel, noteDay, shortDate } from "./dates.js";
 import { BodySection, Properties, Title, Warnings, closeBody } from "./entity.js";
 import { isFinished, typeLabel, useCandidates, writeField } from "./fields.js";
 import { Icon } from "./icons.js";
@@ -342,12 +342,12 @@ function TaggedRow({ tagged }) {
   const { item, roles } = tagged;
   const { status, due } = item.fields;
   const now = today();
-  const late = typeof due === "string" && !finished(item) && daysBetween(due, now) > 0;
+  const late = typeof due === "string" && !finished(item) && daysLate(due, now) > 0;
   const state =
     status === "blocked"
       ? html`<span class="alarm">blocked</span>`
       : late
-        ? html`<span class="alarm">${dueLabel(due, now)}</span>`
+        ? html`<span class="alarm">${lateLabel(due, now)}</span>`
         : typeof status === "string" && status.replace(/-/g, " ");
   return html`
     <div class="person-row">
@@ -378,14 +378,14 @@ function PersonTodo({ todo, names, hide }) {
   const now = today();
   const me = meId();
   const name = (/** @type {string} */ id) => names[id] ?? resolveMention(id)?.title ?? id;
-  const late = typeof due === "string" && !done && daysBetween(due, now) > 0;
+  const late = typeof due === "string" && !done && daysLate(due, now) > 0;
   /** @type {any[]} */
   const meta = [];
   if (done) {
     const day = typeof completed === "string" ? (completed === now ? "today" : shortDate(completed)) : "";
     meta.push(status === "cancelled" ? "cancelled" : `done ${day}`.trim());
   } else if (typeof due === "string") {
-    meta.push(late ? html`<span class="alarm">${dueLabel(due, now)}</span>` : `due ${dueLabel(due, now)}`);
+    meta.push(late ? html`<span class="alarm">${lateLabel(due, now)}</span>` : `due ${dueLabel(due, now)}`);
   }
   if (hide !== "owner" && typeof owner === "string" && !sameId(owner, me)) {
     meta.push(html`→ <a href=${personHref(owner)}>${name(owner)}</a>`);
