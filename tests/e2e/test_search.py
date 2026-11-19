@@ -126,3 +126,23 @@ def test_palette_command_matching_ignores_marks_outside_the_latin_combining_bloc
         "async () => (await import('/static/app/palette.js')).commandScore('dav', 'Da\\u1dc4vid')"
     )
     assert score == 1
+
+
+def test_palette_title_highlight_swallows_marks_that_fold_away(
+    app: Page, server: AppState, root: Path
+):
+    # Hebrew niqqud fold away, so "דוד" matches "דָּוִד" and its <mark> covers the whole name;
+    # "jose" matches a decomposed "josé" (e + U+0301) up to and including the accent (#65).
+    david = "\u05d3\u05b8\u05bc\u05d5\u05b4\u05d3"
+    put(root, "notes/david.md", f"---\ntitle: {david} plan\n---\nBody.\n")
+    put(root, "notes/jose.md", "---\ntitle: Meet Jose\u0301 Ruiz\n---\nBody.\n")
+    app.keyboard.press("Control+k")
+    box = app.get_by_label("Search or run a command")
+
+    box.fill("\u05d3\u05d5\u05d3")
+    row = app.locator(".palette-row", has_text=f"{david} plan")
+    expect(row.locator("mark")).to_have_text(david)
+
+    box.fill("jose")
+    row = app.locator(".palette-row", has_text="Meet Jose\u0301 Ruiz")
+    expect(row.locator("mark")).to_have_text("Jose\u0301")

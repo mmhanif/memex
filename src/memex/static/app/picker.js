@@ -6,7 +6,7 @@ import { useState } from "preact/hooks";
 import { Avatar } from "./avatar.js";
 import { Icon } from "./icons.js";
 import { html } from "./state.js";
-import { fold } from "./text.js";
+import { fold, folding } from "./text.js";
 
 /**
  * @typedef {import("./fields.js").Summary} Summary
@@ -41,9 +41,11 @@ function matching(people, query, exclude) {
  */
 function Highlighted({ text, query }) {
   const q = fold(query.trim());
-  const at = q ? fold(text).indexOf(q) : -1;
+  const f = folding(text);
+  const at = q ? f.folded.indexOf(q) : -1;
   if (at < 0) return text;
-  return html`${text.slice(0, at)}<mark>${text.slice(at, at + q.length)}</mark>${text.slice(at + q.length)}`;
+  const [start, end] = f.span(at, at + q.length);
+  return html`${text.slice(0, start)}<mark>${text.slice(start, end)}</mark>${text.slice(end)}`;
 }
 
 /**

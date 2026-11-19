@@ -11,7 +11,7 @@ import { typeLabel } from "./fields.js";
 import { Icon } from "./icons.js";
 import { entityHref, fileHref, navigate } from "./router.js";
 import { html, viewVersion } from "./state.js";
-import { fold } from "./text.js";
+import { fold, folding } from "./text.js";
 
 /**
  * @typedef {{text: string, highlights: [number, number][]}} Snippet
@@ -202,7 +202,7 @@ export function hitLine(hit) {
  * @returns {[number, number][]}
  */
 export function wordMatches(text, q) {
-  const folded = [...text].map((c) => fold(c).charAt(0) || c).join("");
+  const { folded, span } = folding(text);
   const words = q.replace(/"/g, " ").split(/\s+/)
     .filter((w) => w && !w.includes(":") && !/^[@<>]/.test(w) && !/^due[<>]/i.test(w))
     .map(fold);
@@ -210,7 +210,7 @@ export function wordMatches(text, q) {
   const spans = [];
   for (const word of words) {
     for (let at = folded.indexOf(word); at >= 0; at = folded.indexOf(word, at + 1)) {
-      if (at === 0 || !/[a-z0-9]/.test(folded[at - 1])) spans.push([at, at + word.length]);
+      if (at === 0 || !/[a-z0-9]/.test(folded[at - 1])) spans.push(span(at, at + word.length));
     }
   }
   spans.sort((a, b) => a[0] - b[0]);

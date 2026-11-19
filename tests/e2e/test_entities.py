@@ -273,6 +273,8 @@ def test_person_picker_ignores_marks_outside_the_latin_combining_block(
     options = dialog.locator(".picker-popover").get_by_role("option")
     expect(options).to_have_count(1)
     expect(options).to_contain_text(david)
+    # Folding drops the marks, so the <mark> must still wrap the whole name (#65).
+    expect(options.locator("mark")).to_have_text(david)
 
 
 def test_a_childs_lead_avatar_is_dark_for_me_and_names_its_person(
