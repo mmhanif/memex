@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { describe, request } from "./api.js";
 import { daysBetween, dayMonth, dueLabel, shortDate } from "./dates.js";
+import { useDismiss } from "./dismiss.js";
 import { FIELDS, FieldInput, WORK_STATUSES, initials, useCandidates, writeField } from "./fields.js";
 import { Icon } from "./icons.js";
 import { entityHref, navigate } from "./router.js";
@@ -217,14 +218,9 @@ function StatusMenu({ item, readOnly, onPick, variant }) {
   const [open, setOpen] = useState(false);
   const box = useRef(/** @type {HTMLDivElement | null} */ (null));
   const status = item.fields.status;
+  useDismiss(box, open, () => setOpen(false));
   useEffect(() => {
-    if (!open) return;
-    // Close on a click anywhere else, as a menu would.
-    /** @param {MouseEvent} e */
-    const away = (e) => !box.current?.contains(/** @type {Node} */ (e.target)) && setOpen(false);
-    document.addEventListener("mousedown", away);
-    box.current?.querySelector(/** @type {"button"} */ ('[aria-checked="true"]'))?.focus();
-    return () => document.removeEventListener("mousedown", away);
+    if (open) box.current?.querySelector(/** @type {"button"} */ ('[aria-checked="true"]'))?.focus();
   }, [open]);
   const label = `Status of ${item.title}`;
   /** @param {string} s */
@@ -241,8 +237,7 @@ function StatusMenu({ item, readOnly, onPick, variant }) {
     ${s === "cancelled" && variant === "pill" && html`<span class="item-hint">hides card</span>`}
   </button></li>`;
   return html`
-    <div class="status-menu ${variant}" ref=${box}
-      onKeyDown=${(/** @type {KeyboardEvent} */ e) => e.key === "Escape" && setOpen(false)}>
+    <div class="status-menu ${variant}" ref=${box}>
       <button type="button" class="status-button ${status === "blocked" ? "blocked" : ""}" aria-label=${label}
         aria-haspopup="menu" aria-expanded=${open} disabled=${readOnly || item.ambiguous}
         onClick=${() => setOpen(!open)}>
@@ -509,11 +504,8 @@ function Cell({ item, spec, names, locked, editor }) {
     const details = el?.querySelector("details");
     if (details) details.open = true;
     /** @type {HTMLElement | null | undefined} */ (el?.querySelector("input, select, summary"))?.focus();
-    /** @param {MouseEvent} e */
-    const away = (e) => !el?.contains(/** @type {Node} */ (e.target)) && setEditing(false);
-    document.addEventListener("mousedown", away);
-    return () => document.removeEventListener("mousedown", away);
   }, [editing]);
+  useDismiss(box, editing, () => setEditing(false));
   const shown = html`<${CellValue} item=${item} name=${spec.name} names=${names} />`;
   if (locked) return html`<div class="cell-value">${shown}</div>`;
   if (!editing) {
@@ -521,7 +513,6 @@ function Cell({ item, spec, names, locked, editor }) {
       onClick=${() => setEditing(true)}>${shown}</button>`;
   }
   return html`<div class="cell-editor" ref=${box}
-    onKeyDown=${(/** @type {KeyboardEvent} */ e) => e.key === "Escape" && setEditing(false)}
     onFocusOut=${(/** @type {FocusEvent} */ e) => {
       const next = /** @type {Node | null} */ (e.relatedTarget);
       if (next && !box.current?.contains(next)) setEditing(false);

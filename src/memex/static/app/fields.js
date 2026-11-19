@@ -4,6 +4,7 @@
 
 import { useEffect, useRef, useState } from "preact/hooks";
 import { ApiError, describe, request } from "./api.js";
+import { useDismiss } from "./dismiss.js";
 import { entityHref } from "./router.js";
 import { html, viewVersion } from "./state.js";
 
@@ -263,16 +264,10 @@ function RefChecklist(props) {
   const options = choices(props, "");
   const title = (/** @type {string} */ v) => names?.[v] ?? options.find((c) => c.id === v)?.title ?? v;
   const box = useRef(/** @type {HTMLDetailsElement | null} */ (null));
-  useEffect(() => {
-    // Close on a click anywhere else, as a menu would.
-    /** @param {MouseEvent} e */
-    const away = (e) => {
-      const el = box.current;
-      if (el?.open && !el.contains(/** @type {Node} */ (e.target))) el.open = false;
-    };
-    document.addEventListener("mousedown", away);
-    return () => document.removeEventListener("mousedown", away);
-  }, []);
+  // The <details> keeps its own open state, so listen always and close only if open.
+  useDismiss(box, true, () => {
+    if (box.current?.open) box.current.open = false;
+  });
   /** @param {string} v @param {boolean} on */
   const toggle = (v, on) => {
     const next = on ? [...list, v] : list.filter((x) => x !== v);
