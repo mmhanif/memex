@@ -7,6 +7,7 @@ import { signal } from "@preact/signals";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { ApiError, describe, request } from "./api.js";
 import { openCapture } from "./capture.js";
+import { useDismiss } from "./dismiss.js";
 import { typeLabel, useCandidates } from "./fields.js";
 import { Icon } from "./icons.js";
 import { entityHref, fileHref, navigate } from "./router.js";
@@ -66,14 +67,7 @@ function entityUrl(target) {
 export function Actions({ detail, readOnly, openFile = false }) {
   const [open, setOpen] = useState(false);
   const box = useRef(/** @type {HTMLDivElement | null} */ (null));
-  useEffect(() => {
-    if (!open) return;
-    // Close on a click anywhere else, as a menu would.
-    /** @param {MouseEvent} e */
-    const away = (e) => !box.current?.contains(/** @type {Node} */ (e.target)) && setOpen(false);
-    document.addEventListener("mousedown", away);
-    return () => document.removeEventListener("mousedown", away);
-  }, [open]);
+  useDismiss(box, open, () => setOpen(false));
   const isMe = sameId(meId() ?? "", detail.id);
   const todos = detail.unconverted_todos ?? 0;
   /** @param {LifecycleRequest["kind"]} kind */
@@ -89,7 +83,7 @@ export function Actions({ detail, readOnly, openFile = false }) {
         <${Icon} name="ellipsis" />
       </button>
       ${open &&
-      html`<ul class="menu popover" role="menu" onKeyDown=${(/** @type {KeyboardEvent} */ e) => e.key === "Escape" && setOpen(false)}>
+      html`<ul class="menu popover" role="menu">
         ${!readOnly && todos > 0 &&
         html`<li><button type="button" role="menuitem" class="popover-item" onClick=${() => {
           setOpen(false);

@@ -5,8 +5,8 @@
 
 import { useEffect, useRef, useState } from "preact/hooks";
 import { describe, request } from "./api.js";
-import { daysBetween, shortDate } from "./dates.js";
-import { writeField } from "./fields.js";
+import { daysLate, isLate, lateLabel, shortDate } from "./dates.js";
+import { isFinished, writeField } from "./fields.js";
 import { Icon } from "./icons.js";
 import { entityHref, personHref } from "./router.js";
 import { html, meId, reloadTree, sameId, useView, viewVersion } from "./state.js";
@@ -45,7 +45,7 @@ const BY_DUE = [
  * @param {string} due
  */
 export function isOverdue(due) {
-  return due < today();
+  return daysLate(due, today()) > 0;
 }
 
 /** Today on this machine, `YYYY-MM-DD`. */
@@ -62,7 +62,7 @@ export function today() {
  */
 export async function toggleTodo(todo) {
   const { status } = todo.fields;
-  const error = await writeField(todo, "status", status === "done" || status === "cancelled" ? "open" : "done");
+  const error = await writeField(todo, "status", isFinished(status) ? "open" : "done");
   viewVersion.value += 1;
   return error;
 }
@@ -194,8 +194,8 @@ function TodoBlock({ todo, names, hide, now }) {
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const me = meId();
   const { owner, requester, status, due } = todo.fields;
-  const finished = status === "done" || status === "cancelled";
-  const late = typeof due === "string" && !finished ? daysBetween(due, now) : 0;
+  const finished = isFinished(status);
+  const lateText = typeof due === "string" && !finished ? lateLabel(due, now) : "";
   return html`
     <div class="block-row todo-block ${finished ? "finished" : ""}">
       <span class="bullet"></span>
@@ -211,9 +211,7 @@ function TodoBlock({ todo, names, hide, now }) {
         ${hide !== "requester" && requester && !sameId(requester, me) &&
         html` <span class="muted">from</span> <${PersonRef} id=${requester} names=${names} />`}
         ${typeof due === "string" &&
-        html` <span class="due ${late > 0 ? "late" : ""}">due ${shortDate(due)}${
-          late > 0 ? ` · ${late} day${late === 1 ? "" : "s"} late` : ""
-        }</span>`}
+        html` <span class="due ${lateText ? "late" : ""}">due ${shortDate(due)}${lateText ? ` · ${lateText}` : ""}</span>`}
         ${todo.warnings.length > 0 &&
         html` <span class="broken" title=${todo.warnings.map((w) => w.message).join("; ")}>!</span>`}
         ${error && html` <span class="field-error">${error}</span>`}
@@ -283,7 +281,7 @@ function summaryLine(list, view, now) {
   const overdue = list.groups
     .filter((g) => g.label !== "Completed")
     .flatMap((g) => g.todos)
-    .filter((t) => typeof t.fields.due === "string" && t.fields.due < now).length;
+    .filter((t) => isLate(t.fields.due, now)).length;
   return open ? `${open} open${overdue ? ` · ${overdue} overdue` : ""}` : "Nothing open";
 }
 

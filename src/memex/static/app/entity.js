@@ -5,11 +5,12 @@
 
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { ApiError, describe, request } from "./api.js";
+import { Avatar } from "./avatar.js";
 import { CaptureBar, openCapture } from "./capture.js";
 import { lineSuffix } from "./banners.js";
-import { dayDate, dueLabel, noteDay, shortDate } from "./dates.js";
+import { dayDate, dueLabel, isLate, lateLabel, noteDay, shortDate } from "./dates.js";
 import { BodyDoc } from "./doc.js";
-import { FIELDS, FieldInput, initials, typeLabel, useCandidates, writeField } from "./fields.js";
+import { FIELDS, FieldInput, isFinished, typeLabel, useCandidates, writeField } from "./fields.js";
 import { RawText } from "./files.js";
 import { Icon } from "./icons.js";
 import { Actions, ArchivedBar } from "./lifecycle.js";
@@ -169,7 +170,7 @@ export function BodySection({ detail, readOnly, editing: controlled }) {
     const box = /** @type {HTMLInputElement} */ (e.target);
     const todo = todos.get(box.dataset.todo?.toLowerCase() ?? "");
     if (!todo) return;
-    const finished = ["done", "cancelled"].includes(todo.fields.status);
+    const finished = isFinished(todo.fields.status);
     const failed = await writeField(todo, "status", finished ? "open" : "done");
     if (failed) box.checked = finished; // the same HTML won't be re-applied, so put it back
     setError(failed);
@@ -206,7 +207,7 @@ export function BodySection({ detail, readOnly, editing: controlled }) {
 function todoRow(todo) {
   if (!todo) return null;
   const { status, owner, due } = todo.fields;
-  const finished = status === "done" || status === "cancelled";
+  const finished = isFinished(status);
   const meta = [];
   if (status === "cancelled") meta.push({ class: "status status-cancelled", text: "cancelled" });
   if (owner && !sameId(owner, meId())) meta.push({ class: "party", text: resolveMention(owner)?.title ?? owner });
@@ -479,7 +480,7 @@ function ChildSection({ detail, type }) {
     <${Section} title=${type === "project" ? "Projects" : "Deliverables"} count=${detail.children.length}>
       ${detail.children.map((c) => {
         const { status, lead, due } = c.fields;
-        const late = typeof due === "string" && due < now && !["done", "cancelled"].includes(status);
+        const late = isLate(due, now) && !isFinished(status);
         return html`<div class="child-row" key=${c.id}>
           <span class="bullet" aria-hidden="true"></span>
           <a class="child-title" href=${entityHref(c.id, c.type)}>${c.title}</a>
@@ -488,7 +489,7 @@ function ChildSection({ detail, type }) {
           </span>
           <span class="child-lead">
             ${typeof lead === "string" &&
-            html`<span class="avatar">${initials(personName(lead))}</span>${personName(lead).split(" ")[0]}`}
+            html`<${Avatar} id=${lead} name=${personName(lead)} />${personName(lead).split(" ")[0]}`}
           </span>
           <span class="child-due ${late ? "late" : ""}">${typeof due === "string" && dueLabel(due, now)}</span>
         </div>`;
@@ -512,7 +513,7 @@ function statusLabel(status) {
  */
 function TodoSection({ detail }) {
   const [showDone, setShowDone] = useState(false);
-  const finished = (/** @type {Summary} */ t) => ["done", "cancelled"].includes(t.fields.status);
+  const finished = (/** @type {Summary} */ t) => isFinished(t.fields.status);
   const open = detail.todos.filter((t) => !finished(t));
   const done = detail.todos.length - open.length;
   const shown = showDone ? detail.todos : open;
@@ -531,7 +532,7 @@ function TodoSection({ detail }) {
 function AboutTodo({ todo }) {
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const { status, owner, due } = todo.fields;
-  const finished = status === "done" || status === "cancelled";
+  const finished = isFinished(status);
   const late = typeof due === "string" && !finished && isOverdue(due);
   return html`
     <div class="todo-line ${finished ? "finished" : ""}">
@@ -544,7 +545,7 @@ function AboutTodo({ todo }) {
         ${error && html`<span class="field-error">${error}</span>`}
       </span>
       ${typeof due === "string"
-        ? html`<span class="todo-due ${late ? "late" : ""}">${late ? "" : "due "}${dueLabel(due, today())}</span>`
+        ? html`<span class="todo-due ${late ? "late" : ""}">${late ? lateLabel(due, today()) : `due ${dueLabel(due, today())}`}</span>`
         : html`<span class="todo-due none">no due date</span>`}
     </div>
   `;

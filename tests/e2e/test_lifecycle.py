@@ -84,3 +84,22 @@ def test_archive_from_the_entity_page_then_unarchive(app: Page, server: AppState
     app.get_by_role("button", name="Unarchive").click()
     expect(app.get_by_text("Archived on")).to_have_count(0)
     wait_for_disk(root / "themes/old.md", "---\ntitle: Old theme\n---\n")
+
+
+def test_the_actions_menu_closes_on_escape_and_on_a_click_elsewhere(
+    app: Page, server: AppState, root: Path
+):
+    put(root, "projects/dmig.md", "---\ntitle: Data migration\nstatus: active\n---\n")
+    app.goto(f"{origin(server)}/#/e/dmig")
+    actions = app.get_by_role("button", name="Actions")
+    menu = app.get_by_role("menu")
+
+    actions.click()
+    expect(menu).to_be_visible()
+    app.keyboard.press("Escape")  # focus is still on the button, not in the menu
+    expect(menu).to_be_hidden()
+
+    actions.click()
+    expect(menu).to_be_visible()
+    app.get_by_label("Title").click()
+    expect(menu).to_be_hidden()

@@ -4,6 +4,8 @@
 
 import { useEffect, useRef, useState } from "preact/hooks";
 import { ApiError, describe, request } from "./api.js";
+import { Avatar } from "./avatar.js";
+import { useDismiss } from "./dismiss.js";
 import { entityHref } from "./router.js";
 import { html, viewVersion } from "./state.js";
 
@@ -41,6 +43,11 @@ export function typeLabel(type) {
 
 export const WORK_STATUSES = ["not-started", "active", "on-hold", "blocked", "done", "cancelled"];
 const TODO_STATUSES = ["open", "done", "cancelled"];
+
+/** Done or cancelled: the statuses that take work or a To-do off the open list. @param {unknown} status */
+export function isFinished(status) {
+  return status === "done" || status === "cancelled";
+}
 const WORK = ["theme", "project", "deliverable"];
 
 /** @type {(name: string, label: string) => FieldSpec} */
@@ -263,16 +270,10 @@ function RefChecklist(props) {
   const options = choices(props, "");
   const title = (/** @type {string} */ v) => names?.[v] ?? options.find((c) => c.id === v)?.title ?? v;
   const box = useRef(/** @type {HTMLDetailsElement | null} */ (null));
-  useEffect(() => {
-    // Close on a click anywhere else, as a menu would.
-    /** @param {MouseEvent} e */
-    const away = (e) => {
-      const el = box.current;
-      if (el?.open && !el.contains(/** @type {Node} */ (e.target))) el.open = false;
-    };
-    document.addEventListener("mousedown", away);
-    return () => document.removeEventListener("mousedown", away);
-  }, []);
+  // The <details> keeps its own open state, so listen always and close only if open.
+  useDismiss(box, true, () => {
+    if (box.current?.open) box.current.open = false;
+  });
   /** @param {string} v @param {boolean} on */
   const toggle = (v, on) => {
     const next = on ? [...list, v] : list.filter((x) => x !== v);
@@ -283,7 +284,7 @@ function RefChecklist(props) {
       <summary class=${disabled ? "disabled" : ""} aria-label=${props.ariaLabel}>
         ${list.length
           ? list.map((v) => html`<span class="chip ${broken?.has(v) ? "broken" : ""}" title=${title(v)}>
-              <span class="avatar">${initials(title(v))}</span>${title(v)}
+              <${Avatar} id=${v} name=${title(v)} />${title(v)}
             </span>`)
           : html`<span class="muted">None</span>`}
       </summary>
@@ -300,12 +301,6 @@ function RefChecklist(props) {
       </div>`}
     </details>
   `;
-}
-
-/** @param {string} name */
-export function initials(name) {
-  const words = name.split(/[\s-]+/).filter(Boolean);
-  return (words.length > 1 ? words[0][0] + words[words.length - 1][0] : name.slice(0, 2)).toUpperCase();
 }
 
 /** @param {InputProps} props */

@@ -5,9 +5,10 @@
 
 import { useEffect, useState } from "preact/hooks";
 import { describe } from "./api.js";
-import { daysBetween, dueLabel, noteDay, shortDate } from "./dates.js";
+import { Avatar } from "./avatar.js";
+import { dueLabel, isLate, lateLabel, noteDay, shortDate } from "./dates.js";
 import { BodySection, Properties, Title, Warnings, closeBody } from "./entity.js";
-import { initials, typeLabel, useCandidates, writeField } from "./fields.js";
+import { isFinished, typeLabel, useCandidates, writeField } from "./fields.js";
 import { Icon } from "./icons.js";
 import { Actions, ArchivedBar } from "./lifecycle.js";
 import { openNew } from "./newform.js";
@@ -126,7 +127,7 @@ function PeopleBody({ people }) {
                 (s) => html`<tr key=${s.person.id}>
                   <td>
                     <span class="stakeholder-name">
-                      <span class="avatar stakeholder" aria-hidden="true">${initials(s.person.title)}</span>
+                      <${Avatar} person=${s.person} kind="stakeholder" />
                       <a href=${personHref(s.person.id)}>${s.person.title}</a>
                       ${s.person.fields.archived && html`<span class="status status-cancelled">archived</span>`}
                     </span>
@@ -190,7 +191,7 @@ function OrgPerson({ person, waiting, me = false, reports = 0, reportsTo = false
     .join(" · ");
   const counts = waiting[person.id];
   return html`
-    <span class="avatar ${me ? "me" : ""}" aria-hidden="true">${initials(person.title)}</span>
+    <${Avatar} person=${person} />
     <a class="org-name" href=${personHref(person.id)}>${person.title}</a>
     ${meta && html`<span class="org-meta">${meta}</span>`}
     ${archived && html`<span class="status status-cancelled">archived</span>`}
@@ -236,7 +237,7 @@ export function PersonPage({ id }) {
   return html`
     <article class="entity person-view">
       <header class="entity-head person-head">
-        <span class="avatar person-avatar" aria-hidden="true">${initials(name)}</span>
+        <${Avatar} person=${person} size="large" />
         <div class="person-name">
           <p class="eyebrow">${personEyebrow(person)}</p>
           <${Title} detail=${person} readOnly=${readOnly} onSaved=${reload} />
@@ -317,7 +318,7 @@ function personEyebrow(person) {
 
 /** @param {Summary} item */
 function finished(item) {
-  return ["done", "cancelled"].includes(item.fields.status);
+  return isFinished(item.fields.status);
 }
 
 /**
@@ -341,12 +342,12 @@ function TaggedRow({ tagged }) {
   const { item, roles } = tagged;
   const { status, due } = item.fields;
   const now = today();
-  const late = typeof due === "string" && !finished(item) && daysBetween(due, now) > 0;
+  const late = !finished(item) && isLate(due, now);
   const state =
     status === "blocked"
       ? html`<span class="alarm">blocked</span>`
       : late
-        ? html`<span class="alarm">${dueLabel(due, now)}</span>`
+        ? html`<span class="alarm">${lateLabel(due, now)}</span>`
         : typeof status === "string" && status.replace(/-/g, " ");
   return html`
     <div class="person-row">
@@ -377,14 +378,14 @@ function PersonTodo({ todo, names, hide }) {
   const now = today();
   const me = meId();
   const name = (/** @type {string} */ id) => names[id] ?? resolveMention(id)?.title ?? id;
-  const late = typeof due === "string" && !done && daysBetween(due, now) > 0;
+  const late = !done && isLate(due, now);
   /** @type {any[]} */
   const meta = [];
   if (done) {
     const day = typeof completed === "string" ? (completed === now ? "today" : shortDate(completed)) : "";
     meta.push(status === "cancelled" ? "cancelled" : `done ${day}`.trim());
   } else if (typeof due === "string") {
-    meta.push(late ? html`<span class="alarm">${dueLabel(due, now)}</span>` : `due ${dueLabel(due, now)}`);
+    meta.push(late ? html`<span class="alarm">${lateLabel(due, now)}</span>` : `due ${dueLabel(due, now)}`);
   }
   if (hide !== "owner" && typeof owner === "string" && !sameId(owner, me)) {
     meta.push(html`→ <a href=${personHref(owner)}>${name(owner)}</a>`);

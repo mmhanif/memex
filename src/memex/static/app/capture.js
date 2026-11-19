@@ -7,11 +7,12 @@
 import { signal } from "@preact/signals";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { ApiError, describe, request } from "./api.js";
+import { Avatar } from "./avatar.js";
 import { shortDate } from "./dates.js";
 import { BodyDoc } from "./doc.js";
-import { FIELDS, FieldInput, initials, typeLabel, useCandidates } from "./fields.js";
+import { FIELDS, FieldInput, typeLabel, useCandidates } from "./fields.js";
 import { Icon } from "./icons.js";
-import { Avatar, PersonPicker } from "./picker.js";
+import { PersonPicker } from "./picker.js";
 import { entityHref } from "./router.js";
 import { html, meId, openDoc, reloadTree, sameId, viewVersion } from "./state.js";
 
@@ -323,7 +324,7 @@ function shown(name, value, names, candidates) {
   if (name === "due") return shortDate(value);
   if (name === "about") return html`<span class="capture-ref">${title}</span>`;
   const me = sameId(value, meId());
-  return html`${found ? html`<${Avatar} person=${found} />` : html`<span class="avatar ${me ? "me" : ""}">${initials(title)}</span>`}${" "}<span
+  return html`<${Avatar} person=${found} id=${value} name=${title} />${" "}<span
     class="capture-name ${me ? "me" : ""}">${me ? "Me" : title}</span>`;
 }
 

@@ -1942,7 +1942,7 @@ button.add-row .icon { width: 16px; height: 12px; }
  */
 .entity.person-view { max-width: 1000px; margin: 0 auto; padding: 24px 16px 48px; box-sizing: content-box; }
 .person-head { align-items: flex-end; gap: 18px; padding: 0 0 20px 30px; }
-.avatar.person-avatar { width: 64px; height: 64px; background: var(--link-tint); color: var(--link); font-size: 22px; line-height: 26px; letter-spacing: -0.02em; }
+.avatar.large { width: 64px; height: 64px; background: var(--link-tint); color: var(--link); font-size: 22px; line-height: 26px; letter-spacing: -0.02em; }
 .person-name { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 6px; }
 .person-name .eyebrow { margin: 0; }
 .person-name .entity-title input {

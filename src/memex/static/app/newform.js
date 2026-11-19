@@ -6,6 +6,7 @@
 import { signal } from "@preact/signals";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { ApiError, describe, request } from "./api.js";
+import { useDismiss } from "./dismiss.js";
 import { FIELDS, FieldInput, typeLabel, useCandidates } from "./fields.js";
 import { Icon } from "./icons.js";
 import { renderMarkdown } from "./markdown.js";
@@ -288,11 +289,8 @@ function TemplatePicker({ templates, value, onChange, onManage }) {
   useEffect(() => {
     if (!open) return;
     list.current?.querySelector(/** @type {"li"} */ ("[aria-selected=true]"))?.focus();
-    /** @param {MouseEvent} e */
-    const away = (e) => box.current?.contains(/** @type {Node} */ (e.target)) || setOpen(false);
-    document.addEventListener("mousedown", away);
-    return () => document.removeEventListener("mousedown", away);
   }, [open]);
+  useDismiss(box, open, () => setOpen(false));
 
   /** @param {TemplateInfo} t */
   function pick(t) {

@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { BannerStrip } from "./banners.js";
 import { BookmarkLink, BookmarksPage } from "./bookmarks.js";
 import { Dashboard } from "./dashboard.js";
+import { useDismiss } from "./dismiss.js";
 import { EntityPage } from "./entity.js";
 import { TYPES } from "./fields.js";
 import { FilesPage } from "./files.js";
@@ -206,14 +207,11 @@ function SaveStatus({ doc }) {
 }
 
 /**
- * `N` opens the New… menu, unless the user is typing or a dialog is open; Escape closes it.
+ * `N` opens the New… menu, unless the user is typing or a dialog is open (Escape closes
+ * it, via the menu's useDismiss).
  * @param {KeyboardEvent} e
  */
 function onShortcut(e) {
-  if (e.key === "Escape" && newMenuOpen.value) {
-    newMenuOpen.value = false;
-    return;
-  }
   if (e.key !== "n" && e.key !== "N") return;
   if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
   const target = /** @type {HTMLElement | null} */ (e.target);
@@ -256,14 +254,11 @@ function NewMenu() {
       });
       setVariants(found);
     });
-    /** @param {MouseEvent} e */
-    const away = (e) => box.current?.contains(/** @type {Node} */ (e.target)) || (newMenuOpen.value = false);
-    document.addEventListener("mousedown", away);
     return () => {
       cancelled = true;
-      document.removeEventListener("mousedown", away);
     };
   }, [open]);
+  useDismiss(box, open, () => (newMenuOpen.value = false));
 
   /** @param {string} type @param {string} [template] */
   const create = (type, template) => {

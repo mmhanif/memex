@@ -7,6 +7,7 @@ from playwright.sync_api import Page, expect
 from memex.web.app import AppState
 from tests.e2e.conftest import origin
 from tests.e2e.test_editor import put
+from tests.fold_cases import FOLD_CASES
 
 PROJECT = "---\ntitle: Data migration\nstatus: active\n---\nMove the warehouse.\n"
 
@@ -126,3 +127,44 @@ def test_palette_command_matching_ignores_marks_outside_the_latin_combining_bloc
         "async () => (await import('/static/app/palette.js')).commandScore('dav', 'Da\\u1dc4vid')"
     )
     assert score == 1
+
+
+def test_browser_fold_agrees_with_the_server_on_the_shared_cases(app: Page):
+    # The browser and the server fold by one rule (#66); tests/core/test_names.py checks
+    # the same cases against the server.
+    texts = [text for text, _ in FOLD_CASES]
+    folded = app.evaluate(
+        "async (texts) => { const { fold } = await import('/static/app/text.js');"
+        " return texts.map(fold); }",
+        texts,
+    )
+    assert list(zip(texts, folded, strict=True)) == FOLD_CASES
+
+
+def test_palette_highlights_a_sharp_s_title_found_by_ss(app: Page, server: AppState, root: Path):
+    # The server finds "Straße" for "strasse"; the highlight covers it too (#66).
+    put(root, "notes/strasse.md", "---\ntitle: Hauptstraße move\n---\nBody.\n")
+    app.keyboard.press("Control+k")
+    app.get_by_label("Search or run a command").fill("hauptstrasse")
+    row = app.locator(".palette-row", has_text="Hauptstraße move")
+    expect(row.locator("mark")).to_have_text("Hauptstraße")
+
+
+def test_palette_title_highlight_swallows_marks_that_fold_away(
+    app: Page, server: AppState, root: Path
+):
+    # Hebrew niqqud fold away, so "דוד" matches "דָּוִד" and its <mark> covers the whole name;
+    # "jose" matches a decomposed "josé" (e + U+0301) up to and including the accent (#65).
+    david = "\u05d3\u05b8\u05bc\u05d5\u05b4\u05d3"
+    put(root, "notes/david.md", f"---\ntitle: {david} plan\n---\nBody.\n")
+    put(root, "notes/jose.md", "---\ntitle: Meet Jose\u0301 Ruiz\n---\nBody.\n")
+    app.keyboard.press("Control+k")
+    box = app.get_by_label("Search or run a command")
+
+    box.fill("\u05d3\u05d5\u05d3")
+    row = app.locator(".palette-row", has_text=f"{david} plan")
+    expect(row.locator("mark")).to_have_text(david)
+
+    box.fill("jose")
+    row = app.locator(".palette-row", has_text="Meet Jose\u0301 Ruiz")
+    expect(row.locator("mark")).to_have_text("Jose\u0301")

@@ -8,8 +8,10 @@
 
 import { useEffect, useRef, useState } from "preact/hooks";
 import { describe, request } from "./api.js";
-import { daysBetween, dayMonth, dueLabel, shortDate } from "./dates.js";
-import { FIELDS, FieldInput, WORK_STATUSES, initials, useCandidates, writeField } from "./fields.js";
+import { Avatar } from "./avatar.js";
+import { daysBetween, daysLate, dayMonth, isLate, lateLabel, shortDate } from "./dates.js";
+import { useDismiss } from "./dismiss.js";
+import { FIELDS, FieldInput, WORK_STATUSES, isFinished, useCandidates, writeField } from "./fields.js";
 import { Icon } from "./icons.js";
 import { entityHref, navigate } from "./router.js";
 import { html, meId, sameId, tree, useView, viewVersion } from "./state.js";
@@ -58,8 +60,6 @@ const STATUS_LABELS = /** @type {Record<string, string>} */ ({
   done: "Done",
   cancelled: "Cancelled",
 });
-
-const FINISHED = ["done", "cancelled"];
 
 /** @param {number} n @param {string} one */
 function count(n, one) {
@@ -137,9 +137,9 @@ function summaryLine(data) {
   }
   const items = data.columns.flatMap((c) => c.items);
   const now = today();
-  const open = items.filter((i) => !FINISHED.includes(i.fields.status));
+  const open = items.filter((i) => !isFinished(i.fields.status));
   const dueIn = (/** @type {Summary} */ i) => typeof i.fields.due === "string" ? daysBetween(now, i.fields.due) : null;
-  const late = open.filter((i) => (dueIn(i) ?? 0) < 0).length;
+  const late = open.filter((i) => isLate(i.fields.due, now)).length;
   const soon = open.filter((i) => { const d = dueIn(i); return d !== null && d >= 0 && d <= 7; }).length;
   return [
     count(items.length, data.kind === "deliverable" ? "Deliverable" : "Project"),
@@ -217,14 +217,9 @@ function StatusMenu({ item, readOnly, onPick, variant }) {
   const [open, setOpen] = useState(false);
   const box = useRef(/** @type {HTMLDivElement | null} */ (null));
   const status = item.fields.status;
+  useDismiss(box, open, () => setOpen(false));
   useEffect(() => {
-    if (!open) return;
-    // Close on a click anywhere else, as a menu would.
-    /** @param {MouseEvent} e */
-    const away = (e) => !box.current?.contains(/** @type {Node} */ (e.target)) && setOpen(false);
-    document.addEventListener("mousedown", away);
-    box.current?.querySelector(/** @type {"button"} */ ('[aria-checked="true"]'))?.focus();
-    return () => document.removeEventListener("mousedown", away);
+    if (open) box.current?.querySelector(/** @type {"button"} */ ('[aria-checked="true"]'))?.focus();
   }, [open]);
   const label = `Status of ${item.title}`;
   /** @param {string} s */
@@ -241,8 +236,7 @@ function StatusMenu({ item, readOnly, onPick, variant }) {
     ${s === "cancelled" && variant === "pill" && html`<span class="item-hint">hides card</span>`}
   </button></li>`;
   return html`
-    <div class="status-menu ${variant}" ref=${box}
-      onKeyDown=${(/** @type {KeyboardEvent} */ e) => e.key === "Escape" && setOpen(false)}>
+    <div class="status-menu ${variant}" ref=${box}>
       <button type="button" class="status-button ${status === "blocked" ? "blocked" : ""}" aria-label=${label}
         aria-haspopup="menu" aria-expanded=${open} disabled=${readOnly || item.ambiguous}
         onClick=${() => setOpen(!open)}>
@@ -257,13 +251,6 @@ function StatusMenu({ item, readOnly, onPick, variant }) {
       </ul>`}
     </div>
   `;
-}
-
-/** @param {{id: string, names: Record<string, string>, kind?: "stakeholder"}} props */
-function Avatar({ id, names, kind }) {
-  const name = names[id] ?? id;
-  const me = sameId(id, meId());
-  return html`<span class="avatar ${me ? "me" : ""} ${kind ?? ""}" title=${name}>${initials(name)}</span>`;
 }
 
 /** @param {{board: BoardData, readOnly: boolean}} props */
@@ -289,10 +276,10 @@ function Card({ item, names, attention, readOnly }) {
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const { status, due, lead, theme, project } = item.fields;
   const parent = item.type === "deliverable" ? project : theme;
-  const finished = FINISHED.includes(status);
+  const finished = isFinished(status);
   const now = today();
   const dueIn = typeof due === "string" ? daysBetween(now, due) : null;
-  const late = dueIn !== null && dueIn < 0 && !finished;
+  const late = !finished && isLate(due, now);
   const soon = dueIn !== null && dueIn >= 0 && dueIn <= 7 && !finished;
   return html`
     <article class="card board-card ${status === "blocked" ? "blocked" : ""} ${finished ? "finished" : ""}">
@@ -304,11 +291,10 @@ function Card({ item, names, attention, readOnly }) {
       html`<ul class="card-attention">
         ${attention.map((d) => {
           const blocked = d.fields.status === "blocked";
-          const days = typeof d.fields.due === "string" ? daysBetween(d.fields.due, now) : 0;
           return html`<li key=${d.id}>
             <span class="mini-bullet" aria-hidden="true"></span>
             <a href=${entityHref(d.id, d.type)}>${d.title}</a>${" "}
-            <span class=${blocked ? "blocked-tag" : "late"}>${blocked ? "blocked" : `${days}d late`}</span>
+            <span class=${blocked ? "blocked-tag" : "late"}>${blocked ? "blocked" : typeof d.fields.due === "string" ? lateLabel(d.fields.due, now, { short: true }) : ""}</span>
           </li>`;
         })}
       </ul>`}
@@ -316,9 +302,9 @@ function Card({ item, names, attention, readOnly }) {
         <${StatusMenu} item=${item} readOnly=${readOnly} variant="pill"
           onPick=${(/** @type {string} */ s) => void saveField(item, "status", s, setError)} />
         <span class="card-due ${late ? "late" : soon ? "soon" : ""}">
-          ${typeof due === "string" && (late ? dueLabel(due, now) : soon ? shortDate(due) : dayMonth(due))}
+          ${typeof due === "string" && (late ? lateLabel(due, now) : soon ? shortDate(due) : dayMonth(due))}
         </span>
-        ${typeof lead === "string" && lead && html`<${Avatar} id=${lead} names=${names} />`}
+        ${typeof lead === "string" && lead && html`<${Avatar} id=${lead} name=${names[lead] ?? lead} alone />`}
         ${item.warnings.length > 0 && html`<span class="broken" title=${item.warnings.map((w) => w.message).join("; ")}>!</span>`}
       </div>
       ${error && html`<span class="field-error">${error}</span>`}
@@ -439,7 +425,7 @@ function ThemeRow({ theme, projects, candidates, names, readOnly, showArchived, 
 function Row({ item, depth, candidates, names, readOnly, showArchived, open, onToggle, meta }) {
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const specs = FIELDS[item.type] ?? [];
-  const finished = FINISHED.includes(item.fields.status);
+  const finished = isFinished(item.fields.status);
   const locked = readOnly || item.ambiguous;
   /** @param {string} name @param {any} value */
   const save = (name, value) => void saveField(item, name, value, setError);
@@ -509,11 +495,8 @@ function Cell({ item, spec, names, locked, editor }) {
     const details = el?.querySelector("details");
     if (details) details.open = true;
     /** @type {HTMLElement | null | undefined} */ (el?.querySelector("input, select, summary"))?.focus();
-    /** @param {MouseEvent} e */
-    const away = (e) => !el?.contains(/** @type {Node} */ (e.target)) && setEditing(false);
-    document.addEventListener("mousedown", away);
-    return () => document.removeEventListener("mousedown", away);
   }, [editing]);
+  useDismiss(box, editing, () => setEditing(false));
   const shown = html`<${CellValue} item=${item} name=${spec.name} names=${names} />`;
   if (locked) return html`<div class="cell-value">${shown}</div>`;
   if (!editing) {
@@ -521,7 +504,6 @@ function Cell({ item, spec, names, locked, editor }) {
       onClick=${() => setEditing(true)}>${shown}</button>`;
   }
   return html`<div class="cell-editor" ref=${box}
-    onKeyDown=${(/** @type {KeyboardEvent} */ e) => e.key === "Escape" && setEditing(false)}
     onFocusOut=${(/** @type {FocusEvent} */ e) => {
       const next = /** @type {Node | null} */ (e.relatedTarget);
       if (next && !box.current?.contains(next)) setEditing(false);
@@ -534,21 +516,20 @@ function CellValue({ item, name, names }) {
   const none = html`<span class="none">—</span>`;
   if (name === "lead") {
     if (typeof value !== "string" || !value) return none;
-    return html`<span class="cell-person"><${Avatar} id=${value} names=${names} /><span class="cell-name">${names[value] ?? value}${sameId(value, meId()) && html` <span class="faint">(Me)</span>`}</span></span>`;
+    return html`<span class="cell-person"><${Avatar} id=${value} name=${names[value] ?? value} /><span class="cell-name">${names[value] ?? value}${sameId(value, meId()) && html` <span class="faint">(Me)</span>`}</span></span>`;
   }
   if (name === "team" || name === "stakeholders") {
     const list = Array.isArray(value) ? value.filter((v) => typeof v === "string") : [];
     if (!list.length) return none;
     return html`<span class="cell-avatars">${list.map(
-      (v) => html`<${Avatar} id=${v} names=${names} kind=${name === "stakeholders" ? "stakeholder" : undefined} />`,
+      (v) => html`<${Avatar} id=${v} name=${names[v] ?? v} kind=${name === "stakeholders" ? "stakeholder" : undefined} alone />`,
     )}</span>`;
   }
   if (name === "due") {
     if (typeof value !== "string" || !value) return none;
     const now = today();
-    const late = daysBetween(value, now);
-    if (late > 0 && !FINISHED.includes(item.fields.status)) {
-      return html`<span class="cell-due late">${dayMonth(value)}<span class="late-by">${dueLabel(value, now)}</span></span>`;
+    if (daysLate(value, now) > 0 && !isFinished(item.fields.status)) {
+      return html`<span class="cell-due late">${dayMonth(value)}<span class="late-by">${lateLabel(value, now)}</span></span>`;
     }
     return html`<span class="cell-due">${dayMonth(value)}</span>`;
   }
