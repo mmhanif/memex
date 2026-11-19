@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { describe, request } from "./api.js";
 import { daysBetween, shortDate } from "./dates.js";
-import { writeField } from "./fields.js";
+import { isFinished, writeField } from "./fields.js";
 import { Icon } from "./icons.js";
 import { entityHref, personHref } from "./router.js";
 import { html, meId, reloadTree, sameId, useView, viewVersion } from "./state.js";
@@ -62,7 +62,7 @@ export function today() {
  */
 export async function toggleTodo(todo) {
   const { status } = todo.fields;
-  const error = await writeField(todo, "status", status === "done" || status === "cancelled" ? "open" : "done");
+  const error = await writeField(todo, "status", isFinished(status) ? "open" : "done");
   viewVersion.value += 1;
   return error;
 }
@@ -194,7 +194,7 @@ function TodoBlock({ todo, names, hide, now }) {
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const me = meId();
   const { owner, requester, status, due } = todo.fields;
-  const finished = status === "done" || status === "cancelled";
+  const finished = isFinished(status);
   const late = typeof due === "string" && !finished ? daysBetween(due, now) : 0;
   return html`
     <div class="block-row todo-block ${finished ? "finished" : ""}">

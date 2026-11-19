@@ -11,7 +11,7 @@ import { describe, request } from "./api.js";
 import { Avatar } from "./avatar.js";
 import { daysBetween, dayMonth, dueLabel, shortDate } from "./dates.js";
 import { useDismiss } from "./dismiss.js";
-import { FIELDS, FieldInput, WORK_STATUSES, useCandidates, writeField } from "./fields.js";
+import { FIELDS, FieldInput, WORK_STATUSES, isFinished, useCandidates, writeField } from "./fields.js";
 import { Icon } from "./icons.js";
 import { entityHref, navigate } from "./router.js";
 import { html, meId, sameId, tree, useView, viewVersion } from "./state.js";
@@ -61,7 +61,6 @@ const STATUS_LABELS = /** @type {Record<string, string>} */ ({
   cancelled: "Cancelled",
 });
 
-const FINISHED = ["done", "cancelled"];
 
 /** @param {number} n @param {string} one */
 function count(n, one) {
@@ -139,7 +138,7 @@ function summaryLine(data) {
   }
   const items = data.columns.flatMap((c) => c.items);
   const now = today();
-  const open = items.filter((i) => !FINISHED.includes(i.fields.status));
+  const open = items.filter((i) => !isFinished(i.fields.status));
   const dueIn = (/** @type {Summary} */ i) => typeof i.fields.due === "string" ? daysBetween(now, i.fields.due) : null;
   const late = open.filter((i) => (dueIn(i) ?? 0) < 0).length;
   const soon = open.filter((i) => { const d = dueIn(i); return d !== null && d >= 0 && d <= 7; }).length;
@@ -278,7 +277,7 @@ function Card({ item, names, attention, readOnly }) {
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const { status, due, lead, theme, project } = item.fields;
   const parent = item.type === "deliverable" ? project : theme;
-  const finished = FINISHED.includes(status);
+  const finished = isFinished(status);
   const now = today();
   const dueIn = typeof due === "string" ? daysBetween(now, due) : null;
   const late = dueIn !== null && dueIn < 0 && !finished;
@@ -428,7 +427,7 @@ function ThemeRow({ theme, projects, candidates, names, readOnly, showArchived, 
 function Row({ item, depth, candidates, names, readOnly, showArchived, open, onToggle, meta }) {
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const specs = FIELDS[item.type] ?? [];
-  const finished = FINISHED.includes(item.fields.status);
+  const finished = isFinished(item.fields.status);
   const locked = readOnly || item.ambiguous;
   /** @param {string} name @param {any} value */
   const save = (name, value) => void saveField(item, name, value, setError);
@@ -532,7 +531,7 @@ function CellValue({ item, name, names }) {
     if (typeof value !== "string" || !value) return none;
     const now = today();
     const late = daysBetween(value, now);
-    if (late > 0 && !FINISHED.includes(item.fields.status)) {
+    if (late > 0 && !isFinished(item.fields.status)) {
       return html`<span class="cell-due late">${dayMonth(value)}<span class="late-by">${dueLabel(value, now)}</span></span>`;
     }
     return html`<span class="cell-due">${dayMonth(value)}</span>`;

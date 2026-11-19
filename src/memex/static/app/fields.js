@@ -43,6 +43,11 @@ export function typeLabel(type) {
 
 export const WORK_STATUSES = ["not-started", "active", "on-hold", "blocked", "done", "cancelled"];
 const TODO_STATUSES = ["open", "done", "cancelled"];
+
+/** Done or cancelled: the statuses that take work or a To-do off the open list. @param {unknown} status */
+export function isFinished(status) {
+  return status === "done" || status === "cancelled";
+}
 const WORK = ["theme", "project", "deliverable"];
 
 /** @type {(name: string, label: string) => FieldSpec} */

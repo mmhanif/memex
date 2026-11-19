@@ -8,7 +8,7 @@ import { describe } from "./api.js";
 import { Avatar } from "./avatar.js";
 import { daysBetween, dueLabel, noteDay, shortDate } from "./dates.js";
 import { BodySection, Properties, Title, Warnings, closeBody } from "./entity.js";
-import { typeLabel, useCandidates, writeField } from "./fields.js";
+import { isFinished, typeLabel, useCandidates, writeField } from "./fields.js";
 import { Icon } from "./icons.js";
 import { Actions, ArchivedBar } from "./lifecycle.js";
 import { openNew } from "./newform.js";
@@ -318,7 +318,7 @@ function personEyebrow(person) {
 
 /** @param {Summary} item */
 function finished(item) {
-  return ["done", "cancelled"].includes(item.fields.status);
+  return isFinished(item.fields.status);
 }
 
 /**
