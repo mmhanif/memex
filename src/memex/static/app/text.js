@@ -6,7 +6,9 @@
 
 /**
  * `text` for comparison ignoring case and accents: compatibility-decomposed, every
- * combining mark (any script, not just U+0300–U+036F) dropped, then lowercased.
+ * mark (`\p{M}`, any script) dropped, then case-folded (`Straße` → `strasse`). The
+ * server's fold() (core/names.py) follows the same rule; tests/fold_cases.py holds the
+ * cases both are checked on.
  * @param {string} text
  */
 export function fold(text) {
@@ -26,17 +28,11 @@ export function folding(text) {
   const pieces = [];
   let at = 0;
   for (const c of text) {
-    pieces.push({ piece: c.normalize("NFKD").replace(/\p{M}/gu, ""), at });
+    const bare = c.normalize("NFKD").replace(/\p{M}/gu, "");
+    pieces.push({ piece: Array.from(bare, caseFold).join(""), at });
     at += c.length;
   }
-  // Lowercase the whole string so context-sensitive rules (Greek final sigma) hold; if
-  // that changes the length, lowercase piece by piece so the map stays true.
-  const joined = pieces.map((p) => p.piece).join("");
-  let folded = joined.toLowerCase();
-  if (folded.length !== joined.length) {
-    for (const p of pieces) p.piece = p.piece.toLowerCase();
-    folded = pieces.map((p) => p.piece).join("");
-  }
+  const folded = pieces.map((p) => p.piece).join("");
   // from[i]: where in `text` the character that gave folded[i] starts.
   /** @type {number[]} */
   const from = [];
@@ -51,4 +47,19 @@ export function folding(text) {
       return [from[start], from[stop]];
     },
   };
+}
+
+const CHEROKEE = /\p{Script=Cherokee}/u;
+
+/**
+ * One character case-folded as Python's `str.casefold()` does it (Unicode full case
+ * folding), which toLowerCase() alone falls short of: `ß` → `ss`, final `ς` → `σ`.
+ * Lowercasing the uppercase gets those; the exceptions to that are handled first. When
+ * written, this matched casefold() on every character Unicode 16 assigns.
+ * @param {string} c
+ */
+function caseFold(c) {
+  if (c === "ı") return c; // dotless i: uppercases to I, but doesn't fold to i
+  if (CHEROKEE.test(c)) return c.toUpperCase(); // Cherokee folds to its uppercase
+  return c.toLowerCase().toUpperCase().toLowerCase();
 }

@@ -19,16 +19,23 @@ Rank = tuple[int, int]
 
 
 def fold(text: str) -> str:
-    """Lowercase ASCII-ish text for comparing: "José" → "jose"."""
+    """`text` for comparing ignoring case and accents: "José" → "jose", "Straße" → "strasse".
+
+    Compatibility-decomposed, every mark (Unicode category M, as `\\p{M}` in the
+    browser's fold() in static/app/text.js) dropped, then case-folded. The browser
+    folds by the same rule; tests/fold_cases.py holds the cases both are checked on.
+    """
     if text.isascii():
         return text.lower()  # the same as casefold for ASCII, and much faster
-    return unicodedata.normalize("NFKD", text).translate(_combining_marks()).casefold()
+    return unicodedata.normalize("NFKD", text).translate(_marks()).casefold()
 
 
 @functools.cache
-def _combining_marks() -> dict[int, None]:
-    """A `str.translate` table deleting every combining mark (built once, when needed)."""
-    return {c: None for c in range(sys.maxunicode + 1) if unicodedata.combining(chr(c))}
+def _marks() -> dict[int, None]:
+    """A `str.translate` table deleting every mark (built once, when needed)."""
+    return {
+        c: None for c in range(sys.maxunicode + 1) if unicodedata.category(chr(c)).startswith("M")
+    }
 
 
 def name_rank(query: str, names: Iterable[str]) -> Rank | None:
