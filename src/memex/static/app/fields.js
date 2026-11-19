@@ -4,6 +4,7 @@
 
 import { useEffect, useRef, useState } from "preact/hooks";
 import { ApiError, describe, request } from "./api.js";
+import { Avatar } from "./avatar.js";
 import { useDismiss } from "./dismiss.js";
 import { entityHref } from "./router.js";
 import { html, viewVersion } from "./state.js";
@@ -278,7 +279,7 @@ function RefChecklist(props) {
       <summary class=${disabled ? "disabled" : ""} aria-label=${props.ariaLabel}>
         ${list.length
           ? list.map((v) => html`<span class="chip ${broken?.has(v) ? "broken" : ""}" title=${title(v)}>
-              <span class="avatar">${initials(title(v))}</span>${title(v)}
+              <${Avatar} id=${v} name=${title(v)} />${title(v)}
             </span>`)
           : html`<span class="muted">None</span>`}
       </summary>
@@ -295,12 +296,6 @@ function RefChecklist(props) {
       </div>`}
     </details>
   `;
-}
-
-/** @param {string} name */
-export function initials(name) {
-  const words = name.split(/[\s-]+/).filter(Boolean);
-  return (words.length > 1 ? words[0][0] + words[words.length - 1][0] : name.slice(0, 2)).toUpperCase();
 }
 
 /** @param {InputProps} props */

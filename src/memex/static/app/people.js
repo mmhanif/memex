@@ -5,9 +5,10 @@
 
 import { useEffect, useState } from "preact/hooks";
 import { describe } from "./api.js";
+import { Avatar } from "./avatar.js";
 import { daysBetween, dueLabel, noteDay, shortDate } from "./dates.js";
 import { BodySection, Properties, Title, Warnings, closeBody } from "./entity.js";
-import { initials, typeLabel, useCandidates, writeField } from "./fields.js";
+import { typeLabel, useCandidates, writeField } from "./fields.js";
 import { Icon } from "./icons.js";
 import { Actions, ArchivedBar } from "./lifecycle.js";
 import { openNew } from "./newform.js";
@@ -126,7 +127,7 @@ function PeopleBody({ people }) {
                 (s) => html`<tr key=${s.person.id}>
                   <td>
                     <span class="stakeholder-name">
-                      <span class="avatar stakeholder" aria-hidden="true">${initials(s.person.title)}</span>
+                      <${Avatar} person=${s.person} kind="stakeholder" />
                       <a href=${personHref(s.person.id)}>${s.person.title}</a>
                       ${s.person.fields.archived && html`<span class="status status-cancelled">archived</span>`}
                     </span>
@@ -190,7 +191,7 @@ function OrgPerson({ person, waiting, me = false, reports = 0, reportsTo = false
     .join(" · ");
   const counts = waiting[person.id];
   return html`
-    <span class="avatar ${me ? "me" : ""}" aria-hidden="true">${initials(person.title)}</span>
+    <${Avatar} person=${person} />
     <a class="org-name" href=${personHref(person.id)}>${person.title}</a>
     ${meta && html`<span class="org-meta">${meta}</span>`}
     ${archived && html`<span class="status status-cancelled">archived</span>`}
@@ -236,7 +237,7 @@ export function PersonPage({ id }) {
   return html`
     <article class="entity person-view">
       <header class="entity-head person-head">
-        <span class="avatar person-avatar" aria-hidden="true">${initials(name)}</span>
+        <${Avatar} person=${person} size="large" />
         <div class="person-name">
           <p class="eyebrow">${personEyebrow(person)}</p>
           <${Title} detail=${person} readOnly=${readOnly} onSaved=${reload} />

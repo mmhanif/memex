@@ -3,9 +3,9 @@
 // archived people hidden behind an "Include archived" switch in the popover's footer.
 
 import { useState } from "preact/hooks";
-import { initials } from "./fields.js";
+import { Avatar } from "./avatar.js";
 import { Icon } from "./icons.js";
-import { html, meId, sameId } from "./state.js";
+import { html } from "./state.js";
 import { fold } from "./text.js";
 
 /**
@@ -44,14 +44,6 @@ function Highlighted({ text, query }) {
   const at = q ? fold(text).indexOf(q) : -1;
   if (at < 0) return text;
   return html`${text.slice(0, at)}<mark>${text.slice(at, at + q.length)}</mark>${text.slice(at + q.length)}`;
-}
-
-/** A person's initials: dark for Me, outlined for a Stakeholder. @param {{person: Summary}} props */
-export function Avatar({ person }) {
-  const kind = person.fields.kind;
-  const stakeholder = Array.isArray(kind) && kind.includes("stakeholder") && !kind.includes("team-member");
-  const look = sameId(person.id, meId()) ? "me" : stakeholder ? "stakeholder" : "";
-  return html`<span class="avatar ${look}">${initials(person.title)}</span>`;
 }
 
 /**
@@ -127,7 +119,7 @@ export function PersonPicker(props) {
       ${multiple &&
       list.map(
         (v) => html`<span class="chip picker-chip">
-          ${people.find((p) => p.id === v) ? html`<${Avatar} person=${people.find((p) => p.id === v)} />` : html`<span class="avatar">${initials(v)}</span>`}
+          <${Avatar} person=${people.find((p) => p.id === v)} id=${v} name=${name(v)} />
           ${" "}${name(v)}
           <button type="button" class="chip-remove" aria-label="Remove ${name(v)}"
             onClick=${() => {

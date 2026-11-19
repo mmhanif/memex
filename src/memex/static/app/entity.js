@@ -5,11 +5,12 @@
 
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { ApiError, describe, request } from "./api.js";
+import { Avatar } from "./avatar.js";
 import { CaptureBar, openCapture } from "./capture.js";
 import { lineSuffix } from "./banners.js";
 import { dayDate, dueLabel, noteDay, shortDate } from "./dates.js";
 import { BodyDoc } from "./doc.js";
-import { FIELDS, FieldInput, initials, typeLabel, useCandidates, writeField } from "./fields.js";
+import { FIELDS, FieldInput, typeLabel, useCandidates, writeField } from "./fields.js";
 import { RawText } from "./files.js";
 import { Icon } from "./icons.js";
 import { Actions, ArchivedBar } from "./lifecycle.js";
@@ -488,7 +489,7 @@ function ChildSection({ detail, type }) {
           </span>
           <span class="child-lead">
             ${typeof lead === "string" &&
-            html`<span class="avatar">${initials(personName(lead))}</span>${personName(lead).split(" ")[0]}`}
+            html`<${Avatar} id=${lead} name=${personName(lead)} />${personName(lead).split(" ")[0]}`}
           </span>
           <span class="child-due ${late ? "late" : ""}">${typeof due === "string" && dueLabel(due, now)}</span>
         </div>`;

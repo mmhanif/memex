@@ -8,9 +8,10 @@
 
 import { useEffect, useRef, useState } from "preact/hooks";
 import { describe, request } from "./api.js";
+import { Avatar } from "./avatar.js";
 import { daysBetween, dayMonth, dueLabel, shortDate } from "./dates.js";
 import { useDismiss } from "./dismiss.js";
-import { FIELDS, FieldInput, WORK_STATUSES, initials, useCandidates, writeField } from "./fields.js";
+import { FIELDS, FieldInput, WORK_STATUSES, useCandidates, writeField } from "./fields.js";
 import { Icon } from "./icons.js";
 import { entityHref, navigate } from "./router.js";
 import { html, meId, sameId, tree, useView, viewVersion } from "./state.js";
@@ -254,13 +255,6 @@ function StatusMenu({ item, readOnly, onPick, variant }) {
   `;
 }
 
-/** @param {{id: string, names: Record<string, string>, kind?: "stakeholder"}} props */
-function Avatar({ id, names, kind }) {
-  const name = names[id] ?? id;
-  const me = sameId(id, meId());
-  return html`<span class="avatar ${me ? "me" : ""} ${kind ?? ""}" title=${name}>${initials(name)}</span>`;
-}
-
 /** @param {{board: BoardData, readOnly: boolean}} props */
 function Board({ board, readOnly }) {
   return html`
@@ -313,7 +307,7 @@ function Card({ item, names, attention, readOnly }) {
         <span class="card-due ${late ? "late" : soon ? "soon" : ""}">
           ${typeof due === "string" && (late ? dueLabel(due, now) : soon ? shortDate(due) : dayMonth(due))}
         </span>
-        ${typeof lead === "string" && lead && html`<${Avatar} id=${lead} names=${names} />`}
+        ${typeof lead === "string" && lead && html`<${Avatar} id=${lead} name=${names[lead] ?? lead} alone />`}
         ${item.warnings.length > 0 && html`<span class="broken" title=${item.warnings.map((w) => w.message).join("; ")}>!</span>`}
       </div>
       ${error && html`<span class="field-error">${error}</span>`}
@@ -525,13 +519,13 @@ function CellValue({ item, name, names }) {
   const none = html`<span class="none">—</span>`;
   if (name === "lead") {
     if (typeof value !== "string" || !value) return none;
-    return html`<span class="cell-person"><${Avatar} id=${value} names=${names} /><span class="cell-name">${names[value] ?? value}${sameId(value, meId()) && html` <span class="faint">(Me)</span>`}</span></span>`;
+    return html`<span class="cell-person"><${Avatar} id=${value} name=${names[value] ?? value} /><span class="cell-name">${names[value] ?? value}${sameId(value, meId()) && html` <span class="faint">(Me)</span>`}</span></span>`;
   }
   if (name === "team" || name === "stakeholders") {
     const list = Array.isArray(value) ? value.filter((v) => typeof v === "string") : [];
     if (!list.length) return none;
     return html`<span class="cell-avatars">${list.map(
-      (v) => html`<${Avatar} id=${v} names=${names} kind=${name === "stakeholders" ? "stakeholder" : undefined} />`,
+      (v) => html`<${Avatar} id=${v} name=${names[v] ?? v} kind=${name === "stakeholders" ? "stakeholder" : undefined} alone />`,
     )}</span>`;
   }
   if (name === "due") {

@@ -273,3 +273,29 @@ def test_person_picker_ignores_marks_outside_the_latin_combining_block(
     options = dialog.locator(".picker-popover").get_by_role("option")
     expect(options).to_have_count(1)
     expect(options).to_contain_text(david)
+
+
+def test_a_childs_lead_avatar_is_dark_for_me_and_names_its_person(
+    app: Page, server: AppState, root: Path
+):
+    put(root, "people/alice-smith.md", ALICE)
+    put(root, "projects/p.md", "---\ntitle: Data migration\nstatus: active\n---\n")
+    for slug, title, lead in [
+        ("runbook", "Cutover runbook", "ada-lovelace"),
+        ("ledger", "Ledger export", "alice-smith"),
+    ]:
+        put(
+            root,
+            f"deliverables/{slug}.md",
+            f"---\ntitle: {title}\nproject: p\nstatus: active\nlead: {lead}\n---\n",
+        )
+    app.goto(f"{origin(server)}/#/e/p")
+
+    mine = app.locator(".child-row", has_text="Cutover runbook").locator(".avatar")
+    expect(mine).to_have_text("AL")
+    expect(mine).to_have_class("avatar me")
+    expect(mine).to_have_attribute("title", "Ada Lovelace")
+    expect(mine).to_have_attribute("aria-hidden", "true")
+    theirs = app.locator(".child-row", has_text="Ledger export").locator(".avatar")
+    expect(theirs).to_have_class("avatar")
+    expect(theirs).to_have_attribute("title", "Alice Smith")

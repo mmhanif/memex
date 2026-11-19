@@ -6,10 +6,11 @@
 
 import { useEffect, useState } from "preact/hooks";
 import { ApiError, describe, quitMemex, request } from "./api.js";
+import { Avatar } from "./avatar.js";
 import { Section } from "./entity.js";
 import { TYPES, useCandidates } from "./fields.js";
 import { Icon } from "./icons.js";
-import { Avatar, PersonPicker } from "./picker.js";
+import { PersonPicker } from "./picker.js";
 import { fileHref, navigate } from "./router.js";
 import { html, viewVersion } from "./state.js";
 
