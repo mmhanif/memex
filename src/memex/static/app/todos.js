@@ -5,7 +5,7 @@
 
 import { useEffect, useRef, useState } from "preact/hooks";
 import { describe, request } from "./api.js";
-import { daysLate, lateLabel, shortDate } from "./dates.js";
+import { daysLate, isLate, lateLabel, shortDate } from "./dates.js";
 import { isFinished, writeField } from "./fields.js";
 import { Icon } from "./icons.js";
 import { entityHref, personHref } from "./router.js";
@@ -195,7 +195,7 @@ function TodoBlock({ todo, names, hide, now }) {
   const me = meId();
   const { owner, requester, status, due } = todo.fields;
   const finished = isFinished(status);
-  const late = typeof due === "string" && !finished ? lateLabel(due, now) : "";
+  const lateText = typeof due === "string" && !finished ? lateLabel(due, now) : "";
   return html`
     <div class="block-row todo-block ${finished ? "finished" : ""}">
       <span class="bullet"></span>
@@ -211,7 +211,7 @@ function TodoBlock({ todo, names, hide, now }) {
         ${hide !== "requester" && requester && !sameId(requester, me) &&
         html` <span class="muted">from</span> <${PersonRef} id=${requester} names=${names} />`}
         ${typeof due === "string" &&
-        html` <span class="due ${late ? "late" : ""}">due ${shortDate(due)}${late ? ` · ${late}` : ""}</span>`}
+        html` <span class="due ${lateText ? "late" : ""}">due ${shortDate(due)}${lateText ? ` · ${lateText}` : ""}</span>`}
         ${todo.warnings.length > 0 &&
         html` <span class="broken" title=${todo.warnings.map((w) => w.message).join("; ")}>!</span>`}
         ${error && html` <span class="field-error">${error}</span>`}
@@ -281,7 +281,7 @@ function summaryLine(list, view, now) {
   const overdue = list.groups
     .filter((g) => g.label !== "Completed")
     .flatMap((g) => g.todos)
-    .filter((t) => typeof t.fields.due === "string" && daysLate(t.fields.due, now) > 0).length;
+    .filter((t) => isLate(t.fields.due, now)).length;
   return open ? `${open} open${overdue ? ` · ${overdue} overdue` : ""}` : "Nothing open";
 }
 

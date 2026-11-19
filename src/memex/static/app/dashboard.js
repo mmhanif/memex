@@ -4,7 +4,7 @@
 
 import { useState } from "preact/hooks";
 import { describe } from "./api.js";
-import { daysLate, dueLabel, longDate, noteDay, shortDate } from "./dates.js";
+import { dueLabel, isLate, longDate, noteDay, shortDate } from "./dates.js";
 import { typeLabel } from "./fields.js";
 import { Icon } from "./icons.js";
 import { openNew } from "./newform.js";
@@ -104,7 +104,7 @@ export function Dashboard() {
  * @param {string} now
  */
 function summaryLine(due, now) {
-  const overdue = due.filter((f) => typeof f.fields.due === "string" && daysLate(f.fields.due, now) > 0).length;
+  const overdue = due.filter((f) => isLate(f.fields.due, now)).length;
   const parts = ["Today"];
   if (overdue) parts.push(`${overdue} overdue`);
   if (due.length - overdue) parts.push(`${due.length - overdue} due this week`);
@@ -138,7 +138,7 @@ function Paused({ children }) {
  */
 function DueRow({ item, names, now }) {
   const due = /** @type {string} */ (item.fields.due ?? "");
-  const late = due !== "" && daysLate(due, now) > 0;
+  const late = isLate(due, now);
   const when = html`<span class="when ${late ? "late" : ""}">${due && dueLabel(due, now)}</span>`;
   if (item.type === "todo") return html`<${TodoBlock} todo=${item} names=${names} party="requester" word="for" when=${when} />`;
   return html`

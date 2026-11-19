@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { describe, request } from "./api.js";
 import { Avatar } from "./avatar.js";
-import { daysBetween, daysLate, dayMonth, lateLabel, shortDate } from "./dates.js";
+import { daysBetween, daysLate, dayMonth, isLate, lateLabel, shortDate } from "./dates.js";
 import { useDismiss } from "./dismiss.js";
 import { FIELDS, FieldInput, WORK_STATUSES, isFinished, useCandidates, writeField } from "./fields.js";
 import { Icon } from "./icons.js";
@@ -60,7 +60,6 @@ const STATUS_LABELS = /** @type {Record<string, string>} */ ({
   done: "Done",
   cancelled: "Cancelled",
 });
-
 
 /** @param {number} n @param {string} one */
 function count(n, one) {
@@ -140,7 +139,7 @@ function summaryLine(data) {
   const now = today();
   const open = items.filter((i) => !isFinished(i.fields.status));
   const dueIn = (/** @type {Summary} */ i) => typeof i.fields.due === "string" ? daysBetween(now, i.fields.due) : null;
-  const late = open.filter((i) => (dueIn(i) ?? 0) < 0).length;
+  const late = open.filter((i) => isLate(i.fields.due, now)).length;
   const soon = open.filter((i) => { const d = dueIn(i); return d !== null && d >= 0 && d <= 7; }).length;
   return [
     count(items.length, data.kind === "deliverable" ? "Deliverable" : "Project"),
@@ -280,7 +279,7 @@ function Card({ item, names, attention, readOnly }) {
   const finished = isFinished(status);
   const now = today();
   const dueIn = typeof due === "string" ? daysBetween(now, due) : null;
-  const late = dueIn !== null && dueIn < 0 && !finished;
+  const late = !finished && isLate(due, now);
   const soon = dueIn !== null && dueIn >= 0 && dueIn <= 7 && !finished;
   return html`
     <article class="card board-card ${status === "blocked" ? "blocked" : ""} ${finished ? "finished" : ""}">

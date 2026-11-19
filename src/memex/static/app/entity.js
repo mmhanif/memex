@@ -8,7 +8,7 @@ import { ApiError, describe, request } from "./api.js";
 import { Avatar } from "./avatar.js";
 import { CaptureBar, openCapture } from "./capture.js";
 import { lineSuffix } from "./banners.js";
-import { dayDate, daysLate, dueLabel, lateLabel, noteDay, shortDate } from "./dates.js";
+import { dayDate, dueLabel, isLate, lateLabel, noteDay, shortDate } from "./dates.js";
 import { BodyDoc } from "./doc.js";
 import { FIELDS, FieldInput, isFinished, typeLabel, useCandidates, writeField } from "./fields.js";
 import { RawText } from "./files.js";
@@ -480,7 +480,7 @@ function ChildSection({ detail, type }) {
     <${Section} title=${type === "project" ? "Projects" : "Deliverables"} count=${detail.children.length}>
       ${detail.children.map((c) => {
         const { status, lead, due } = c.fields;
-        const late = typeof due === "string" && daysLate(due, now) > 0 && !isFinished(status);
+        const late = isLate(due, now) && !isFinished(status);
         return html`<div class="child-row" key=${c.id}>
           <span class="bullet" aria-hidden="true"></span>
           <a class="child-title" href=${entityHref(c.id, c.type)}>${c.title}</a>

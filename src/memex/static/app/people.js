@@ -6,7 +6,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { describe } from "./api.js";
 import { Avatar } from "./avatar.js";
-import { daysLate, dueLabel, lateLabel, noteDay, shortDate } from "./dates.js";
+import { dueLabel, isLate, lateLabel, noteDay, shortDate } from "./dates.js";
 import { BodySection, Properties, Title, Warnings, closeBody } from "./entity.js";
 import { isFinished, typeLabel, useCandidates, writeField } from "./fields.js";
 import { Icon } from "./icons.js";
@@ -342,7 +342,7 @@ function TaggedRow({ tagged }) {
   const { item, roles } = tagged;
   const { status, due } = item.fields;
   const now = today();
-  const late = typeof due === "string" && !finished(item) && daysLate(due, now) > 0;
+  const late = !finished(item) && isLate(due, now);
   const state =
     status === "blocked"
       ? html`<span class="alarm">blocked</span>`
@@ -378,7 +378,7 @@ function PersonTodo({ todo, names, hide }) {
   const now = today();
   const me = meId();
   const name = (/** @type {string} */ id) => names[id] ?? resolveMention(id)?.title ?? id;
-  const late = typeof due === "string" && !done && daysLate(due, now) > 0;
+  const late = !done && isLate(due, now);
   /** @type {any[]} */
   const meta = [];
   if (done) {

@@ -38,6 +38,11 @@ export function daysLate(due, now) {
   return Math.max(0, daysBetween(due, now));
 }
 
+/** Whether a due date (any field value) is past `now`. @param {unknown} due @param {string} now */
+export function isLate(due, now) {
+  return typeof due === "string" && due !== "" && daysLate(due, now) > 0;
+}
+
 /**
  * How late `due` is: "2 days late", or "2d late" where room is short (board cards); "" when
  * it isn't late. @param {string} due @param {string} now @param {{short?: boolean}} [opts]
