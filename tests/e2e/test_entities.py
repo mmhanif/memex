@@ -1,5 +1,6 @@
 """SPEC §7, §11.5, §16.7: creating Entities and the Entity page against a real server."""
 
+import re
 from pathlib import Path
 
 from playwright.sync_api import Page, expect
@@ -301,3 +302,51 @@ def test_a_childs_lead_avatar_is_dark_for_me_and_names_its_person(
     theirs = app.locator(".child-row", has_text="Ledger export").locator(".avatar")
     expect(theirs).to_have_class("avatar")
     expect(theirs).to_have_attribute("title", "Alice Smith")
+
+
+def test_a_finished_child_past_its_due_date_shows_the_date_not_lateness(
+    app: Page, server: AppState, root: Path
+):
+    put(root, "projects/p.md", "---\ntitle: Data migration\nstatus: active\n---\n")
+    for slug, title, status in [
+        ("runbook", "Cutover runbook", "done"),
+        ("ledger", "Ledger export", "active"),
+    ]:
+        put(
+            root,
+            f"deliverables/{slug}.md",
+            f"---\ntitle: {title}\nproject: p\nstatus: {status}\ndue: 2026-11-10\n---\n",
+        )
+    app.clock.set_fixed_time("2026-11-12T10:00:00")  # the e2e clock's day, in the browser too
+    app.goto(f"{origin(server)}/#/e/p")
+
+    done = app.locator(".child-row", has_text="Cutover runbook").locator(".child-due")
+    expect(done).to_have_text("Tue 10 Nov")
+    expect(done).not_to_have_class(re.compile(r"\blate\b"))
+    live = app.locator(".child-row", has_text="Ledger export").locator(".child-due")
+    expect(live).to_have_text("2 days late")
+    expect(live).to_have_class("child-due late")
+
+
+def test_a_finished_todo_about_this_past_its_due_date_shows_the_date_not_lateness(
+    app: Page, server: AppState, root: Path
+):
+    put(root, "projects/dmig.md", "---\ntitle: Data migration\nstatus: active\n---\n")
+    for slug, title, status in [("call", "Call vendor", "done"), ("send", "Send deck", "open")]:
+        put(
+            root,
+            f"todos/{slug}.md",
+            f"---\ntitle: {title}\nowner: ada-lovelace\nrequester: ada-lovelace\n"
+            f"status: {status}\ndue: 2026-11-10\nabout: dmig\n---\n",
+        )
+    app.clock.set_fixed_time("2026-11-12T10:00:00")  # the e2e clock's day, in the browser too
+    app.goto(f"{origin(server)}/#/e/dmig")
+
+    section = app.get_by_role("region", name="To-dos about this")
+    section.get_by_role("button", name="Show completed (1)").click()
+    done = section.locator(".todo-line", has_text="Call vendor").locator(".todo-due")
+    expect(done).to_have_text("due Tue 10 Nov")
+    expect(done).not_to_have_class(re.compile(r"\blate\b"))
+    live = section.locator(".todo-line", has_text="Send deck").locator(".todo-due")
+    expect(live).to_have_text("2 days late")
+    expect(live).to_have_class("todo-due late")

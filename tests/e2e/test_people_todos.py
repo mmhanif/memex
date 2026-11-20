@@ -161,6 +161,7 @@ def test_person_view_todo_names_the_note_it_came_from(app: Page, server: AppStat
         "---\ntitle: Send deck\nowner: alice-smith\nrequester: ada-lovelace\nstatus: open\n"
         "due: 2026-11-20\nsource: one\n---\n",
     )
+    app.clock.set_fixed_time("2026-11-12T10:00:00")  # the e2e clock's day, in the browser too
     app.goto(f"{origin(server)}/#/people/alice-smith")
 
     row = app.get_by_role("region", name="Waiting on Alice Smith").locator(".person-row")

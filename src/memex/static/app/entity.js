@@ -480,7 +480,8 @@ function ChildSection({ detail, type }) {
     <${Section} title=${type === "project" ? "Projects" : "Deliverables"} count=${detail.children.length}>
       ${detail.children.map((c) => {
         const { status, lead, due } = c.fields;
-        const late = isLate(due, now) && !isFinished(status);
+        const finished = isFinished(status);
+        const late = !finished && isLate(due, now);
         return html`<div class="child-row" key=${c.id}>
           <span class="bullet" aria-hidden="true"></span>
           <a class="child-title" href=${entityHref(c.id, c.type)}>${c.title}</a>
@@ -491,7 +492,7 @@ function ChildSection({ detail, type }) {
             ${typeof lead === "string" &&
             html`<${Avatar} id=${lead} name=${personName(lead)} />${personName(lead).split(" ")[0]}`}
           </span>
-          <span class="child-due ${late ? "late" : ""}">${typeof due === "string" && dueLabel(due, now)}</span>
+          <span class="child-due ${late ? "late" : ""}">${typeof due === "string" && dueLabel(due, now, { finished })}</span>
         </div>`;
       })}
       <button type="button" class="add-row" onClick=${() => openNew(type, { [parentField]: detail.id })}>
@@ -545,7 +546,7 @@ function AboutTodo({ todo }) {
         ${error && html`<span class="field-error">${error}</span>`}
       </span>
       ${typeof due === "string"
-        ? html`<span class="todo-due ${late ? "late" : ""}">${late ? lateLabel(due, today()) : `due ${dueLabel(due, today())}`}</span>`
+        ? html`<span class="todo-due ${late ? "late" : ""}">${late ? lateLabel(due, today()) : `due ${dueLabel(due, today(), { finished })}`}</span>`
         : html`<span class="todo-due none">no due date</span>`}
     </div>
   `;
