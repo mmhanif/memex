@@ -55,8 +55,10 @@ export function lateLabel(due, now, { short = false } = {}) {
 
 /**
  * A due date as the Due block shows it: "2 days late", "Today" or "Fri 20 Nov". A finished
- * item is never late, so it gets the plain date. @param {string} due @param {string} now
- * @param {{ finished?: boolean }} [options]
+ * item is never late, so it gets the plain date.
+ * @param {string} due
+ * @param {string} now
+ * @param {{finished?: boolean}} [opts]
  */
 export function dueLabel(due, now, { finished = false } = {}) {
   if (!finished && daysLate(due, now) > 0) return lateLabel(due, now);
